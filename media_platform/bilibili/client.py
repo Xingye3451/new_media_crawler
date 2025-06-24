@@ -1,3 +1,14 @@
+# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：  
+# 1. 不得用于任何商业用途。  
+# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。  
+# 3. 不得进行大规模爬取或对平台造成运营干扰。  
+# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。   
+# 5. 不得用于任何非法或不当的用途。
+#   
+# 详细许可条款请参阅项目根目录下的LICENSE文件。  
+# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。  
+
+
 # -*- coding: utf-8 -*-
 # @Author  : relakkes@gmail.com
 # @Time    : 2023/12/2 18:44
@@ -10,6 +21,7 @@ from urllib.parse import urlencode
 import httpx
 from playwright.async_api import BrowserContext, Page
 
+import config
 from base.base_crawler import AbstractApiClient
 from tools import utils
 
@@ -116,13 +128,17 @@ class BilibiliClient(AbstractApiClient):
         self.cookie_dict = cookie_dict
 
     async def search_video_by_keyword(self, keyword: str, page: int = 1, page_size: int = 20,
-                                      order: SearchOrderType = SearchOrderType.DEFAULT):
+                                      order: SearchOrderType = SearchOrderType.DEFAULT,
+                                      pubtime_begin_s: int = 0, pubtime_end_s: int = 0) -> Dict:
+
         """
         KuaiShou web search api
         :param keyword: 搜索关键词
         :param page: 分页参数具体第几页
         :param page_size: 每一页参数的数量
         :param order: 搜索结果排序，默认位综合排序
+        :param pubtime_begin_s: 发布时间开始时间戳
+        :param pubtime_end_s: 发布时间结束时间戳
         :return:
         """
         uri = "/x/web-interface/wbi/search/type"
@@ -131,7 +147,9 @@ class BilibiliClient(AbstractApiClient):
             "keyword": keyword,
             "page": page,
             "page_size": page_size,
-            "order": order.value
+            "order": order.value,
+            "pubtime_begin_s": pubtime_begin_s,
+            "pubtime_end_s": pubtime_end_s
         }
         return await self.get(uri, post_data)
 
@@ -205,20 +223,23 @@ class BilibiliClient(AbstractApiClient):
         return await self.get(uri, post_data)
 
     async def get_video_all_comments(self, video_id: str, crawl_interval: float = 1.0, is_fetch_sub_comments=False,
-                                     callback: Optional[Callable] = None, ):
+                                     callback: Optional[Callable] = None,
+                                     max_count: int = 10,):
         """
         get video all comments include sub comments
         :param video_id:
         :param crawl_interval:
         :param is_fetch_sub_comments:
         :param callback:
+        max_count: 一次笔记爬取的最大评论数量
+
         :return:
         """
 
         result = []
         is_end = False
         next_page = 0
-        while not is_end:
+        while not is_end and len(result) < max_count:
             comments_res = await self.get_video_comments(video_id, CommentOrderType.DEFAULT, next_page)
             cursor_info: Dict = comments_res.get("cursor")
             comment_list: List[Dict] = comments_res.get("replies", [])
@@ -232,6 +253,8 @@ class BilibiliClient(AbstractApiClient):
                             await self.get_video_all_level_two_comments(
                                 video_id, comment_id, CommentOrderType.DEFAULT, 10, crawl_interval,  callback)
                         }
+            if len(result) + len(comment_list) > max_count:
+                comment_list = comment_list[:max_count - len(result)]
             if callback:  # 如果有回调函数，就执行回调函数
                 await callback(video_id, comment_list)
             await asyncio.sleep(crawl_interval)
@@ -315,3 +338,162 @@ class BilibiliClient(AbstractApiClient):
             "order": order_mode,
         }
         return await self.get(uri, post_data)
+
+    async def get_creator_info(self, creator_id: int) -> Dict:
+        """
+        get creator info
+        :param creator_id: 作者 ID
+        """
+        uri = "/x/space/wbi/acc/info"
+        post_data = {
+            "mid": creator_id,
+        }
+        return await self.get(uri, post_data)
+
+    async def get_creator_fans(self,
+                               creator_id: int,
+                               pn: int,
+                               ps: int = 24,
+                               ) -> Dict:
+        """
+        get creator fans
+        :param creator_id: 创作者 ID
+        :param pn: 开始页数
+        :param ps: 每页数量
+        :return:
+        """
+        uri = "/x/relation/fans"
+        post_data = {
+            'vmid': creator_id,
+            "pn": pn,
+            "ps": ps,
+            "gaia_source": "main_web",
+
+        }
+        return await self.get(uri, post_data)
+
+    async def get_creator_followings(self,
+                                     creator_id: int,
+                                     pn: int,
+                                     ps: int = 24,
+                                     ) -> Dict:
+        """
+        get creator followings
+        :param creator_id: 创作者 ID
+        :param pn: 开始页数
+        :param ps: 每页数量
+        :return:
+        """
+        uri = "/x/relation/followings"
+        post_data = {
+            "vmid": creator_id,
+            "pn": pn,
+            "ps": ps,
+            "gaia_source": "main_web",
+        }
+        return await self.get(uri, post_data)
+
+    async def get_creator_dynamics(self, creator_id: int, offset: str = ""):
+        """
+        get creator comments
+        :param creator_id: 创作者 ID
+        :param offset: 发送请求所需参数
+        :return:
+        """
+        uri = "/x/polymer/web-dynamic/v1/feed/space"
+        post_data = {
+            "offset": offset,
+            "host_mid": creator_id,
+            "platform": "web",
+        }
+
+        return await self.get(uri, post_data)
+
+    async def get_creator_all_fans(self, creator_info: Dict, crawl_interval: float = 1.0,
+                                   callback: Optional[Callable] = None,
+                                   max_count: int = 100) -> List:
+        """
+        get creator all fans
+        :param creator_info:
+        :param crawl_interval:
+        :param callback:
+        :param max_count: 一个up主爬取的最大粉丝数量
+
+        :return: up主粉丝数列表
+        """
+        creator_id = creator_info["id"]
+        result = []
+        pn = config.START_CONTACTS_PAGE
+        while len(result) < max_count:
+            fans_res: Dict = await self.get_creator_fans(creator_id, pn=pn)
+            fans_list: List[Dict] = fans_res.get("list", [])
+
+            pn += 1
+            if len(result) + len(fans_list) > max_count:
+                fans_list = fans_list[:max_count - len(result)]
+            if callback:  # 如果有回调函数，就执行回调函数
+                await callback(creator_info, fans_list)
+            await asyncio.sleep(crawl_interval)
+            if not fans_list:
+                break
+            result.extend(fans_list)
+        return result
+
+    async def get_creator_all_followings(self, creator_info: Dict, crawl_interval: float = 1.0,
+                                         callback: Optional[Callable] = None,
+                                         max_count: int = 100) -> List:
+        """
+        get creator all followings
+        :param creator_info:
+        :param crawl_interval:
+        :param callback:
+        :param max_count: 一个up主爬取的最大关注者数量
+
+        :return: up主关注者列表
+        """
+        creator_id = creator_info["id"]
+        result = []
+        pn = config.START_CONTACTS_PAGE
+        while len(result) < max_count:
+            followings_res: Dict = await self.get_creator_followings(creator_id, pn=pn)
+            followings_list: List[Dict] = followings_res.get("list", [])
+
+            pn += 1
+            if len(result) + len(followings_list) > max_count:
+                followings_list = followings_list[:max_count - len(result)]
+            if callback:  # 如果有回调函数，就执行回调函数
+                await callback(creator_info, followings_list)
+            await asyncio.sleep(crawl_interval)
+            if not followings_list:
+                break
+            result.extend(followings_list)
+        return result
+
+    async def get_creator_all_dynamics(self, creator_info: Dict, crawl_interval: float = 1.0,
+                                       callback: Optional[Callable] = None,
+                                       max_count: int = 20) -> List:
+        """
+        get creator all followings
+        :param creator_info:
+        :param crawl_interval:
+        :param callback:
+        :param max_count: 一个up主爬取的最大动态数量
+
+        :return: up主关注者列表
+        """
+        creator_id = creator_info["id"]
+        result = []
+        offset = ""
+        has_more = True
+        while has_more and len(result) < max_count:
+            dynamics_res = await self.get_creator_dynamics(creator_id, offset)
+            dynamics_list: List[Dict] = dynamics_res["items"]
+            has_more = dynamics_res["has_more"]
+            offset = dynamics_res["offset"]
+            if len(result) + len(dynamics_list) > max_count:
+                dynamics_list = dynamics_list[:max_count - len(result)]
+            if callback:
+                await callback(creator_info, dynamics_list)
+            await asyncio.sleep(crawl_interval)
+            result.extend(dynamics_list)
+        return result
