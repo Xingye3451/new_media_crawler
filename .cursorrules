@@ -1,0 +1,103 @@
+# MediaCrawler 项目 Cursor 规则
+
+## 项目概述
+MediaCrawler 是一个多平台媒体内容爬虫项目，支持小红书、抖音、快手、B站、微博、贴吧、知乎等平台的笔记/视频/评论爬取。
+
+## 技术架构
+- **语言**: Python 3.9+
+- **异步框架**: asyncio
+- **浏览器自动化**: Playwright
+- **数据库**: MySQL (可选)
+- **数据格式**: CSV, JSON
+- **容器化**: Docker
+
+## 核心架构设计
+```
+media_crawler/
+├── base/                    # 基础抽象类
+│   └── base_crawler.py     # 爬虫基类 AbstractCrawler
+├── media_platform/         # 各平台爬虫实现
+│   ├── xhs.py             # 小红书爬虫
+│   ├── douyin.py          # 抖音爬虫
+│   ├── kuaishou.py        # 快手爬虫
+│   ├── bilibili.py        # B站爬虫
+│   ├── weibo.py           # 微博爬虫
+│   ├── tieba.py           # 贴吧爬虫
+│   └── zhihu.py           # 知乎爬虫
+├── config/                 # 配置文件
+│   └── base_config.py     # 基础配置
+├── utils/                  # 工具类
+├── data/                   # 数据输出目录
+├── main.py                 # 主入口文件
+├── cmd_arg.py             # 命令行参数解析
+├── db.py                  # 数据库操作
+└── requirements.txt       # 依赖包
+```
+
+## 主要功能模块
+
+### 1. 爬虫工厂模式 (CrawlerFactory)
+- 位置: `main.py`
+- 功能: 根据平台参数创建对应的爬虫实例
+- 支持的平台: xhs, dy, ks, bili, wb, tieba, zhihu
+
+### 2. 抽象基类 (AbstractCrawler)
+- 位置: `base/base_crawler.py`
+- 功能: 定义爬虫的通用接口和基础方法
+- 所有平台爬虫都继承此类
+
+### 3. 平台爬虫实现
+每个平台都有独立的爬虫类，实现具体的爬取逻辑：
+- 登录认证 (二维码登录)
+- 内容爬取
+- 评论获取
+- 数据解析
+
+### 4. 数据存储
+- **MySQL**: 关系型数据库存储
+- **CSV**: 结构化数据文件
+- **JSON**: 灵活的数据格式
+
+## 使用方式
+
+### 命令行参数
+```bash
+# 搜索模式 - 根据关键词搜索并爬取
+python main.py --platform xhs --lt qrcode --type search
+
+# 详情模式 - 爬取指定帖子ID的内容
+python main.py --platform xhs --lt qrcode --type detail
+```
+
+### 平台参数
+- `xhs`: 小红书
+- `dy`: 抖音  
+- `ks`: 快手
+- `bili`: B站
+- `wb`: 微博
+- `tieba`: 贴吧
+- `zhihu`: 知乎
+
+## 配置说明
+- 配置文件: `config/base_config.py`
+- 主要配置项:
+  - `ENABLE_GET_COMMENTS`: 是否爬取评论
+  - `SAVE_DATA_OPTION`: 数据保存方式 (db/csv/json)
+  - `PLATFORM`: 目标平台
+
+## 容器化部署
+- Dockerfile 已配置完整环境
+- 包含 Python 3.9, Playwright, FFmpeg 等依赖
+- 支持 Linux 环境运行
+
+## 代码规范
+- 使用异步编程 (async/await)
+- 遵循工厂模式设计
+- 模块化架构，易于扩展
+- 完善的错误处理和日志记录
+
+## 注意事项
+- 仅供学习研究使用
+- 遵守目标平台的使用条款
+- 合理控制请求频率
+- 不得用于商业用途 

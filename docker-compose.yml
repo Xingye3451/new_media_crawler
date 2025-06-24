@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  mediacrawler-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mediacrawler-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 可选：添加Redis用于任务队列（如果需要）
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: mediacrawler-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+  # 可选：添加MySQL数据库（如果需要）
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: mediacrawler-mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root123
+  #     MYSQL_DATABASE: mediacrawler
+  #     MYSQL_USER: crawler
+  #     MYSQL_PASSWORD: crawler123
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   restart: unless-stopped
+
+volumes:
+  # redis_data:
+  # mysql_data: 
