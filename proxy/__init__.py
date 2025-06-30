@@ -8,9 +8,12 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。  
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。  
 
+from .proxy_manager import ProxyManager, ProxyInfo, ProxyStrategy
+from .proxy_api import router as proxy_router
 
-# -*- coding: utf-8 -*-
-# @Author  : relakkes@gmail.com
-# @Time    : 2023/12/2 14:37
-# @Desc    : IP代理池入口
-from .base_proxy import *
+__all__ = [
+    "ProxyManager",
+    "ProxyInfo", 
+    "ProxyStrategy",
+    "proxy_router"
+]

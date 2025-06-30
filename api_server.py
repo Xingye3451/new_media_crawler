@@ -31,6 +31,8 @@ from media_platform.tieba import TieBaCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
+from proxy import proxy_router, ProxyManager
+from login_api import login_router
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -38,6 +40,12 @@ app = FastAPI(
     description="多平台媒体内容爬虫API服务",
     version="1.0.0"
 )
+
+# 注册代理管理路由
+app.include_router(proxy_router)
+
+# 注册登录管理路由
+app.include_router(login_router)
 
 # 任务状态存储
 task_status = {}
@@ -55,6 +63,11 @@ class CrawlerRequest(BaseModel):
     specified_ids: Optional[List[str]] = Field(default=None, description="指定ID列表")
     max_notes_count: int = Field(default=200, description="最大爬取数量")
     enable_images: bool = Field(default=False, description="是否爬取图片")
+    # 新增代理相关参数
+    use_proxy: bool = Field(default=False, description="是否使用代理")
+    proxy_strategy: str = Field(default="round_robin", description="代理策略: round_robin, random, weighted, failover, geo_based, smart")
+    # 新增登录会话参数
+    session_id: Optional[str] = Field(default=None, description="登录会话ID")
 
 class CrawlerResponse(BaseModel):
     task_id: str
@@ -96,6 +109,48 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         task_status[task_id]["status"] = "running"
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
         
+        # 检查登录状态
+        from login_manager import login_manager
+        
+        if request.session_id:
+            # 使用指定的会话ID
+            session = await login_manager.check_login_status(request.platform, request.session_id)
+            if session.status.value == "not_logged_in" or session.status.value == "expired":
+                # 需要重新登录
+                task_status[task_id]["status"] = "need_login"
+                task_status[task_id]["error"] = "需要重新登录"
+                task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                return
+            elif session.status.value == "need_verification":
+                # 需要验证
+                task_status[task_id]["status"] = "need_verification"
+                task_status[task_id]["error"] = "需要手动验证"
+                task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                return
+            elif session.status.value == "logged_in":
+                # 已登录，获取cookies
+                cookies = await login_manager.get_session_cookies(request.session_id)
+                if cookies:
+                    # 将cookies转换为字符串格式
+                    cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+                    config.COOKIES = cookie_str
+        else:
+            # 查找平台的最新会话
+            session = await login_manager.check_login_status(request.platform)
+            if session.status.value == "logged_in":
+                # 已登录，获取cookies
+                cookies = await login_manager.get_session_cookies(session.session_id)
+                if cookies:
+                    cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+                    config.COOKIES = cookie_str
+            elif session.status.value in ["not_logged_in", "expired", "need_verification"]:
+                # 需要登录或验证
+                task_status[task_id]["status"] = "need_login"
+                task_status[task_id]["error"] = "需要登录"
+                task_status[task_id]["session_id"] = session.session_id
+                task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                return
+        
         # 配置爬虫参数
         config.PLATFORM = request.platform
         config.LOGIN_TYPE = request.login_type
@@ -105,9 +160,17 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         config.ENABLE_GET_COMMENTS = request.get_comments
         config.ENABLE_GET_SUB_COMMENTS = request.get_sub_comments
         config.SAVE_DATA_OPTION = request.save_data_option
-        config.COOKIES = request.cookies
         config.CRAWLER_MAX_NOTES_COUNT = request.max_notes_count
         config.ENABLE_GET_IMAGES = request.enable_images
+        
+        # 配置代理设置
+        if request.use_proxy:
+            config.ENABLE_IP_PROXY = True
+            # 这里可以设置代理策略，具体实现需要在爬虫基类中支持
+            # 暂时通过环境变量传递
+            os.environ["PROXY_STRATEGY"] = request.proxy_strategy
+        else:
+            config.ENABLE_IP_PROXY = False
         
         # 设置指定ID列表
         if request.specified_ids:
@@ -182,12 +245,11 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         return CrawlerResponse(
             task_id=task_id,
             status="pending",
-            message="爬虫任务已启动",
-            data={"task_id": task_id}
+            message="爬虫任务已启动，正在检查登录状态..."
         )
         
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"启动爬虫失败: {str(e)}")
 
 @app.get("/api/v1/crawler/status/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
@@ -199,7 +261,7 @@ async def get_task_status(task_id: str):
 
 @app.get("/api/v1/crawler/tasks")
 async def list_tasks():
-    """列出所有任务"""
+    """获取所有任务列表"""
     return {
         "tasks": list(task_status.values()),
         "total": len(task_status)
@@ -212,7 +274,7 @@ async def delete_task(task_id: str):
         raise HTTPException(status_code=404, detail="任务不存在")
     
     del task_status[task_id]
-    return {"message": "任务已删除"}
+    return {"message": "任务已删除", "task_id": task_id}
 
 @app.get("/api/v1/health")
 async def health_check():
@@ -227,17 +289,69 @@ async def health_check():
 async def get_supported_platforms():
     """获取支持的平台列表"""
     return {
-        "platforms": list(CrawlerFactory.CRAWLERS.keys()),
-        "descriptions": {
-            "xhs": "小红书",
-            "dy": "抖音",
-            "ks": "快手",
-            "bili": "B站",
-            "wb": "微博",
-            "tieba": "贴吧",
-            "zhihu": "知乎"
-        }
+        "platforms": [
+            {"code": "xhs", "name": "小红书", "description": "小红书笔记和评论爬取"},
+            {"code": "dy", "name": "抖音", "description": "抖音视频和评论爬取"},
+            {"code": "ks", "name": "快手", "description": "快手视频和评论爬取"},
+            {"code": "bili", "name": "B站", "description": "B站视频和评论爬取"},
+            {"code": "wb", "name": "微博", "description": "微博内容和评论爬取"},
+            {"code": "tieba", "name": "贴吧", "description": "贴吧帖子和回复爬取"},
+            {"code": "zhihu", "name": "知乎", "description": "知乎问答和评论爬取"}
+        ]
     }
 
+@app.get("/api/v1/proxy/quick-get")
+async def quick_get_proxy(
+    strategy_type: str = "round_robin",
+    platform: str = None,
+    check_availability: bool = True
+):
+    """快速获取代理"""
+    try:
+        proxy_manager = ProxyManager()
+        proxy = await proxy_manager.get_proxy(strategy_type, platform=platform)
+        
+        if not proxy:
+            return {"message": "没有可用的代理", "proxy": None}
+        
+        if check_availability:
+            is_available = await proxy_manager.check_proxy(proxy)
+            if not is_available:
+                return {"message": "代理不可用", "proxy": None}
+        
+        return {
+            "message": "获取代理成功",
+            "proxy": {
+                "id": proxy.id,
+                "ip": proxy.ip,
+                "port": proxy.port,
+                "proxy_type": proxy.proxy_type,
+                "country": proxy.country,
+                "speed": proxy.speed,
+                "anonymity": proxy.anonymity,
+                "success_rate": proxy.success_rate
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取代理失败: {str(e)}")
+
+@app.get("/api/v1/proxy/quick-stats")
+async def quick_proxy_stats():
+    """快速获取代理统计"""
+    try:
+        proxy_manager = ProxyManager()
+        stats = await proxy_manager.get_proxy_stats()
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取代理统计失败: {str(e)}")
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(
+        "api_server:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    ) 

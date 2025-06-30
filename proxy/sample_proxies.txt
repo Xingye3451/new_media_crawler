@@ -1,0 +1,17 @@
+# 示例代理文件
+# 格式: proxy_type://ip:port 或 proxy_type://username:password@ip:port
+# 支持的类型: http, https, socks5
+
+# HTTP代理示例
+http://127.0.0.1:8080
+http://user:pass@127.0.0.1:8081
+
+# HTTPS代理示例
+https://127.0.0.1:8443
+https://user:pass@127.0.0.1:8444
+
+# SOCKS5代理示例
+socks5://127.0.0.1:1080
+socks5://user:pass@127.0.0.1:1081
+
+# 注意：这些是示例代理，实际使用时请替换为真实的代理服务器 

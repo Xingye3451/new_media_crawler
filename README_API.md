@@ -2,7 +2,7 @@
 
 ## 概述
 
-MediaCrawler API 是将原有的命令行爬虫工具包装成 HTTP API 服务，方便集成到其他平台中。
+MediaCrawler API 是将原有的命令行爬虫工具包装成 HTTP API 服务，方便集成到其他平台中。现在支持完整的代理管理功能，提供更安全、更稳定的爬取能力。
 
 ## 快速开始
 
@@ -26,6 +26,24 @@ chmod +x quick_test.sh
 
 # 或者手动测试
 curl http://localhost:8000/api/v1/health
+```
+
+### 3. 初始化代理数据库（可选）
+
+```bash
+# 初始化代理相关表结构
+python -c "
+import asyncio
+import db
+async def init():
+    await db.init_db()
+    async_db = db.media_crawler_db_var.get()
+    with open('schema/proxy_tables.sql', 'r') as f:
+        sql = f.read()
+    await async_db.execute(sql)
+    await db.close()
+asyncio.run(init())
+"
 ```
 
 ## API 接口
@@ -59,7 +77,9 @@ Content-Type: application/json
   "get_sub_comments": false,
   "save_data_option": "json",
   "max_notes_count": 100,
-  "enable_images": false
+  "enable_images": false,
+  "use_proxy": true,
+  "proxy_strategy": "smart"
 }
 ```
 
@@ -78,9 +98,59 @@ GET /api/v1/crawler/tasks
 DELETE /api/v1/crawler/tasks/{task_id}
 ```
 
+### 代理管理接口
+
+#### 获取代理统计
+```bash
+GET /api/v1/proxy/stats
+```
+
+#### 快速获取代理
+```bash
+GET /api/v1/proxy/quick-get?strategy_type=smart&platform=xhs
+```
+
+#### 获取代理列表
+```bash
+GET /api/v1/proxy/list?page=1&page_size=20&status=true&proxy_type=http&country=CN
+```
+
+#### 添加代理
+```bash
+POST /api/v1/proxy/add
+Content-Type: application/json
+
+{
+  "proxy_type": "http",
+  "ip": "127.0.0.1",
+  "port": 8080,
+  "username": "user",
+  "password": "pass",
+  "country": "CN",
+  "speed": 100,
+  "anonymity": "elite",
+  "priority": 10
+}
+```
+
+#### 检测代理
+```bash
+POST /api/v1/proxy/check/{proxy_id}
+```
+
+#### 批量检测代理
+```bash
+POST /api/v1/proxy/check/batch
+Content-Type: application/json
+
+{
+  "proxy_ids": [1, 2, 3, 4, 5]
+}
+```
+
 ## 参数说明
 
-### 请求参数
+### 爬虫请求参数
 
 | 参数名 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
@@ -96,90 +166,74 @@ DELETE /api/v1/crawler/tasks/{task_id}
 | specified_ids | array | 否 | null | 指定ID列表 |
 | max_notes_count | int | 否 | 200 | 最大爬取数量 |
 | enable_images | boolean | 否 | false | 是否爬取图片 |
+| **use_proxy** | **boolean** | **否** | **false** | **是否使用代理** |
+| **proxy_strategy** | **string** | **否** | **round_robin** | **代理策略：round_robin, random, weighted, failover, geo_based, smart** |
 
-### 响应格式
+### 代理策略说明
 
-#### 启动任务响应
-```json
-{
-  "task_id": "uuid-string",
-  "status": "pending",
-  "message": "爬虫任务已启动",
-  "data": {
-    "task_id": "uuid-string"
-  }
-}
-```
-
-#### 任务状态响应
-```json
-{
-  "task_id": "uuid-string",
-  "status": "completed",
-  "progress": 100.0,
-  "result": {
-    "data": [...]
-  },
-  "error": null,
-  "created_at": "2024-01-01T00:00:00",
-  "updated_at": "2024-01-01T00:05:00"
-}
-```
+- **round_robin**: 轮询策略 - 按顺序轮询使用代理
+- **random**: 随机策略 - 随机选择代理
+- **weighted**: 权重策略 - 根据代理权重选择
+- **failover**: 故障转移策略 - 优先使用高可用代理，失败时自动切换
+- **geo_based**: 地理位置策略 - 根据目标网站地理位置选择代理
+- **smart**: 智能策略 - 综合速度、可用性等因素智能选择
 
 ## 使用示例
 
-### Python 客户端示例
+### Python 客户端示例（带代理）
 
 ```python
 import requests
 import time
 
-# 启动爬虫任务
-def start_crawler_task(platform="xhs", keywords="编程"):
+# 启动带代理的爬虫任务
+def start_crawler_with_proxy(platform="xhs", keywords="编程"):
     url = "http://localhost:8000/api/v1/crawler/start"
     payload = {
         "platform": platform,
         "keywords": keywords,
         "max_notes_count": 10,
-        "get_comments": False
+        "get_comments": False,
+        "use_proxy": True,
+        "proxy_strategy": "smart"
     }
     
     response = requests.post(url, json=payload)
     return response.json()
 
-# 获取任务状态
-def get_task_status(task_id):
-    url = f"http://localhost:8000/api/v1/crawler/status/{task_id}"
+# 获取代理统计
+def get_proxy_stats():
+    url = "http://localhost:8000/api/v1/proxy/stats"
+    response = requests.get(url)
+    return response.json()
+
+# 快速获取代理
+def get_proxy(strategy="smart", platform="xhs"):
+    url = f"http://localhost:8000/api/v1/proxy/quick-get?strategy_type={strategy}&platform={platform}"
     response = requests.get(url)
     return response.json()
 
 # 使用示例
 if __name__ == "__main__":
-    # 启动任务
-    result = start_crawler_task("xhs", "Python编程")
+    # 查看代理统计
+    stats = get_proxy_stats()
+    print(f"代理统计: {stats}")
+    
+    # 获取代理
+    proxy = get_proxy("smart", "xhs")
+    print(f"获取代理: {proxy}")
+    
+    # 启动爬虫任务
+    result = start_crawler_with_proxy("xhs", "Python编程")
     task_id = result["data"]["task_id"]
     print(f"任务ID: {task_id}")
-    
-    # 轮询任务状态
-    while True:
-        status = get_task_status(task_id)
-        print(f"任务状态: {status['status']}")
-        
-        if status['status'] in ['completed', 'failed']:
-            if status['status'] == 'completed':
-                print(f"爬取完成，共获取 {len(status['result'])} 条数据")
-            else:
-                print(f"任务失败: {status['error']}")
-            break
-        
-        time.sleep(5)
 ```
 
-### JavaScript 客户端示例
+### JavaScript 客户端示例（带代理）
 
 ```javascript
-// 启动爬虫任务
-async function startCrawlerTask(platform = 'xhs', keywords = '编程') {
+// 启动带代理的爬虫任务
+async function startCrawlerWithProxy(platform = 'xhs', keywords = '编程') {
     const response = await fetch('http://localhost:8000/api/v1/crawler/start', {
         method: 'POST',
         headers: {
@@ -189,42 +243,43 @@ async function startCrawlerTask(platform = 'xhs', keywords = '编程') {
             platform,
             keywords,
             max_notes_count: 10,
-            get_comments: false
+            get_comments: false,
+            use_proxy: true,
+            proxy_strategy: 'smart'
         })
     });
     
     return await response.json();
 }
 
-// 获取任务状态
-async function getTaskStatus(taskId) {
-    const response = await fetch(`http://localhost:8000/api/v1/crawler/status/${taskId}`);
+// 获取代理统计
+async function getProxyStats() {
+    const response = await fetch('http://localhost:8000/api/v1/proxy/stats');
+    return await response.json();
+}
+
+// 快速获取代理
+async function getProxy(strategy = 'smart', platform = 'xhs') {
+    const response = await fetch(`http://localhost:8000/api/v1/proxy/quick-get?strategy_type=${strategy}&platform=${platform}`);
     return await response.json();
 }
 
 // 使用示例
 async function main() {
     try {
-        // 启动任务
-        const result = await startCrawlerTask('xhs', 'Python编程');
+        // 查看代理统计
+        const stats = await getProxyStats();
+        console.log('代理统计:', stats);
+        
+        // 获取代理
+        const proxy = await getProxy('smart', 'xhs');
+        console.log('获取代理:', proxy);
+        
+        // 启动爬虫任务
+        const result = await startCrawlerWithProxy('xhs', 'Python编程');
         const taskId = result.data.task_id;
-        console.log(`任务ID: ${taskId}`);
+        console.log('任务ID:', taskId);
         
-        // 轮询任务状态
-        const checkStatus = async () => {
-            const status = await getTaskStatus(taskId);
-            console.log(`任务状态: ${status.status}`);
-            
-            if (status.status === 'completed') {
-                console.log(`爬取完成，共获取 ${status.result.length} 条数据`);
-            } else if (status.status === 'failed') {
-                console.log(`任务失败: ${status.error}`);
-            } else {
-                setTimeout(checkStatus, 5000);
-            }
-        };
-        
-        checkStatus();
     } catch (error) {
         console.error('错误:', error);
     }
@@ -233,9 +288,92 @@ async function main() {
 main();
 ```
 
+## 代理管理工具
+
+### 支持的代理提供商
+
+#### 1. 青果代理 (Qingguo Proxy)
+- **官方文档**: https://www.qg.net/doc/2145.html
+- **配置方式**:
+  ```bash
+  # 环境变量配置
+  export qg_key="你的青果代理Key"
+  export qg_pwd="你的青果代理密码"  # 可选
+  
+  # 项目配置
+  # 修改 config/base_config.py
+  IP_PROXY_PROVIDER_NAME = "qingguo"
+  ENABLE_IP_PROXY = True
+  ```
+
+#### 2. 快代理 (KuaiDaili Proxy)
+- **配置方式**:
+  ```bash
+  export kdl_secret_id="你的快代理secret_id"
+  export kdl_signature="你的快代理签名"
+  export kdl_user_name="你的快代理用户名"
+  export kdl_user_pwd="你的快代理密码"
+  ```
+
+#### 3. 极速HTTP代理 (JiSu HTTP Proxy)
+- **配置方式**:
+  ```bash
+  export jisu_http_key="你的极速HTTP代理Key"
+  ```
+
+### 命令行工具
+
+```bash
+# 导入代理
+python proxy/proxy_tools.py import --file proxy/sample_proxies.txt
+
+# 检测代理
+python proxy/proxy_tools.py check
+
+# 查看统计
+python proxy/proxy_tools.py stats
+
+# 列出代理
+python proxy/proxy_tools.py list --limit 20
+
+# 测试策略
+python proxy/proxy_tools.py test
+
+# 清理失效代理
+python proxy/proxy_tools.py cleanup --max-fail 5
+```
+
+### 代理文件格式
+
+#### 文本格式
+```
+# 注释行
+http://127.0.0.1:8080
+http://user:pass@127.0.0.1:8081
+https://127.0.0.1:8443
+socks5://127.0.0.1:1080
+```
+
+#### JSON格式
+```json
+[
+  {
+    "proxy_type": "http",
+    "ip": "127.0.0.1",
+    "port": 8080,
+    "username": "user",
+    "password": "pass",
+    "country": "CN",
+    "speed": 100,
+    "anonymity": "elite",
+    "priority": 10
+  }
+]
+```
+
 ## 集成到AI平台
 
-### 1. 微服务架构集成
+### 1. 微服务架构集成（带代理）
 
 ```python
 # 在你的AI平台中添加MediaCrawler服务调用
@@ -243,26 +381,31 @@ class MediaCrawlerService:
     def __init__(self, api_url="http://localhost:8000"):
         self.api_url = api_url
     
-    async def crawl_content(self, platform, keywords, max_count=50):
-        """爬取内容并返回结构化数据"""
+    async def crawl_content_with_proxy(self, platform, keywords, max_count=50, use_proxy=True):
+        """爬取内容并返回结构化数据（支持代理）"""
         # 启动爬虫任务
-        task = await self._start_task(platform, keywords, max_count)
+        task = await self._start_task_with_proxy(platform, keywords, max_count, use_proxy)
         
         # 等待任务完成
         result = await self._wait_for_completion(task['task_id'])
         
         return result
     
-    async def _start_task(self, platform, keywords, max_count):
-        # 实现任务启动逻辑
+    async def _start_task_with_proxy(self, platform, keywords, max_count, use_proxy):
+        # 实现带代理的任务启动逻辑
         pass
     
     async def _wait_for_completion(self, task_id):
         # 实现任务等待逻辑
         pass
+    
+    async def get_proxy_info(self, strategy="smart", platform=None):
+        """获取代理信息"""
+        # 实现代理获取逻辑
+        pass
 ```
 
-### 2. 消息队列集成
+### 2. 消息队列集成（带代理）
 
 ```python
 # 使用Redis或RabbitMQ进行任务队列管理
@@ -273,10 +416,12 @@ class CrawlerTaskQueue:
     def __init__(self):
         self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
     
-    def enqueue_task(self, task_data):
-        """将爬虫任务加入队列"""
+    def enqueue_task_with_proxy(self, task_data, use_proxy=True, proxy_strategy="smart"):
+        """将爬虫任务加入队列（支持代理）"""
         task_id = str(uuid.uuid4())
         task_data['task_id'] = task_id
+        task_data['use_proxy'] = use_proxy
+        task_data['proxy_strategy'] = proxy_strategy
         self.redis_client.lpush('crawler_tasks', json.dumps(task_data))
         return task_id
     
@@ -293,6 +438,8 @@ class CrawlerTaskQueue:
 3. **数据存储**: 数据默认保存在 `./data` 目录下
 4. **容器日志**: 使用 `docker-compose logs -f mediacrawler-api` 查看详细日志
 5. **资源限制**: 爬虫任务会消耗较多资源，建议设置合理的并发限制
+6. **代理使用**: 使用代理时请确保代理服务器可用，建议定期检测代理质量
+7. **法律合规**: 请确保代理使用符合当地法律法规
 
 ## 故障排除
 
@@ -325,6 +472,31 @@ class CrawlerTaskQueue:
    docker exec mediacrawler-api ping www.xiaohongshu.com
    ```
 
+4. **代理相关问题**
+   ```bash
+   # 检查代理统计
+   curl http://localhost:8000/api/v1/proxy/stats
+   
+   # 检测代理可用性
+   python proxy/proxy_tools.py check
+   
+   # 查看代理日志
+   curl "http://localhost:8000/api/v1/proxy/usage/logs?success=false&page_size=10"
+   ```
+
+5. **青果代理相关问题**
+   ```bash
+   # 测试青果代理连接
+   python test/test_qingguo_proxy.py
+   
+   # 检查青果代理配置
+   echo $qg_key
+   echo $qg_pwd
+   
+   # 查看青果代理余额
+   curl "https://proxy.qg.net/query?Key=your_key"
+   ```
+
 ## 开发说明
 
 ### 本地开发
@@ -338,6 +510,9 @@ python api_server.py
 
 # 运行测试
 python test_api.py
+
+# 测试青果代理
+python test/test_qingguo_proxy.py
 ```
 
 ### 自定义配置
@@ -349,6 +524,12 @@ python test_api.py
 export CRAWLER_MAX_CONCURRENCY=5
 export CRAWLER_TIMEOUT=300
 export LOG_LEVEL=INFO
+export PROXY_ENABLED=true
+export PROXY_STRATEGY=smart
+
+# 青果代理配置
+export qg_key="your_qingguo_key"
+export qg_pwd="your_qingguo_password"
 
 # 启动服务
 docker-compose up -d
@@ -356,4 +537,4 @@ docker-compose up -d
 
 ## 许可证
 
-本项目仅供学习和研究使用，请遵守相关法律法规和平台使用条款。 
+本项目仅供学习和研究使用，请遵守相关法律法规和平台使用条款。
