@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mediacrawler-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mediacrawler-api
+    ports:
+      - "8100:8100"    # API服务端口
+      - "6080:6080"    # noVNC Web界面端口
+      - "5901:5901"    # VNC直连端口
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config:ro  # 挂载配置文件（只读）
+    environment:
+      - PYTHONPATH=/app
+      - TZ=Asia/Shanghai
+      - DISPLAY=:1
+      # VNC配置
+      - VNC_PASSWORD=mediacrawler123
+      - VNC_URL=http://localhost:6080/vnc.html  # 外部访问时修改为实际IP
+      - VNC_HOST=localhost
+      - VNC_PORT=6080
+      - DISPLAY_NUMBER=1
+      - REMOTE_DESKTOP_ENABLED=true
+      # 数据库配置（如果使用外部数据库）
+      - DB_HOST=192.168.31.231
+      - DB_PORT=3306
+      - DB_USER=aiuser
+      - DB_PASSWORD=edcghj98578
+      - DB_NAME=mediacrawler
+      # 环境配置
+      - ENV=production
+    restart: unless-stopped
+    privileged: true  # VNC服务器需要特权模式
+    shm_size: 2gb     # 增加共享内存，避免浏览器崩溃
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # 可选：添加Redis用于任务队列（如果需要）
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: mediacrawler-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+  # 可选：添加MySQL数据库（如果需要）
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: mediacrawler-mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root123
+  #     MYSQL_DATABASE: mediacrawler
+  #     MYSQL_USER: crawler
+  #     MYSQL_PASSWORD: crawler123
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   restart: unless-stopped
+
+volumes:
+  # redis_data:
+  # mysql_data: 

@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频预览 - MediaCrawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-info h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header-info p {
+            opacity: 0.9;
+            font-size: 1.2em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-white {
+            background: white;
+            color: #6f42c1;
+        }
+
+        .btn-white:hover {
+            background: #f8f9fa;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .video-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .video-header {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+
+        .video-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .video-meta {
+            display: flex;
+            gap: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .video-player {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .video-element {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .video-placeholder {
+            aspect-ratio: 16/9;
+            background: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        .video-placeholder .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .video-controls {
+            padding: 20px;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .btn-primary {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a359a;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .info-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .info-card h3 {
+            color: #6f42c1;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-word;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .stat-number {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #6f42c1;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .comments-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .comments-header {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .comments-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .comment-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .comment-item:last-child {
+            border-bottom: none;
+        }
+
+        .comment-author {
+            font-weight: bold;
+            color: #6f42c1;
+            margin-bottom: 5px;
+        }
+
+        .comment-content {
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .comment-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #6f42c1;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #dc3545;
+            background: #f8d7da;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .thumbnail-item {
+            aspect-ratio: 16/9;
+            background: #f0f0f0;
+            border-radius: 5px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .thumbnail-item:hover {
+            transform: scale(1.05);
+        }
+
+        .thumbnail-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .quality-selector {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            justify-content: center;
+        }
+
+        .quality-btn {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .quality-btn.active {
+            background: #6f42c1;
+            color: white;
+            border-color: #6f42c1;
+        }
+
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background: #28a745;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .toast.info {
+            background: #17a2b8;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .video-meta {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .video-controls {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-info">
+                    <h1>🎬 视频预览</h1>
+                    <p>在线预览视频内容和元数据信息</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-white" onclick="goBack()">← 返回</button>
+                    <button class="btn btn-white" onclick="shareVideo()">分享</button>
+                    <button class="btn btn-white" onclick="reportVideo()">举报</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- 视频播放区域 -->
+            <div class="video-section">
+                <div class="video-header">
+                    <div class="video-title" id="videoTitle">正在加载...</div>
+                    <div class="video-meta" id="videoMeta">
+                        <span>📱 平台: <span id="videoPlatform">-</span></span>
+                        <span>👤 作者: <span id="videoAuthor">-</span></span>
+                        <span>⏰ 发布: <span id="videoDate">-</span></span>
+                    </div>
+                </div>
+                
+                <div class="video-player">
+                    <div class="video-container">
+                        <div class="video-placeholder" id="videoPlaceholder">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <div>正在加载视频...</div>
+                            </div>
+                        </div>
+                        <video id="videoElement" class="video-element" controls style="display: none;">
+                            您的浏览器不支持视频播放
+                        </video>
+                        <button class="fullscreen-btn" onclick="toggleFullscreen()" style="display: none;">⛶</button>
+                    </div>
+                    
+                    <div class="quality-selector" id="qualitySelector" style="display: none;">
+                        <!-- 动态生成画质选择 -->
+                    </div>
+                </div>
+                
+                <div class="video-controls">
+                    <button class="btn btn-primary" onclick="playPause()">▶ 播放</button>
+                    <button class="btn btn-secondary" onclick="downloadVideo()">📥 下载</button>
+                    <button class="btn btn-success" onclick="collectVideo()">⭐ 收藏</button>
+                </div>
+            </div>
+
+            <!-- 信息面板 -->
+            <div class="info-section">
+                <!-- 基本信息 -->
+                <div class="info-card">
+                    <h3>📋 基本信息</h3>
+                    <div id="basicInfo">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <div>正在加载...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 统计数据 -->
+                <div class="info-card">
+                    <h3>📊 数据统计</h3>
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-item">
+                            <div class="stat-number" id="likeCount">-</div>
+                            <div class="stat-label">点赞</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="commentCount">-</div>
+                            <div class="stat-label">评论</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="shareCount">-</div>
+                            <div class="stat-label">分享</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="viewCount">-</div>
+                            <div class="stat-label">观看</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 技术信息 -->
+                <div class="info-card">
+                    <h3>🔧 技术信息</h3>
+                    <div id="techInfo">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <div>正在加载...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 评论区域 -->
+        <div class="comments-section">
+            <div class="comments-header">
+                <h3>💬 热门评论</h3>
+                <button class="btn btn-secondary btn-sm" onclick="loadAllComments()">查看全部</button>
+            </div>
+            <div class="comments-list" id="commentsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>正在加载评论...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let videoData = {};
+        let currentVideoUrl = '';
+        let platform = '';
+        let videoId = '';
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 从URL获取参数
+            const urlParams = new URLSearchParams(window.location.search);
+            platform = urlParams.get('platform');
+            videoId = urlParams.get('video_id');
+            
+            if (!platform || !videoId) {
+                showError('缺少必要参数');
+                return;
+            }
+
+            loadVideoData();
+        });
+
+        // 加载视频数据
+        async function loadVideoData() {
+            try {
+                const response = await fetch(`/api/v1/videos/${platform}/${videoId}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    videoData = data.data;
+                    renderVideoInfo();
+                    loadVideoPlayer();
+                    loadComments();
+                } else {
+                    showError('视频不存在或已被删除');
+                }
+            } catch (error) {
+                console.error('加载视频数据失败:', error);
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 渲染视频信息
+        function renderVideoInfo() {
+            // 基本信息
+            document.getElementById('videoTitle').textContent = videoData.desc || videoData.title || '无标题';
+            document.getElementById('videoPlatform').textContent = getPlatformText(platform);
+            document.getElementById('videoAuthor').textContent = videoData.nickname || videoData.user_name || '未知用户';
+            document.getElementById('videoDate').textContent = formatDate(videoData.create_time);
+
+            // 统计数据
+            document.getElementById('likeCount').textContent = formatNumber(videoData.digg_count || videoData.liked_count || 0);
+            document.getElementById('commentCount').textContent = formatNumber(videoData.comment_count || 0);
+            document.getElementById('shareCount').textContent = formatNumber(videoData.share_count || 0);
+            document.getElementById('viewCount').textContent = formatNumber(videoData.collect_count || videoData.view_count || 0);
+
+            // 详细信息
+            const basicInfo = document.getElementById('basicInfo');
+            basicInfo.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">视频ID</span>
+                    <span class="info-value">${videoId}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">标题</span>
+                    <span class="info-value">${videoData.desc || videoData.title || '无标题'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">作者</span>
+                    <span class="info-value">${videoData.nickname || videoData.user_name || '未知用户'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">时长</span>
+                    <span class="info-value">${formatDuration(videoData.duration || 0)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">发布时间</span>
+                    <span class="info-value">${formatDate(videoData.create_time)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">更新时间</span>
+                    <span class="info-value">${formatDate(videoData.update_time)}</span>
+                </div>
+            `;
+
+            // 技术信息
+            const techInfo = document.getElementById('techInfo');
+            techInfo.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">视频格式</span>
+                    <span class="info-value">${getVideoFormat(videoData.video_url)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">分辨率</span>
+                    <span class="info-value">${videoData.width || 0} × ${videoData.height || 0}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">文件大小</span>
+                    <span class="info-value">${formatBytes(videoData.file_size || 0)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">比特率</span>
+                    <span class="info-value">${videoData.bit_rate || 0} kbps</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">帧率</span>
+                    <span class="info-value">${videoData.frame_rate || 0} fps</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">编码格式</span>
+                    <span class="info-value">${videoData.codec || 'H.264'}</span>
+                </div>
+            `;
+        }
+
+        // 加载视频播放器
+        function loadVideoPlayer() {
+            const placeholder = document.getElementById('videoPlaceholder');
+            const videoElement = document.getElementById('videoElement');
+            
+            if (videoData.video_url) {
+                // 设置视频源
+                videoElement.src = videoData.video_url;
+                currentVideoUrl = videoData.video_url;
+                
+                // 隐藏占位符，显示视频
+                placeholder.style.display = 'none';
+                videoElement.style.display = 'block';
+                document.querySelector('.fullscreen-btn').style.display = 'block';
+                
+                // 添加视频事件监听
+                videoElement.addEventListener('loadedmetadata', function() {
+                    showToast('视频加载完成', 'success');
+                });
+                
+                videoElement.addEventListener('error', function() {
+                    showError('视频加载失败');
+                });
+
+                // 生成画质选择器（如果有多个清晰度）
+                generateQualitySelector();
+                
+            } else {
+                placeholder.innerHTML = `
+                    <div class="error-message">
+                        <div style="font-size: 3em; margin-bottom: 15px;">❌</div>
+                        <h3>视频不可播放</h3>
+                        <p>该视频可能已被删除或链接已失效</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 生成画质选择器
+        function generateQualitySelector() {
+            const qualitySelector = document.getElementById('qualitySelector');
+            
+            // 这里可以根据实际情况添加多个画质选项
+            const qualities = [
+                { label: '原画', url: videoData.video_url },
+                // 可以添加更多画质选项
+            ];
+
+            if (qualities.length > 1) {
+                qualitySelector.style.display = 'flex';
+                qualitySelector.innerHTML = qualities.map((quality, index) => 
+                    `<button class="quality-btn ${index === 0 ? 'active' : ''}" onclick="switchQuality('${quality.url}', this)">${quality.label}</button>`
+                ).join('');
+            }
+        }
+
+        // 切换画质
+        function switchQuality(url, button) {
+            const videoElement = document.getElementById('videoElement');
+            const currentTime = videoElement.currentTime;
+            
+            videoElement.src = url;
+            videoElement.currentTime = currentTime;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.quality-btn').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            
+            showToast('画质切换成功', 'success');
+        }
+
+        // 加载评论
+        async function loadComments() {
+            try {
+                const commentsList = document.getElementById('commentsList');
+                
+                if (videoData.hot_comments && videoData.hot_comments.length > 0) {
+                    commentsList.innerHTML = '';
+                    
+                    videoData.hot_comments.forEach(comment => {
+                        const commentItem = document.createElement('div');
+                        commentItem.className = 'comment-item';
+                        commentItem.innerHTML = `
+                            <div class="comment-author">${comment.nickname || comment.user_name || '匿名用户'}</div>
+                            <div class="comment-content">${comment.text || comment.content || '内容为空'}</div>
+                            <div class="comment-meta">
+                                <span>👍 ${formatNumber(comment.digg_count || comment.like_count || 0)}</span>
+                                <span>${formatDate(comment.create_time)}</span>
+                            </div>
+                        `;
+                        commentsList.appendChild(commentItem);
+                    });
+                } else {
+                    commentsList.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #666;">
+                            <div style="font-size: 2em; margin-bottom: 15px;">💬</div>
+                            <h4>暂无评论</h4>
+                            <p>还没有人评论这个视频</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('加载评论失败:', error);
+            }
+        }
+
+        // 播放/暂停
+        function playPause() {
+            const videoElement = document.getElementById('videoElement');
+            const playBtn = event.target;
+            
+            if (videoElement.paused) {
+                videoElement.play();
+                playBtn.textContent = '⏸ 暂停';
+            } else {
+                videoElement.pause();
+                playBtn.textContent = '▶ 播放';
+            }
+        }
+
+        // 下载视频
+        async function downloadVideo() {
+            if (!currentVideoUrl) {
+                showToast('视频链接不可用', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/videos/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        video_url: currentVideoUrl,
+                        video_id: videoId,
+                        platform: platform,
+                        download_type: 'local'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    showToast('下载任务已提交', 'success');
+                } else {
+                    showToast('下载失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('下载失败:', error);
+                showToast('下载失败', 'error');
+            }
+        }
+
+        // 收藏视频
+        function collectVideo() {
+            showToast('收藏功能开发中', 'info');
+        }
+
+        // 分享视频
+        function shareVideo() {
+            const shareUrl = window.location.href;
+            navigator.clipboard.writeText(shareUrl);
+            showToast('链接已复制到剪贴板', 'success');
+        }
+
+        // 举报视频
+        function reportVideo() {
+            if (confirm('确定要举报这个视频吗？')) {
+                showToast('举报已提交', 'success');
+            }
+        }
+
+        // 全屏切换
+        function toggleFullscreen() {
+            const videoContainer = document.querySelector('.video-container');
+            
+            if (!document.fullscreenElement) {
+                videoContainer.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 加载所有评论
+        function loadAllComments() {
+            window.open(`/comments.html?platform=${platform}&video_id=${videoId}`, '_blank');
+        }
+
+        // 返回上一页
+        function goBack() {
+            if (document.referrer) {
+                window.history.back();
+            } else {
+                window.location.href = '/static/task_results.html';
+            }
+        }
+
+        // 显示错误
+        function showError(message) {
+            const placeholder = document.getElementById('videoPlaceholder');
+            placeholder.innerHTML = `
+                <div class="error-message">
+                    <div style="font-size: 3em; margin-bottom: 15px;">❌</div>
+                    <h3>加载失败</h3>
+                    <p>${message}</p>
+                    <button class="btn btn-primary" onclick="location.reload()">重新加载</button>
+                </div>
+            `;
+        }
+
+        // 工具函数
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        function getPlatformText(platform) {
+            const platforms = {
+                'dy': '抖音',
+                'xhs': '小红书',
+                'ks': '快手',
+                'bili': '哔哩哔哩',
+                'wb': '微博',
+                'zhihu': '知乎'
+            };
+            return platforms[platform] || platform;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '未知时间';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        function formatNumber(num) {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + 'w';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'k';
+            }
+            return num.toString();
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '00:00';
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function getVideoFormat(url) {
+            if (!url) return '未知';
+            const extension = url.split('.').pop().toLowerCase();
+            return extension.toUpperCase();
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            const videoElement = document.getElementById('videoElement');
+            
+            switch(e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    playPause();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    videoElement.currentTime -= 10;
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    videoElement.currentTime += 10;
+                    break;
+                case 'KeyF':
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html> 

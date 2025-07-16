@@ -1,0 +1,88 @@
+# 开发环境配置文件
+# 使用方式: ENV=development python main.py
+
+proxy:
+  # 代理提供商配置
+  provider_name: "qingguo"  # 可选: qingguo, kuaidaili, jisuhttp
+  enabled: true
+  pool_count: 5
+  validate_ip: true
+  
+  # 青果代理配置
+  qingguo_key: "your_qingguo_key_here"
+  qingguo_pwd: "your_qingguo_pwd_here"  # 可选
+  
+  # 快代理配置
+  kuaidaili_secret_id: "your_kuaidaili_secret_id"
+  kuaidaili_signature: "your_kuaidaili_signature"
+  kuaidaili_user_name: "your_kuaidaili_username"
+  kuaidaili_user_pwd: "your_kuaidaili_password"
+  
+  # 极速HTTP代理配置
+  jisu_http_key: "your_jisu_http_key"
+
+crawler:
+  # 爬虫基础配置
+  platform: "xhs"  # 可选: xhs, dy, ks, bili, wb, tieba, zhihu
+  keywords: "编程副业,编程兼职"
+  login_type: "qrcode"  # 可选: qrcode, phone, cookie
+  crawler_type: "search"  # 可选: search, detail, creator
+  max_notes_count: 50  # 开发环境设置较小的数量
+  enable_comments: true
+  enable_sub_comments: false
+  enable_images: false
+  save_data_option: "json"  # 可选: json, csv, db
+  headless: true  # Linux服务器环境无头模式
+  max_sleep_sec: 3  # 开发环境增加间隔
+  max_concurrency: 1  # 开发环境单线程
+
+database:
+  # 数据库配置
+  host: "192.168.31.231"
+  port: 3306
+  username: "aiuser"
+  password: "edcghj98578"
+  database: "mediacrawler"
+  charset: "utf8mb4"
+
+redis:
+  # Redis缓存配置
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: "your_redis_password_123"  # 本地Redis无密码
+  connection_pool_size: 10
+  max_connections: 100
+  socket_timeout: 5
+  socket_connect_timeout: 5
+  socket_keepalive: true
+  socket_keepalive_options: {}
+  health_check_interval: 30
+  retry_on_timeout: true
+  
+  # 任务结果缓存配置
+  task_result_ttl: 604800  # 7天过期时间
+  task_result_key_prefix: "mediacrawler:task:"
+  
+  # 会话缓存配置
+  session_ttl: 3600  # 1小时过期时间
+  session_key_prefix: "mediacrawler:session:"
+
+app:
+  # 应用配置
+  debug: true
+  log_level: "DEBUG"
+  data_dir: "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/data"
+  user_data_dir: "%s_user_data_dir"
+
+remote_desktop:
+  # 远程桌面配置
+  enabled: true
+  vnc_url: "http://192.168.31.231:6080/vnc.html"  # 本地环境VNC地址
+  vnc_host: "192.168.31.231"
+  vnc_port: 6080
+  vnc_password: ""
+  display_number: 1
+  connection_timeout: 5
+  max_wait_time: 1800  # 30分钟
+  check_interval: 3    # 3秒检查一次 

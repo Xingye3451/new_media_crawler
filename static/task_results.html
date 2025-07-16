@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务结果管理 - MediaCrawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .controls h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-group input, .control-group select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .task-list {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .task-item {
+            border-bottom: 1px solid #eee;
+            padding: 20px;
+            transition: background-color 0.3s;
+        }
+
+        .task-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .task-item:last-child {
+            border-bottom: none;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .task-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .task-status {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-running {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .task-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .meta-item .icon {
+            font-size: 1.2em;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .page-btn {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .page-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background: #28a745;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .toast.info {
+            background: #17a2b8;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-group {
+                flex-direction: column;
+            }
+            
+            .control-group input, .control-group select {
+                min-width: auto;
+            }
+            
+            .task-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .task-actions {
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 任务结果管理</h1>
+            <p>MediaCrawler 爬虫任务执行结果监控与管理</p>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>📝 总任务数</h3>
+                <div class="number" id="totalTasks">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>✅ 成功任务</h3>
+                <div class="number" id="successTasks">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>📹 总视频数</h3>
+                <div class="number" id="totalVideos">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>💾 存储使用</h3>
+                <div class="number" id="storageUsed">-</div>
+            </div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="controls">
+            <h3>🔍 筛选与搜索</h3>
+            <div class="control-group">
+                <input type="text" id="searchKeyword" placeholder="搜索关键词...">
+                <select id="platformFilter">
+                    <option value="">所有平台</option>
+                    <option value="dy">抖音</option>
+                    <option value="xhs">小红书</option>
+                    <option value="ks">快手</option>
+                    <option value="bili">哔哩哔哩</option>
+                    <option value="wb">微博</option>
+                    <option value="zhihu">知乎</option>
+                </select>
+                <select id="statusFilter">
+                    <option value="">所有状态</option>
+                    <option value="completed">已完成</option>
+                    <option value="running">运行中</option>
+                    <option value="failed">失败</option>
+                </select>
+                <button class="btn btn-primary" onclick="searchTasks()">搜索</button>
+                <button class="btn btn-secondary" onclick="refreshTasks()">刷新</button>
+            </div>
+        </div>
+
+        <!-- 任务列表 -->
+        <div class="task-list">
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner"></div>
+                <div>正在加载任务结果...</div>
+            </div>
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <div class="icon">📋</div>
+                <h3>暂无任务结果</h3>
+                <p>开始一个新的爬虫任务来查看结果</p>
+            </div>
+            <div id="taskList"></div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let pageSize = 10;
+        let totalPages = 0;
+        let tasks = [];
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatistics();
+            loadTasks();
+        });
+
+        // 加载统计信息
+        async function loadStatistics() {
+            try {
+                const response = await fetch('/api/v1/task-results/statistics');
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    const stats = data.data;
+                    document.getElementById('totalTasks').textContent = stats.redis_stats.total_tasks || 0;
+                    document.getElementById('successTasks').textContent = stats.redis_stats.completed_tasks || 0;
+                    document.getElementById('totalVideos').textContent = stats.database_stats.total_videos || 0;
+                    document.getElementById('storageUsed').textContent = formatBytes(stats.database_stats.total_size || 0);
+                }
+            } catch (error) {
+                console.error('加载统计信息失败:', error);
+            }
+        }
+
+        // 加载任务列表
+        async function loadTasks() {
+            try {
+                showLoading(true);
+                const response = await fetch(`/api/v1/task-results?page=${currentPage}&page_size=${pageSize}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    tasks = data.data.results;
+                    totalPages = data.data.total_pages;
+                    
+                    renderTasks();
+                    renderPagination();
+                    
+                    if (tasks.length === 0) {
+                        showEmptyState(true);
+                    }
+                } else {
+                    showToast('加载任务失败', 'error');
+                }
+            } catch (error) {
+                console.error('加载任务失败:', error);
+                showToast('网络错误', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 渲染任务列表
+        function renderTasks() {
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+
+            tasks.forEach(task => {
+                const taskItem = document.createElement('div');
+                taskItem.className = 'task-item';
+                taskItem.innerHTML = `
+                    <div class="task-header">
+                        <div class="task-title">${task.keywords || task.task_id}</div>
+                        <div class="task-status status-${task.status || 'completed'}">${getStatusText(task.status)}</div>
+                    </div>
+                    <div class="task-meta">
+                        <div class="meta-item">
+                            <span class="icon">📱</span>
+                            <span>${getPlatformText(task.platform)}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="icon">📹</span>
+                            <span>${task.statistics?.total_videos || 0} 个视频</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="icon">💬</span>
+                            <span>${task.statistics?.total_comments || 0} 条评论</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="icon">⏰</span>
+                            <span>${formatDate(task.created_at)}</span>
+                        </div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="btn btn-primary btn-sm" onclick="viewTaskDetail('${task.task_id}')">查看详情</button>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadVideos('${task.task_id}')">下载视频</button>
+                        <button class="btn btn-secondary btn-sm" onclick="exportResults('${task.task_id}')">导出结果</button>
+                    </div>
+                `;
+                taskList.appendChild(taskItem);
+            });
+        }
+
+        // 渲染分页
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            // 上一页
+            if (currentPage > 1) {
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'page-btn';
+                prevBtn.textContent = '← 上一页';
+                prevBtn.onclick = () => changePage(currentPage - 1);
+                pagination.appendChild(prevBtn);
+            }
+
+            // 页码
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `page-btn ${i === currentPage ? 'active' : ''}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => changePage(i);
+                pagination.appendChild(pageBtn);
+            }
+
+            // 下一页
+            if (currentPage < totalPages) {
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'page-btn';
+                nextBtn.textContent = '下一页 →';
+                nextBtn.onclick = () => changePage(currentPage + 1);
+                pagination.appendChild(nextBtn);
+            }
+        }
+
+        // 切换页面
+        function changePage(page) {
+            currentPage = page;
+            loadTasks();
+        }
+
+        // 搜索任务
+        function searchTasks() {
+            const keyword = document.getElementById('searchKeyword').value;
+            const platform = document.getElementById('platformFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            // 这里可以添加搜索逻辑
+            showToast('搜索功能开发中', 'info');
+        }
+
+        // 刷新任务
+        function refreshTasks() {
+            currentPage = 1;
+            loadTasks();
+            loadStatistics();
+            showToast('刷新成功', 'success');
+        }
+
+        // 查看任务详情
+        function viewTaskDetail(taskId) {
+            window.open(`/task-detail.html?task_id=${taskId}`, '_blank');
+        }
+
+        // 下载视频
+        function downloadVideos(taskId) {
+            showToast('正在准备下载...', 'info');
+            // 这里可以添加下载逻辑
+        }
+
+        // 导出结果
+        function exportResults(taskId) {
+            showToast('正在导出结果...', 'info');
+            // 这里可以添加导出逻辑
+        }
+
+        // 工具函数
+        function showLoading(show) {
+            const loading = document.getElementById('loadingIndicator');
+            loading.style.display = show ? 'block' : 'none';
+        }
+
+        function showEmptyState(show) {
+            const emptyState = document.getElementById('emptyState');
+            emptyState.style.display = show ? 'block' : 'none';
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '未知时间';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        function getPlatformText(platform) {
+            const platforms = {
+                'dy': '抖音',
+                'xhs': '小红书',
+                'ks': '快手',
+                'bili': '哔哩哔哩',
+                'wb': '微博',
+                'zhihu': '知乎'
+            };
+            return platforms[platform] || platform;
+        }
+
+        function getStatusText(status) {
+            const statusTexts = {
+                'completed': '已完成',
+                'running': '运行中',
+                'failed': '失败',
+                'pending': '等待中'
+            };
+            return statusTexts[status] || '未知';
+        }
+    </script>
+</body>
+</html> 

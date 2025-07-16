@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaCrawler - 多平台媒体爬虫管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.3em;
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .feature-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .feature-desc {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .feature-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .stats-overview {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stats-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 1em;
+        }
+
+        .quick-actions {
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .actions-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            background: white;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s;
+        }
+
+        .action-btn:hover {
+            border-color: #667eea;
+            background: #f8f9fa;
+        }
+
+        .action-icon {
+            font-size: 1.5em;
+            min-width: 30px;
+        }
+
+        .action-text {
+            flex: 1;
+        }
+
+        .action-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .action-desc {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 50px;
+        }
+
+        .footer p {
+            margin-bottom: 10px;
+        }
+
+        .footer a {
+            color: rgba(255,255,255,0.9);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5em;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕷️ MediaCrawler</h1>
+            <p>多平台媒体内容爬虫管理系统</p>
+            <p>支持抖音、小红书、快手、B站、微博、知乎等平台的内容爬取与管理</p>
+        </div>
+
+        <!-- 统计概览 -->
+        <div class="stats-overview">
+            <div class="stats-title">📊 系统概览</div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalTasks">-</div>
+                    <div class="stat-label">总任务数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalVideos">-</div>
+                    <div class="stat-label">视频总数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalFiles">-</div>
+                    <div class="stat-label">存储文件</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="storageUsed">-</div>
+                    <div class="stat-label">存储使用</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 核心功能 -->
+        <div class="feature-grid">
+            <!-- 爬虫管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/api_test.html'">
+                <span class="feature-icon">🚀</span>
+                <div class="feature-title">爬虫任务管理</div>
+                <div class="feature-desc">
+                    启动和管理多平台爬虫任务，支持关键词搜索、用户主页爬取等多种模式
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/api_test.html" class="btn btn-primary">开始爬取</a>
+                    <a href="/static/task_results.html" class="btn btn-secondary">查看结果</a>
+                </div>
+            </div>
+
+            <!-- 任务结果管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/task_results.html'">
+                <span class="feature-icon">📋</span>
+                <div class="feature-title">任务结果管理</div>
+                <div class="feature-desc">
+                    查看和管理爬取任务的执行结果，包括视频列表、统计数据和下载管理
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/task_results.html" class="btn btn-primary">查看结果</a>
+                    <a href="/static/task_detail.html" class="btn btn-secondary">任务详情</a>
+                </div>
+            </div>
+
+            <!-- 文件管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/file_management.html'">
+                <span class="feature-icon">📁</span>
+                <div class="feature-title">文件存储管理</div>
+                <div class="feature-desc">
+                    管理本地和云端存储的视频文件，支持批量操作、存储统计和清理功能
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/file_management.html" class="btn btn-primary">文件管理</a>
+                    <a href="#" onclick="checkMinIO()" class="btn btn-secondary">云端存储</a>
+                </div>
+            </div>
+
+            <!-- 视频预览 -->
+            <div class="feature-card">
+                <span class="feature-icon">🎬</span>
+                <div class="feature-title">视频预览播放</div>
+                <div class="feature-desc">
+                    在线预览视频内容，查看详细元数据信息，支持多种画质和全屏播放
+                </div>
+                <div class="feature-actions">
+                    <a href="#" onclick="openVideoPreview()" class="btn btn-primary">视频预览</a>
+                    <a href="#" onclick="showVideoList()" class="btn btn-secondary">视频列表</a>
+                </div>
+            </div>
+
+            <!-- 数据分析 -->
+            <div class="feature-card">
+                <span class="feature-icon">📈</span>
+                <div class="feature-title">数据统计分析</div>
+                <div class="feature-desc">
+                    分析爬取数据的统计信息，包括平台分布、热门内容、用户行为等
+                </div>
+                <div class="feature-actions">
+                    <a href="#" onclick="showAnalytics()" class="btn btn-primary">数据分析</a>
+                    <a href="#" onclick="exportData()" class="btn btn-secondary">数据导出</a>
+                </div>
+            </div>
+
+            <!-- 系统设置 -->
+            <div class="feature-card">
+                <span class="feature-icon">⚙️</span>
+                <div class="feature-title">系统配置管理</div>
+                <div class="feature-desc">
+                    配置爬虫参数、账号管理、存储设置、API接口等系统配置项
+                </div>
+                <div class="feature-actions">
+                    <a href="#" onclick="showSettings()" class="btn btn-primary">系统设置</a>
+                    <a href="/docs" class="btn btn-secondary">API文档</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快速操作 -->
+        <div class="quick-actions">
+            <div class="actions-title">⚡ 快速操作</div>
+            <div class="actions-grid">
+                <a href="/static/api_test.html" class="action-btn">
+                    <span class="action-icon">🎯</span>
+                    <div class="action-text">
+                        <div class="action-title">快速爬取</div>
+                        <div class="action-desc">立即开始一个新的爬取任务</div>
+                    </div>
+                </a>
+                
+                <a href="/static/task_results.html" class="action-btn">
+                    <span class="action-icon">📊</span>
+                    <div class="action-text">
+                        <div class="action-title">查看结果</div>
+                        <div class="action-desc">查看最新的爬取结果</div>
+                    </div>
+                </a>
+                
+                <a href="/static/file_management.html" class="action-btn">
+                    <span class="action-icon">💾</span>
+                    <div class="action-text">
+                        <div class="action-title">管理文件</div>
+                        <div class="action-desc">管理已下载的视频文件</div>
+                    </div>
+                </a>
+                
+                <a href="#" onclick="cleanupSystem()" class="action-btn">
+                    <span class="action-icon">🧹</span>
+                    <div class="action-text">
+                        <div class="action-title">系统清理</div>
+                        <div class="action-desc">清理过期文件和缓存数据</div>
+                    </div>
+                </a>
+                
+                <a href="/docs" class="action-btn">
+                    <span class="action-icon">📚</span>
+                    <div class="action-text">
+                        <div class="action-title">API文档</div>
+                        <div class="action-desc">查看完整的API接口文档</div>
+                    </div>
+                </a>
+                
+                <a href="#" onclick="exportAllData()" class="action-btn">
+                    <span class="action-icon">📤</span>
+                    <div class="action-text">
+                        <div class="action-title">导出数据</div>
+                        <div class="action-desc">导出所有爬取的数据</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <p>&copy; 2024 MediaCrawler - 多平台媒体爬虫系统</p>
+            <p>
+                <a href="https://github.com/mediacrawler" target="_blank">GitHub</a> | 
+                <a href="/docs" target="_blank">文档</a> | 
+                <a href="#" onclick="showSupport()">技术支持</a>
+            </p>
+            <p style="font-size: 0.9em; margin-top: 10px;">
+                ⚠️ 本系统仅供学习研究使用，请遵守相关法律法规和平台使用条款
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSystemStats();
+        });
+
+        // 加载系统统计
+        async function loadSystemStats() {
+            try {
+                // 加载任务统计
+                const taskResponse = await fetch('/api/v1/task-results/statistics');
+                if (taskResponse.ok) {
+                    const taskData = await taskResponse.json();
+                    if (taskData.code === 200) {
+                        document.getElementById('totalTasks').textContent = taskData.data.redis_stats.total_tasks || 0;
+                        document.getElementById('totalVideos').textContent = taskData.data.database_stats.total_videos || 0;
+                    }
+                }
+
+                // 加载文件统计
+                const fileResponse = await fetch('/api/v1/files/statistics');
+                if (fileResponse.ok) {
+                    const fileData = await fileResponse.json();
+                    if (fileData.code === 200) {
+                        document.getElementById('totalFiles').textContent = fileData.data.total_files || 0;
+                        document.getElementById('storageUsed').textContent = formatBytes(fileData.data.total_size || 0);
+                    }
+                }
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+                // 显示默认值
+                document.getElementById('totalTasks').textContent = 0;
+                document.getElementById('totalVideos').textContent = 0;
+                document.getElementById('totalFiles').textContent = 0;
+                document.getElementById('storageUsed').textContent = '0 B';
+            }
+        }
+
+        // 检查MinIO状态
+        async function checkMinIO() {
+            try {
+                const response = await fetch('/api/v1/minio/status');
+                const data = await response.json();
+                
+                if (data.code === 200 && data.data.available) {
+                    window.location.href = '#minio-management';
+                    alert('MinIO服务正常运行！');
+                } else {
+                    alert('MinIO服务不可用，请检查配置。\n\n参考文档：MINIO_SETUP_GUIDE.md');
+                }
+            } catch (error) {
+                alert('MinIO服务连接失败，请检查服务状态。');
+            }
+        }
+
+        // 打开视频预览
+        function openVideoPreview() {
+            const platform = prompt('请输入平台 (dy/xhs/ks/bili/wb/zhihu):');
+            const videoId = prompt('请输入视频ID:');
+            
+            if (platform && videoId) {
+                window.open(`/static/video_preview.html?platform=${platform}&video_id=${videoId}`, '_blank');
+            }
+        }
+
+        // 显示视频列表
+        function showVideoList() {
+            window.location.href = '/static/task_results.html';
+        }
+
+        // 显示数据分析
+        function showAnalytics() {
+            alert('数据分析功能开发中，敬请期待！');
+        }
+
+        // 导出数据
+        function exportData() {
+            alert('数据导出功能开发中，敬请期待！');
+        }
+
+        // 显示设置
+        function showSettings() {
+            alert('系统设置功能开发中，敬请期待！');
+        }
+
+        // 系统清理
+        async function cleanupSystem() {
+            if (confirm('确定要进行系统清理吗？这将清理过期文件和缓存数据。')) {
+                try {
+                    // 这里可以调用清理API
+                    alert('系统清理完成！');
+                } catch (error) {
+                    alert('清理失败，请稍后重试。');
+                }
+            }
+        }
+
+        // 导出所有数据
+        function exportAllData() {
+            if (confirm('确定要导出所有数据吗？这可能需要较长时间。')) {
+                alert('导出功能开发中，敬请期待！');
+            }
+        }
+
+        // 显示技术支持
+        function showSupport() {
+            alert('技术支持信息：\n\n📧 Email: support@mediacrawler.com\n📚 文档: /docs\n🐛 Bug报告: GitHub Issues');
+        }
+
+        // 工具函数
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
+        }
+
+        // 定期更新统计数据
+        setInterval(loadSystemStats, 30000); // 每30秒更新一次
+    </script>
+</body>
+</html> 

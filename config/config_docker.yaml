@@ -1,0 +1,81 @@
+# Docker容器环境配置文件
+# 使用方式: ENV=docker python main.py
+
+proxy:
+  # 代理提供商配置
+  provider_name: "qingguo"  # 容器环境推荐使用青果代理
+  enabled: false  # 容器环境默认禁用代理，可通过环境变量启用
+  pool_count: 10
+  validate_ip: true
+  
+  # 青果代理配置（从环境变量读取）
+  qingguo_key: "${QINGGUO_KEY:-}"
+  qingguo_pwd: "${QINGGUO_PWD:-}"
+  
+  # 快代理配置（从环境变量读取）
+  kuaidaili_secret_id: "${KUAIDAILI_SECRET_ID:-}"
+  kuaidaili_signature: "${KUAIDAILI_SIGNATURE:-}"
+  kuaidaili_user_name: "${KUAIDAILI_USERNAME:-}"
+  kuaidaili_user_pwd: "${KUAIDAILI_PASSWORD:-}"
+  
+  # 极速HTTP代理配置（从环境变量读取）
+  jisu_http_key: "${JISU_HTTP_KEY:-}"
+
+crawler:
+  # 爬虫基础配置
+  platform: "xhs"
+  keywords: "编程副业,编程兼职"
+  login_type: "qrcode"
+  crawler_type: "search"
+  max_notes_count: 300  # 容器环境适中设置
+  enable_comments: true
+  enable_sub_comments: false
+  enable_images: false
+  save_data_option: "db"  # 容器环境推荐使用数据库
+  headless: false  # 远程桌面登录需要可见界面
+  max_sleep_sec: 2
+  max_concurrency: 2  # 容器环境适度并发
+
+database:
+  # 数据库配置（从环境变量读取）
+  host: "${DB_HOST:-192.168.31.231}"
+  port: ${DB_PORT:-3306}
+  username: "${DB_USER:-aiuser}"
+  password: "${DB_PASSWORD:-edcghj98578}"
+  database: "${DB_NAME:-mediacrawler}"
+  charset: "utf8mb4"
+
+app:
+  # 应用配置
+  debug: false
+  log_level: "INFO"
+  data_dir: "/app/data"  # 容器内路径
+  user_data_dir: "/app/data/%s_user_data_dir"
+
+remote_desktop:
+  # 远程桌面配置（容器环境）
+  enabled: ${REMOTE_DESKTOP_ENABLED:-true}
+  vnc_url: "${VNC_URL:-http://localhost:6080/vnc.html}"
+  vnc_host: "${VNC_HOST:-localhost}"
+  vnc_port: ${VNC_PORT:-6080}
+  vnc_password: "${VNC_PASSWORD:-mediacrawler123}"
+  display_number: ${DISPLAY_NUMBER:-1}
+  connection_timeout: 10  # 容器环境增加超时时间
+  max_wait_time: 1800  # 30分钟
+  check_interval: 3    # 3秒检查一次
+
+storage:
+  # 存储配置
+  local_base_path: "/app/data"
+  small_file_threshold: 10485760  # 10MB
+  enable_minio: false
+  minio_endpoint: "${MINIO_ENDPOINT:-localhost:9000}"
+  minio_access_key: "${MINIO_ACCESS_KEY:-minioadmin}"
+  minio_secret_key: "${MINIO_SECRET_KEY:-minioadmin}"
+  minio_secure: false
+  minio_bucket: "mediacrawler-videos"
+  database_url: "mysql+pymysql://${DB_USER:-aiuser}:${DB_PASSWORD:-edcghj98578}@${DB_HOST:-192.168.31.231}:${DB_PORT:-3306}/${DB_NAME:-mediacrawler}"
+  max_concurrent_downloads: 3  # 容器环境适度并发
+  download_timeout: 300
+  max_retries: 3
+  retry_delay: 5 
