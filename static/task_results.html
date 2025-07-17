@@ -412,15 +412,15 @@
         // 加载统计信息
         async function loadStatistics() {
             try {
-                const response = await fetch('/api/v1/task-results/statistics');
+                const response = await fetch('/api/v1/task-management/tasks/statistics');
                 const data = await response.json();
                 
                 if (data.code === 200) {
                     const stats = data.data;
-                    document.getElementById('totalTasks').textContent = stats.redis_stats.total_tasks || 0;
-                    document.getElementById('successTasks').textContent = stats.redis_stats.completed_tasks || 0;
-                    document.getElementById('totalVideos').textContent = stats.database_stats.total_videos || 0;
-                    document.getElementById('storageUsed').textContent = formatBytes(stats.database_stats.total_size || 0);
+                    document.getElementById('totalTasks').textContent = stats.total_tasks || 0;
+                    document.getElementById('successTasks').textContent = stats.completed_tasks || 0;
+                    document.getElementById('totalVideos').textContent = stats.total_videos || 0;
+                    document.getElementById('storageUsed').textContent = formatBytes(stats.collected_videos * 1024 * 1024 || 0); // 估算存储大小
                 }
             } catch (error) {
                 console.error('加载统计信息失败:', error);
@@ -431,11 +431,27 @@
         async function loadTasks() {
             try {
                 showLoading(true);
-                const response = await fetch(`/api/v1/task-results?page=${currentPage}&page_size=${pageSize}`);
+                
+                // 构建查询参数
+                const params = new URLSearchParams({
+                    page: currentPage.toString(),
+                    page_size: pageSize.toString()
+                });
+                
+                // 添加筛选条件
+                const platformFilter = document.getElementById('platformFilter').value;
+                const statusFilter = document.getElementById('statusFilter').value;
+                const searchKeyword = document.getElementById('searchKeyword').value;
+                
+                if (platformFilter) params.append('platform', platformFilter);
+                if (statusFilter) params.append('status', statusFilter);
+                if (searchKeyword) params.append('keyword', searchKeyword);
+                
+                const response = await fetch(`/api/v1/task-management/tasks?${params.toString()}`);
                 const data = await response.json();
                 
                 if (data.code === 200) {
-                    tasks = data.data.results;
+                    tasks = data.data.items;
                     totalPages = data.data.total_pages;
                     
                     renderTasks();
@@ -465,7 +481,10 @@
                 taskItem.className = 'task-item';
                 taskItem.innerHTML = `
                     <div class="task-header">
-                        <div class="task-title">${task.keywords || task.task_id}</div>
+                        <div class="task-title">
+                            ${task.is_pinned ? '📌 ' : ''}${task.keywords || task.id}
+                            ${task.is_favorite ? '⭐' : ''}
+                        </div>
                         <div class="task-status status-${task.status || 'completed'}">${getStatusText(task.status)}</div>
                     </div>
                     <div class="task-meta">
@@ -475,11 +494,11 @@
                         </div>
                         <div class="meta-item">
                             <span class="icon">📹</span>
-                            <span>${task.statistics?.total_videos || 0} 个视频</span>
+                            <span>${task.result_count || 0} 个视频</span>
                         </div>
                         <div class="meta-item">
-                            <span class="icon">💬</span>
-                            <span>${task.statistics?.total_comments || 0} 条评论</span>
+                            <span class="icon">📊</span>
+                            <span>${Math.round(task.progress || 0)}% 进度</span>
                         </div>
                         <div class="meta-item">
                             <span class="icon">⏰</span>
@@ -487,9 +506,15 @@
                         </div>
                     </div>
                     <div class="task-actions">
-                        <button class="btn btn-primary btn-sm" onclick="viewTaskDetail('${task.task_id}')">查看详情</button>
-                        <button class="btn btn-secondary btn-sm" onclick="downloadVideos('${task.task_id}')">下载视频</button>
-                        <button class="btn btn-secondary btn-sm" onclick="exportResults('${task.task_id}')">导出结果</button>
+                        <button class="btn btn-primary btn-sm" onclick="viewTaskDetail('${task.id}')">查看详情</button>
+                        <button class="btn btn-secondary btn-sm" onclick="viewTaskVideos('${task.id}')">查看视频</button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleTaskFavorite('${task.id}', ${task.is_favorite})">
+                            ${task.is_favorite ? '取消收藏' : '收藏'}
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleTaskPin('${task.id}', ${task.is_pinned})">
+                            ${task.is_pinned ? '取消置顶' : '置顶'}
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="deleteTask('${task.id}')">删除</button>
                     </div>
                 `;
                 taskList.appendChild(taskItem);
@@ -539,12 +564,9 @@
 
         // 搜索任务
         function searchTasks() {
-            const keyword = document.getElementById('searchKeyword').value;
-            const platform = document.getElementById('platformFilter').value;
-            const status = document.getElementById('statusFilter').value;
-
-            // 这里可以添加搜索逻辑
-            showToast('搜索功能开发中', 'info');
+            currentPage = 1;
+            loadTasks();
+            showToast('搜索完成', 'success');
         }
 
         // 刷新任务
@@ -560,16 +582,87 @@
             window.open(`/task-detail.html?task_id=${taskId}`, '_blank');
         }
 
-        // 下载视频
-        function downloadVideos(taskId) {
-            showToast('正在准备下载...', 'info');
-            // 这里可以添加下载逻辑
+        // 查看任务视频
+        function viewTaskVideos(taskId) {
+            window.open(`/task-videos.html?task_id=${taskId}`, '_blank');
         }
 
-        // 导出结果
-        function exportResults(taskId) {
-            showToast('正在导出结果...', 'info');
-            // 这里可以添加导出逻辑
+        // 切换任务收藏状态
+        async function toggleTaskFavorite(taskId, currentFavorite) {
+            try {
+                const action = currentFavorite ? 'unfavorite' : 'favorite';
+                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: action, task_id: taskId })
+                });
+                
+                const data = await response.json();
+                if (data.code === 200) {
+                    showToast(currentFavorite ? '取消收藏成功' : '收藏成功', 'success');
+                    loadTasks(); // 重新加载任务列表
+                } else {
+                    showToast('操作失败', 'error');
+                }
+            } catch (error) {
+                console.error('切换收藏状态失败:', error);
+                showToast('操作失败', 'error');
+            }
+        }
+
+        // 切换任务置顶状态
+        async function toggleTaskPin(taskId, currentPinned) {
+            try {
+                const action = currentPinned ? 'unpin' : 'pin';
+                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: action, task_id: taskId })
+                });
+                
+                const data = await response.json();
+                if (data.code === 200) {
+                    showToast(currentPinned ? '取消置顶成功' : '置顶成功', 'success');
+                    loadTasks(); // 重新加载任务列表
+                } else {
+                    showToast('操作失败', 'error');
+                }
+            } catch (error) {
+                console.error('切换置顶状态失败:', error);
+                showToast('操作失败', 'error');
+            }
+        }
+
+        // 删除任务
+        async function deleteTask(taskId) {
+            if (!confirm('确定要删除这个任务吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'delete', task_id: taskId })
+                });
+                
+                const data = await response.json();
+                if (data.code === 200) {
+                    showToast('删除成功', 'success');
+                    loadTasks(); // 重新加载任务列表
+                } else {
+                    showToast('删除失败', 'error');
+                }
+            } catch (error) {
+                console.error('删除任务失败:', error);
+                showToast('删除失败', 'error');
+            }
         }
 
         // 工具函数

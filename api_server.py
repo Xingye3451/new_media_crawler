@@ -140,6 +140,372 @@ db_initialized = False
 # 任务状态存储
 task_status = {}
 
+# 🆕 任务管理相关函数
+async def create_task_record(task_id: str, request: CrawlerRequest):
+    """创建任务记录到数据库"""
+    try:
+        # 构建任务参数JSON
+        task_params = {
+            "platform": request.platform,
+            "keywords": request.keywords,
+            "max_notes_count": request.max_notes_count,
+            "account_id": request.account_id,
+            "session_id": request.session_id,
+            "login_type": request.login_type,
+            "crawler_type": request.crawler_type,
+            "get_comments": request.get_comments,
+            "save_data_option": request.save_data_option,
+            "use_proxy": request.use_proxy,
+            "proxy_strategy": request.proxy_strategy
+        }
+        
+        # 插入任务记录
+        sql = """
+        INSERT INTO crawler_tasks (
+            id, platform, task_type, keywords, status, progress, 
+            user_id, params, priority, is_favorite, deleted, is_pinned,
+            ip_address, user_security_id, user_signature,
+            created_at, updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, 
+            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s,
+            NOW(), NOW()
+        )
+        """
+        
+        await db.execute(sql, (
+            task_id,
+            request.platform,
+            "single_platform",
+            request.keywords,
+            "pending",
+            0.0,
+            None,  # user_id
+            json.dumps(task_params),
+            0,  # priority
+            False,  # is_favorite
+            False,  # deleted
+            False,  # is_pinned
+            None,  # ip_address
+            None,  # user_security_id
+            None,  # user_signature
+        ))
+        
+        utils.logger.info(f"[TASK_RECORD] 任务记录创建成功: {task_id}")
+        
+    except Exception as e:
+        utils.logger.error(f"[TASK_RECORD] 创建任务记录失败: {e}")
+        raise
+
+async def save_video_to_database(platform: str, video_data: Dict, task_id: str):
+    """保存视频数据到数据库"""
+    try:
+        if platform == "dy":  # 抖音
+            # 构建抖音视频数据
+            aweme_data = {
+                "aweme_id": video_data.get("aweme_id", ""),
+                "aweme_type": video_data.get("aweme_type", "0"),
+                "title": video_data.get("title", ""),
+                "desc": video_data.get("desc", ""),
+                "create_time": video_data.get("create_time", int(time.time())),
+                "user_id": video_data.get("user_id", ""),
+                "sec_uid": video_data.get("sec_uid", ""),
+                "short_user_id": video_data.get("short_user_id", ""),
+                "user_unique_id": video_data.get("user_unique_id", ""),
+                "nickname": video_data.get("nickname", ""),
+                "avatar": video_data.get("avatar", ""),
+                "user_signature": video_data.get("user_signature", ""),
+                "ip_location": video_data.get("ip_location", ""),
+                "liked_count": str(video_data.get("liked_count", 0)),
+                "comment_count": str(video_data.get("comment_count", 0)),
+                "share_count": str(video_data.get("share_count", 0)),
+                "collected_count": str(video_data.get("collected_count", 0)),
+                "aweme_url": video_data.get("aweme_url", ""),
+                "cover_url": video_data.get("cover_url", ""),
+                "video_download_url": video_data.get("video_url", ""),
+                "video_play_url": video_data.get("video_play_url", ""),
+                "video_share_url": video_data.get("video_share_url", ""),
+                "is_favorite": False,
+                "minio_url": None,
+                "task_id": task_id,
+                "source_keyword": video_data.get("source_keyword", ""),
+                "add_ts": int(time.time()),
+                "last_modify_ts": int(time.time())
+            }
+            
+            # 检查是否已存在
+            check_sql = "SELECT id FROM douyin_aweme WHERE aweme_id = %s"
+            existing = await db.query(check_sql, aweme_data["aweme_id"])
+            
+            if existing:
+                # 更新现有记录
+                update_sql = """
+                UPDATE douyin_aweme SET 
+                    title = %s, desc = %s, nickname = %s, avatar = %s,
+                    liked_count = %s, comment_count = %s, share_count = %s, collected_count = %s,
+                    cover_url = %s, video_download_url = %s, video_play_url = %s, video_share_url = %s,
+                    task_id = %s, last_modify_ts = %s
+                WHERE aweme_id = %s
+                """
+                await db.execute(update_sql, (
+                    aweme_data["title"], aweme_data["desc"], aweme_data["nickname"], aweme_data["avatar"],
+                    aweme_data["liked_count"], aweme_data["comment_count"], aweme_data["share_count"], aweme_data["collected_count"],
+                    aweme_data["cover_url"], aweme_data["video_download_url"], aweme_data["video_play_url"], aweme_data["video_share_url"],
+                    aweme_data["task_id"], aweme_data["last_modify_ts"], aweme_data["aweme_id"]
+                ))
+            else:
+                # 插入新记录
+                insert_sql = """
+                INSERT INTO douyin_aweme (
+                    aweme_id, aweme_type, title, `desc`, create_time, user_id, sec_uid, short_user_id, user_unique_id,
+                    nickname, avatar, user_signature, ip_location, liked_count, comment_count, share_count, collected_count,
+                    aweme_url, cover_url, video_download_url, video_play_url, video_share_url, is_favorite, minio_url,
+                    task_id, source_keyword, add_ts, last_modify_ts
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s
+                )
+                """
+                await db.execute(insert_sql, (
+                    aweme_data["aweme_id"], aweme_data["aweme_type"], aweme_data["title"], aweme_data["desc"], aweme_data["create_time"],
+                    aweme_data["user_id"], aweme_data["sec_uid"], aweme_data["short_user_id"], aweme_data["user_unique_id"],
+                    aweme_data["nickname"], aweme_data["avatar"], aweme_data["user_signature"], aweme_data["ip_location"],
+                    aweme_data["liked_count"], aweme_data["comment_count"], aweme_data["share_count"], aweme_data["collected_count"],
+                    aweme_data["aweme_url"], aweme_data["cover_url"], aweme_data["video_download_url"], aweme_data["video_play_url"],
+                    aweme_data["video_share_url"], aweme_data["is_favorite"], aweme_data["minio_url"],
+                    aweme_data["task_id"], aweme_data["source_keyword"], aweme_data["add_ts"], aweme_data["last_modify_ts"]
+                ))
+            
+            utils.logger.info(f"[VIDEO_SAVE] 抖音视频保存成功: {aweme_data['aweme_id']}")
+            
+        elif platform == "xhs":  # 小红书
+            # 构建小红书笔记数据
+            note_data = {
+                "note_id": video_data.get("note_id", ""),
+                "type": video_data.get("type", "normal"),
+                "title": video_data.get("title", ""),
+                "desc": video_data.get("desc", ""),
+                "video_url": video_data.get("video_url", ""),
+                "time": video_data.get("time", int(time.time())),
+                "last_update_time": int(time.time()),
+                "user_id": video_data.get("user_id", ""),
+                "nickname": video_data.get("nickname", ""),
+                "avatar": video_data.get("avatar", ""),
+                "ip_location": video_data.get("ip_location", ""),
+                "liked_count": str(video_data.get("liked_count", 0)),
+                "collected_count": str(video_data.get("collected_count", 0)),
+                "comment_count": str(video_data.get("comment_count", 0)),
+                "share_count": str(video_data.get("share_count", 0)),
+                "image_list": video_data.get("image_list", ""),
+                "tag_list": video_data.get("tag_list", ""),
+                "note_url": video_data.get("note_url", ""),
+                "source_keyword": video_data.get("source_keyword", ""),
+                "xsec_token": video_data.get("xsec_token", ""),
+                "add_ts": int(time.time()),
+                "last_modify_ts": int(time.time())
+            }
+            
+            # 检查是否已存在
+            check_sql = "SELECT id FROM xhs_note WHERE note_id = %s"
+            existing = await db.query(check_sql, note_data["note_id"])
+            
+            if existing:
+                # 更新现有记录
+                update_sql = """
+                UPDATE xhs_note SET 
+                    title = %s, `desc` = %s, video_url = %s, nickname = %s, avatar = %s,
+                    liked_count = %s, collected_count = %s, comment_count = %s, share_count = %s,
+                    image_list = %s, tag_list = %s, note_url = %s, last_modify_ts = %s
+                WHERE note_id = %s
+                """
+                await db.execute(update_sql, (
+                    note_data["title"], note_data["desc"], note_data["video_url"], note_data["nickname"], note_data["avatar"],
+                    note_data["liked_count"], note_data["collected_count"], note_data["comment_count"], note_data["share_count"],
+                    note_data["image_list"], note_data["tag_list"], note_data["note_url"], note_data["last_modify_ts"], note_data["note_id"]
+                ))
+            else:
+                # 插入新记录
+                insert_sql = """
+                INSERT INTO xhs_note (
+                    note_id, type, title, `desc`, video_url, time, last_update_time, user_id,
+                    nickname, avatar, ip_location, liked_count, collected_count, comment_count, share_count,
+                    image_list, tag_list, note_url, source_keyword, xsec_token, add_ts, last_modify_ts
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s
+                )
+                """
+                await db.execute(insert_sql, (
+                    note_data["note_id"], note_data["type"], note_data["title"], note_data["desc"], note_data["video_url"],
+                    note_data["time"], note_data["last_update_time"], note_data["user_id"],
+                    note_data["nickname"], note_data["avatar"], note_data["ip_location"], note_data["liked_count"],
+                    note_data["collected_count"], note_data["comment_count"], note_data["share_count"],
+                    note_data["image_list"], note_data["tag_list"], note_data["note_url"], note_data["source_keyword"],
+                    note_data["xsec_token"], note_data["add_ts"], note_data["last_modify_ts"]
+                ))
+            
+            utils.logger.info(f"[VIDEO_SAVE] 小红书笔记保存成功: {note_data['note_id']}")
+            
+        # 可以继续添加其他平台的处理逻辑...
+        
+    except Exception as e:
+        utils.logger.error(f"[VIDEO_SAVE] 保存视频数据失败: {e}")
+        raise
+
+async def save_comment_to_database(platform: str, comment_data: Dict, task_id: str):
+    """保存评论数据到数据库"""
+    try:
+        if platform == "dy":  # 抖音评论
+            comment_record = {
+                "comment_id": comment_data.get("comment_id", ""),
+                "aweme_id": comment_data.get("aweme_id", ""),
+                "content": comment_data.get("content", ""),
+                "create_time": comment_data.get("create_time", int(time.time())),
+                "user_id": comment_data.get("user_id", ""),
+                "sec_uid": comment_data.get("sec_uid", ""),
+                "short_user_id": comment_data.get("short_user_id", ""),
+                "nickname": comment_data.get("nickname", ""),
+                "avatar": comment_data.get("avatar", ""),
+                "ip_location": comment_data.get("ip_location", ""),
+                "sub_comment_count": str(comment_data.get("sub_comment_count", 0)),
+                "parent_comment_id": comment_data.get("parent_comment_id", ""),
+                "like_count": str(comment_data.get("like_count", 0)),
+                "pictures": comment_data.get("pictures", ""),
+                "add_ts": int(time.time()),
+                "last_modify_ts": int(time.time())
+            }
+            
+            # 检查是否已存在
+            check_sql = "SELECT id FROM douyin_aweme_comment WHERE comment_id = %s"
+            existing = await db.query(check_sql, comment_record["comment_id"])
+            
+            if not existing:
+                # 插入新评论记录
+                insert_sql = """
+                INSERT INTO douyin_aweme_comment (
+                    comment_id, aweme_id, content, create_time, user_id, sec_uid, short_user_id,
+                    nickname, avatar, ip_location, sub_comment_count, parent_comment_id, like_count,
+                    pictures, add_ts, last_modify_ts
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s
+                )
+                """
+                await db.execute(insert_sql, (
+                    comment_record["comment_id"], comment_record["aweme_id"], comment_record["content"], comment_record["create_time"],
+                    comment_record["user_id"], comment_record["sec_uid"], comment_record["short_user_id"],
+                    comment_record["nickname"], comment_record["avatar"], comment_record["ip_location"], comment_record["sub_comment_count"],
+                    comment_record["parent_comment_id"], comment_record["like_count"], comment_record["pictures"],
+                    comment_record["add_ts"], comment_record["last_modify_ts"]
+                ))
+                
+                utils.logger.info(f"[COMMENT_SAVE] 抖音评论保存成功: {comment_record['comment_id']}")
+        
+        elif platform == "xhs":  # 小红书评论
+            comment_record = {
+                "comment_id": comment_data.get("comment_id", ""),
+                "create_time": comment_data.get("create_time", int(time.time())),
+                "note_id": comment_data.get("note_id", ""),
+                "content": comment_data.get("content", ""),
+                "user_id": comment_data.get("user_id", ""),
+                "nickname": comment_data.get("nickname", ""),
+                "avatar": comment_data.get("avatar", ""),
+                "ip_location": comment_data.get("ip_location", ""),
+                "sub_comment_count": comment_data.get("sub_comment_count", 0),
+                "pictures": comment_data.get("pictures", ""),
+                "parent_comment_id": comment_data.get("parent_comment_id", ""),
+                "like_count": str(comment_data.get("like_count", 0)),
+                "add_ts": int(time.time()),
+                "last_modify_ts": int(time.time())
+            }
+            
+            # 检查是否已存在
+            check_sql = "SELECT id FROM xhs_note_comment WHERE comment_id = %s"
+            existing = await db.query(check_sql, comment_record["comment_id"])
+            
+            if not existing:
+                # 插入新评论记录
+                insert_sql = """
+                INSERT INTO xhs_note_comment (
+                    comment_id, create_time, note_id, content, user_id, nickname, avatar,
+                    ip_location, sub_comment_count, pictures, parent_comment_id, like_count,
+                    add_ts, last_modify_ts
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s
+                )
+                """
+                await db.execute(insert_sql, (
+                    comment_record["comment_id"], comment_record["create_time"], comment_record["note_id"], comment_record["content"],
+                    comment_record["user_id"], comment_record["nickname"], comment_record["avatar"],
+                    comment_record["ip_location"], comment_record["sub_comment_count"], comment_record["pictures"],
+                    comment_record["parent_comment_id"], comment_record["like_count"],
+                    comment_record["add_ts"], comment_record["last_modify_ts"]
+                ))
+                
+                utils.logger.info(f"[COMMENT_SAVE] 小红书评论保存成功: {comment_record['comment_id']}")
+        
+        # 可以继续添加其他平台的评论处理逻辑...
+        
+    except Exception as e:
+        utils.logger.error(f"[COMMENT_SAVE] 保存评论数据失败: {e}")
+        raise
+
+async def update_task_progress(task_id: str, progress: float, status: str = None, result_count: int = None):
+    """更新任务进度"""
+    try:
+        update_fields = ["progress = %s"]
+        update_values = [progress]
+        
+        if status:
+            update_fields.append("status = %s")
+            update_values.append(status)
+        
+        if result_count is not None:
+            update_fields.append("result_count = %s")
+            update_values.append(result_count)
+        
+        update_fields.append("updated_at = NOW()")
+        update_values.append(task_id)
+        
+        sql = f"UPDATE crawler_tasks SET {', '.join(update_fields)} WHERE id = %s"
+        await db.execute(sql, update_values)
+        
+        utils.logger.info(f"[TASK_PROGRESS] 任务进度更新: {task_id}, 进度: {progress}, 状态: {status}")
+        
+    except Exception as e:
+        utils.logger.error(f"[TASK_PROGRESS] 更新任务进度失败: {e}")
+
+async def log_task_step(task_id: str, platform: str, step: str, message: str, log_level: str = "INFO", progress: int = None):
+    """记录任务步骤日志"""
+    try:
+        sql = """
+        INSERT INTO crawler_task_logs (
+            task_id, platform, account_id, log_level, message, step, progress, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        """
+        
+        await db.execute(sql, (
+            task_id,
+            platform,
+            None,  # account_id
+            log_level,
+            message,
+            step,
+            progress or 0
+        ))
+        
+        utils.logger.info(f"[TASK_LOG] {task_id} - {step}: {message}")
+        
+    except Exception as e:
+        utils.logger.error(f"[TASK_LOG] 记录任务日志失败: {e}")
+
 class PlatformComingSoonException(Exception):
     """平台即将支持异常"""
     pass
@@ -203,14 +569,25 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
         utils.logger.info(f"[TASK_{task_id}]   └─ proxy_strategy: {request.proxy_strategy}")
         
+        # 🆕 创建任务记录到数据库
+        utils.logger.info(f"[TASK_{task_id}] 📝 创建任务记录到数据库...")
+        await create_task_record(task_id, request)
+        utils.logger.info(f"[TASK_{task_id}] ✅ 任务记录创建成功")
+        
         # 更新任务状态
         utils.logger.info(f"[TASK_{task_id}] 🔄 更新任务状态为运行中...")
         task_status[task_id]["status"] = "running"
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
         utils.logger.info(f"[TASK_{task_id}] ✅ 任务状态已更新")
         
+        # 🆕 更新数据库中的任务状态
+        await update_task_progress(task_id, 0.0, "running")
+        await log_task_step(task_id, request.platform, "task_start", "任务开始执行", "INFO", 0)
+        
         # 检查登录状态
         utils.logger.info(f"[任务 {task_id}] 检查登录状态...")
+        await log_task_step(task_id, request.platform, "login_check", "检查登录状态", "INFO", 10)
+        
         from login_manager import login_manager
         
         if request.session_id:
@@ -223,18 +600,23 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                 task_status[task_id]["error"] = "需要验证"
                 task_status[task_id]["session_id"] = session.session_id
                 task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                await update_task_progress(task_id, 0.0, "need_verification")
+                await log_task_step(task_id, request.platform, "login_failed", "需要验证", "WARN", 0)
                 return
             elif session.status.value == "logged_in":
                 utils.logger.info(f"[任务 {task_id}] 会话状态正常")
+                await log_task_step(task_id, request.platform, "login_success", "登录状态正常", "INFO", 20)
                 # 已登录，cookies由爬虫直接从数据库读取
             else:
                 utils.logger.warning(f"[任务 {task_id}] 会话状态异常: {session.status.value}")
+                await log_task_step(task_id, request.platform, "login_error", f"会话状态异常: {session.status.value}", "ERROR", 0)
         else:
             utils.logger.info(f"[任务 {task_id}] 查找平台 {request.platform} 的最新会话")
             # 查找平台的最新会话
             session = await login_manager.check_login_status(request.platform)
             if session.status.value == "logged_in":
                 utils.logger.info(f"[任务 {task_id}] 找到有效会话")
+                await log_task_step(task_id, request.platform, "login_success", "找到有效会话", "INFO", 20)
                 # 已登录，cookies由爬虫直接从数据库读取
             elif session.status.value in ["not_logged_in", "expired", "need_verification"]:
                 utils.logger.warning(f"[任务 {task_id}] 需要登录，会话状态: {session.status.value}")
@@ -243,23 +625,34 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                 task_status[task_id]["error"] = "需要登录"
                 task_status[task_id]["session_id"] = session.session_id
                 task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                await update_task_progress(task_id, 0.0, "need_login")
+                await log_task_step(task_id, request.platform, "login_failed", "需要登录", "WARN", 0)
                 return
                 
         # 检查指定账号的凭证有效性（如果提供了账号ID）
         if request.account_id:
             utils.logger.info(f"[任务 {task_id}] 检查指定账号凭证有效性: {request.account_id}")
+            await log_task_step(task_id, request.platform, "account_check", f"检查账号凭证: {request.account_id}", "INFO", 25)
+            
             validity = await check_token_validity(request.platform, request.account_id)
             if validity["status"] not in ["valid", "expiring_soon"]:
                 utils.logger.error(f"[任务 {task_id}] 指定账号凭证无效: {validity['message']}")
                 task_status[task_id]["status"] = "failed"
                 task_status[task_id]["error"] = f"指定账号凭证无效: {validity['message']}"
                 task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                await update_task_progress(task_id, 0.0, "failed")
+                await log_task_step(task_id, request.platform, "account_failed", f"账号凭证无效: {validity['message']}", "ERROR", 0)
                 return
             elif validity["status"] == "expiring_soon":
                 utils.logger.warning(f"[任务 {task_id}] 指定账号凭证即将过期: {validity['expires_at']}")
+                await log_task_step(task_id, request.platform, "account_warning", f"账号凭证即将过期: {validity['expires_at']}", "WARN", 30)
+            else:
+                await log_task_step(task_id, request.platform, "account_success", "账号凭证有效", "INFO", 30)
         
         # 设置爬虫配置
         utils.logger.info(f"[TASK_{task_id}] ⚙️ 设置爬虫配置...")
+        await log_task_step(task_id, request.platform, "config_setup", "设置爬虫配置", "INFO", 35)
+        
         config.PLATFORM = request.platform
         config.KEYWORDS = request.keywords
         config.CRAWLER_MAX_NOTES_COUNT = request.max_notes_count
@@ -291,31 +684,41 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ SaveOption: {config.SAVE_DATA_OPTION}")
         utils.logger.info(f"[TASK_{task_id}]   └─ AccountID: {config.ACCOUNT_ID}")
         
+        await log_task_step(task_id, request.platform, "config_complete", "爬虫配置完成", "INFO", 40)
+        
         # 初始化数据库（如果需要保存到数据库）
         if config.SAVE_DATA_OPTION == "db":
             utils.logger.info(f"[TASK_{task_id}] 💾 初始化数据库连接...")
+            await log_task_step(task_id, request.platform, "db_init", "初始化数据库连接", "INFO", 45)
+            
             try:
                 await db.init_db()
                 utils.logger.info(f"[TASK_{task_id}] ✅ 数据库连接初始化成功")
+                await log_task_step(task_id, request.platform, "db_success", "数据库连接初始化成功", "INFO", 50)
             except Exception as e:
                 utils.logger.error(f"[TASK_{task_id}] ❌ 数据库连接初始化失败: {e}")
                 task_status[task_id]["status"] = "failed"
                 task_status[task_id]["error"] = f"数据库连接初始化失败: {e}"
                 task_status[task_id]["updated_at"] = datetime.now().isoformat()
+                await update_task_progress(task_id, 0.0, "failed")
+                await log_task_step(task_id, request.platform, "db_failed", f"数据库连接初始化失败: {e}", "ERROR", 0)
                 return
         
         # 创建爬虫实例
         utils.logger.info(f"[TASK_{task_id}] 🏭 创建爬虫实例...")
+        await log_task_step(task_id, request.platform, "crawler_create", "创建爬虫实例", "INFO", 55)
+        
         crawler_instance: AbstractCrawler = CrawlerFactory.create_crawler(config.PLATFORM)
         utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功: {type(crawler_instance).__name__}")
+        await log_task_step(task_id, request.platform, "crawler_ready", f"爬虫实例创建成功: {type(crawler_instance).__name__}", "INFO", 60)
         
-        # 🚀 新增：爬虫直接写入Redis，不经过数据库
-        utils.logger.info(f"[TASK_{task_id}] 📊 准备接收爬虫数据到Redis...")
+        # 🚀 新增：爬虫直接写入Redis和数据库
+        utils.logger.info(f"[TASK_{task_id}] 📊 准备接收爬虫数据到Redis和数据库...")
         
         try:
-            # 创建Redis存储回调函数，让爬虫直接写入Redis
-            async def redis_storage_callback(platform: str, data: Dict, data_type: str = "video"):
-                """Redis存储回调函数，供爬虫调用"""
+            # 创建Redis和数据库存储回调函数，让爬虫直接写入
+            async def storage_callback(platform: str, data: Dict, data_type: str = "video"):
+                """Redis和数据库存储回调函数，供爬虫调用"""
                 try:
                     if data_type == "video":
                         # 转换视频数据格式
@@ -340,6 +743,10 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                         await redis_manager.store_video_data(task_id, platform, video_data)
                         utils.logger.info(f"[TASK_{task_id}] ✅ 视频数据已存储到Redis: {video_data['video_id']}")
                         
+                        # 🆕 存储到数据库
+                        await save_video_to_database(platform, data, task_id)
+                        utils.logger.info(f"[TASK_{task_id}] ✅ 视频数据已存储到数据库: {video_data['video_id']}")
+                        
                     elif data_type == "comment":
                         # 处理评论数据
                         video_id = data.get("aweme_id" if platform == "dy" else "note_id", "")
@@ -357,26 +764,35 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                             await redis_manager.store_hot_comments(platform, video_id, [comment_data])
                             utils.logger.info(f"[TASK_{task_id}] ✅ 评论数据已存储到Redis: {comment_data['comment_id']}")
                             
+                            # 🆕 存储评论到数据库
+                            await save_comment_to_database(platform, data, task_id)
+                            utils.logger.info(f"[TASK_{task_id}] ✅ 评论数据已存储到数据库: {comment_data['comment_id']}")
+                            
                 except Exception as e:
-                    utils.logger.error(f"[TASK_{task_id}] ❌ Redis存储回调失败: {e}")
+                    utils.logger.error(f"[TASK_{task_id}] ❌ 存储回调失败: {e}")
             
             # 将回调函数传递给爬虫
-            crawler_instance.set_storage_callback(redis_storage_callback)
+            crawler_instance.set_storage_callback(storage_callback)
             
             # 执行爬取
             utils.logger.info(f"[TASK_{task_id}] 🚀 开始执行爬取...")
+            await log_task_step(task_id, request.platform, "crawler_start", "开始执行爬取", "INFO", 65)
             task_status[task_id]["progress"] = 0.1
             task_status[task_id]["updated_at"] = datetime.now().isoformat()
+            await update_task_progress(task_id, 0.1, "running")
             
             utils.logger.info(f"[TASK_{task_id}] 📞 调用爬虫start()方法...")
             await crawler_instance.start()
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫执行完成")
+            await log_task_step(task_id, request.platform, "crawler_complete", "爬虫执行完成", "INFO", 80)
             
             task_status[task_id]["progress"] = 0.8
             task_status[task_id]["updated_at"] = datetime.now().isoformat()
+            await update_task_progress(task_id, 0.8, "running")
             
             # 从Redis读取任务结果
             utils.logger.info(f"[TASK_{task_id}] 📊 从Redis读取任务结果...")
+            await log_task_step(task_id, request.platform, "result_read", "读取任务结果", "INFO", 85)
             
             # 获取任务统计信息
             task_result = await redis_manager.get_task_result(task_id)
@@ -393,6 +809,7 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                 }
                 
                 utils.logger.info(f"[TASK_{task_id}] ✅ Redis读取完成: {videos_count} 个视频，{comments_count} 条评论")
+                await log_task_step(task_id, request.platform, "result_success", f"读取完成: {videos_count} 个视频，{comments_count} 条评论", "INFO", 90)
             else:
                 utils.logger.warning(f"[TASK_{task_id}] ⚠️ 未找到任务结果数据")
                 task_status[task_id]["result"] = {
@@ -401,6 +818,7 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                     "comment_count": 0,
                     "message": "任务完成，但未找到数据"
                 }
+                await log_task_step(task_id, request.platform, "result_empty", "未找到任务结果数据", "WARN", 90)
                     
         except Exception as redis_e:
             utils.logger.error(f"[TASK_{task_id}] ❌ Redis存储失败: {redis_e}")
@@ -454,6 +872,8 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         task_status[task_id]["status"] = "completed"
         task_status[task_id]["progress"] = 1.0
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
+        await update_task_progress(task_id, 1.0, "completed", task_status[task_id]["result"]["data_count"])
+        await log_task_step(task_id, request.platform, "task_complete", "任务执行完成", "INFO", 100)
         
         # 关闭数据库连接（如果使用了数据库）
         if config.SAVE_DATA_OPTION == "db":
@@ -483,6 +903,8 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         task_status[task_id]["status"] = "failed"
         task_status[task_id]["error"] = str(e)
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
+        await update_task_progress(task_id, 0.0, "failed")
+        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0)
         utils.logger.error(f"[TASK_{task_id}] ✅ 任务状态已更新")
         
         # 关闭数据库连接（如果使用了数据库）

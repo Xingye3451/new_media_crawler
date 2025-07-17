@@ -423,10 +423,25 @@ class DatabaseInitializer:
                     {'name': 'progress', 'type': 'FLOAT DEFAULT 0.0'},
                     {'name': 'result_count', 'type': 'INT DEFAULT 0'},
                     {'name': 'error_message', 'type': 'TEXT'},
+                    {'name': 'user_id', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "用户ID"'},
+                    {'name': 'params', 'type': 'TEXT COMMENT "任务参数JSON"'},
+                    {'name': 'priority', 'type': 'INT DEFAULT 0 COMMENT "优先级"'},
+                    {'name': 'is_favorite', 'type': 'BOOLEAN DEFAULT FALSE COMMENT "是否收藏"'},
+                    {'name': 'deleted', 'type': 'BOOLEAN DEFAULT FALSE COMMENT "是否删除"'},
+                    {'name': 'is_pinned', 'type': 'BOOLEAN DEFAULT FALSE COMMENT "是否置顶"'},
+                    {'name': 'ip_address', 'type': 'VARCHAR(45) DEFAULT NULL COMMENT "IP地址"'},
+                    {'name': 'user_security_id', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "用户安全ID"'},
+                    {'name': 'user_signature', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户签名"'},
                     {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'},
                     {'name': 'updated_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'},
                     {'name': 'started_at', 'type': 'TIMESTAMP NULL'},
                     {'name': 'completed_at', 'type': 'TIMESTAMP NULL'}
+                ],
+                'indexes': [
+                    {'name': 'idx_crawler_tasks_platform', 'columns': '(platform)'},
+                    {'name': 'idx_crawler_tasks_status', 'columns': '(status)'},
+                    {'name': 'idx_crawler_tasks_user_id', 'columns': '(user_id)'},
+                    {'name': 'idx_crawler_tasks_created_at', 'columns': '(created_at)'}
                 ]
             },
             {
@@ -491,10 +506,11 @@ class DatabaseInitializer:
                     {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT "创建时间"'}
                 ],
                 'indexes': [
-                    {'name': 'idx_task_id', 'columns': '(task_id)'},
-                    {'name': 'idx_platform', 'columns': '(platform)'},
-                    {'name': 'idx_account_id', 'columns': '(account_id)'},
-                    {'name': 'idx_log_level', 'columns': '(log_level)'}
+                    {'name': 'idx_crawler_task_logs_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_crawler_task_logs_platform', 'columns': '(platform)'},
+                    {'name': 'idx_crawler_task_logs_account_id', 'columns': '(account_id)'},
+                    {'name': 'idx_crawler_task_logs_log_level', 'columns': '(log_level)'},
+                    {'name': 'idx_crawler_task_logs_created_at', 'columns': '(created_at)'}
                 ]
             },
             {
@@ -688,13 +704,20 @@ class DatabaseInitializer:
                     {'name': 'aweme_url', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "视频详情页URL"'},
                     {'name': 'cover_url', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频封面图URL"'},
                     {'name': 'video_download_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频下载地址"'},
+                    {'name': 'video_play_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频播放地址"'},
+                    {'name': 'video_share_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频分享地址"'},
+                    {'name': 'is_favorite', 'type': 'BOOLEAN DEFAULT FALSE COMMENT "是否收藏"'},
+                    {'name': 'minio_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "MinIO存储地址"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(36) DEFAULT NULL COMMENT "关联任务ID"'},
                     {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
                     {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
                     {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
                 ],
                 'indexes': [
                     {'name': 'idx_douyin_aweme_aweme_id', 'columns': '(aweme_id)'},
-                    {'name': 'idx_douyin_aweme_create_time', 'columns': '(create_time)'}
+                    {'name': 'idx_douyin_aweme_create_time', 'columns': '(create_time)'},
+                    {'name': 'idx_douyin_aweme_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_douyin_aweme_is_favorite', 'columns': '(is_favorite)'}
                 ]
             },
             {
