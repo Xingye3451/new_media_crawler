@@ -44,6 +44,9 @@ class ZhihuCrawler(AbstractCrawler):
         self.index_url = "https://www.zhihu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        # 使用存储工厂创建存储对象
+        from store.zhihu import ZhihuStoreFactory
+        self.zhihu_store = ZhihuStoreFactory.create_store()
         self._extractor = ZhihuExtractor()
 
     async def start(self) -> None:
@@ -146,7 +149,7 @@ class ZhihuCrawler(AbstractCrawler):
 
                     page += 1
                     for content in content_list:
-                        await zhihu_store.update_zhihu_content(content)
+                        await self.zhihu_store.update_zhihu_content(content)
 
                     await self.batch_get_content_comments(content_list)
                 except DataFetchError:
@@ -188,7 +191,7 @@ class ZhihuCrawler(AbstractCrawler):
             await self.zhihu_client.get_note_all_comments(
                 content=content_item,
                 crawl_interval=random.random(),
-                callback=zhihu_store.batch_update_zhihu_note_comments
+                callback=self.zhihu_store.batch_update_zhihu_note_comments
             )
 
     async def get_creators_and_notes(self) -> None:
@@ -208,7 +211,7 @@ class ZhihuCrawler(AbstractCrawler):
                 continue
 
             utils.logger.info(f"[ZhihuCrawler.get_creators_and_notes] Creator info: {createor_info}")
-            await zhihu_store.save_creator(creator=createor_info)
+            await self.zhihu_store.save_creator(creator=createor_info)
 
             # 默认只提取回答信息，如果需要文章和视频，把下面的注释打开即可
 
@@ -216,7 +219,7 @@ class ZhihuCrawler(AbstractCrawler):
             all_content_list = await self.zhihu_client.get_all_anwser_by_creator(
                 creator=createor_info,
                 crawl_interval=random.random(),
-                callback=zhihu_store.batch_update_zhihu_contents
+                callback=self.zhihu_store.batch_update_zhihu_contents
             )
 
 
@@ -224,14 +227,14 @@ class ZhihuCrawler(AbstractCrawler):
             # all_content_list = await self.zhihu_client.get_all_articles_by_creator(
             #     creator=createor_info,
             #     crawl_interval=random.random(),
-            #     callback=zhihu_store.batch_update_zhihu_contents
+            #     callback=self.zhihu_store.batch_update_zhihu_contents
             # )
 
             # Get all videos of the creator's contents
             # all_content_list = await self.zhihu_client.get_all_videos_by_creator(
             #     creator=createor_info,
             #     crawl_interval=random.random(),
-            #     callback=zhihu_store.batch_update_zhihu_contents
+            #     callback=self.zhihu_store.batch_update_zhihu_contents
             # )
 
             # Get all comments of the creator's contents
@@ -304,7 +307,7 @@ class ZhihuCrawler(AbstractCrawler):
 
             note_detail = cast(ZhihuContent, note_detail)  # only for type check
             need_get_comment_notes.append(note_detail)
-            await zhihu_store.update_zhihu_content(note_detail)
+            await self.zhihu_store.update_zhihu_content(note_detail)
 
         await self.batch_get_content_comments(need_get_comment_notes)
 
@@ -379,3 +382,105 @@ class ZhihuCrawler(AbstractCrawler):
         """Close browser context"""
         await self.browser_context.close()
         utils.logger.info("[ZhihuCrawler.close] Browser context closed ...")
+
+    async def search_by_keywords(self, keywords: str, max_count: int = 50, 
+                                account_id: str = None, session_id: str = None,
+                                login_type: str = "qrcode", get_comments: bool = False,
+                                save_data_option: str = "db", use_proxy: bool = False,
+                                proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        根据关键词搜索知乎内容
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 搜索结果列表
+        """
+        try:
+            utils.logger.info(f"[ZhihuCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 设置配置
+            import config
+            config.KEYWORDS = keywords
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'zhihu_store') and hasattr(self.zhihu_store, 'get_all_content'):
+                results = await self.zhihu_store.get_all_content()
+            
+            utils.logger.info(f"[ZhihuCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[ZhihuCrawler.search_by_keywords] 搜索失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[ZhihuCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
+
+    async def get_user_notes(self, user_id: str, max_count: int = 50,
+                            account_id: str = None, session_id: str = None,
+                            login_type: str = "qrcode", get_comments: bool = False,
+                            save_data_option: str = "db", use_proxy: bool = False,
+                            proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        获取用户发布的内容
+        :param user_id: 用户ID
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 内容列表
+        """
+        try:
+            utils.logger.info(f"[ZhihuCrawler.get_user_notes] 开始获取用户内容: {user_id}")
+            
+            # 设置配置
+            import config
+            config.ZHIHU_SPECIFIED_ID_LIST = [user_id]
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'zhihu_store') and hasattr(self.zhihu_store, 'get_all_content'):
+                results = await self.zhihu_store.get_all_content()
+            
+            utils.logger.info(f"[ZhihuCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[ZhihuCrawler.get_user_notes] 获取失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[ZhihuCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

@@ -45,10 +45,13 @@ class WeiboCrawler(AbstractCrawler):
     browser_context: BrowserContext
 
     def __init__(self):
-        self.index_url = "https://www.weibo.com"
+        self.index_url = "https://weibo.com"
         self.mobile_index_url = "https://m.weibo.cn"
         self.user_agent = utils.get_user_agent()
         self.mobile_user_agent = utils.get_mobile_user_agent()
+        # 使用存储工厂创建存储对象
+        from store.weibo import WeiboStoreFactory
+        self.weibo_store = WeiboStoreFactory.create_store()
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -139,7 +142,7 @@ class WeiboCrawler(AbstractCrawler):
                         mblog: Dict = note_item.get("mblog")
                         if mblog:
                             note_id_list.append(mblog.get("id"))
-                            await weibo_store.update_weibo_note(note_item)
+                            await self.weibo_store.update_weibo_note(note_item)
                             await self.get_note_images(mblog)
 
                 page += 1
@@ -158,7 +161,7 @@ class WeiboCrawler(AbstractCrawler):
         video_details = await asyncio.gather(*task_list)
         for note_item in video_details:
             if note_item:
-                await weibo_store.update_weibo_note(note_item)
+                await self.weibo_store.update_weibo_note(note_item)
         await self.batch_get_notes_comments(config.WEIBO_SPECIFIED_ID_LIST)
 
     async def get_note_info_task(self, note_id: str, semaphore: asyncio.Semaphore) -> Optional[Dict]:
@@ -211,7 +214,7 @@ class WeiboCrawler(AbstractCrawler):
                 await self.wb_client.get_note_all_comments(
                     note_id=note_id,
                     crawl_interval=random.randint(1,3), # 微博对API的限流比较严重，所以延时提高一些
-                    callback=weibo_store.batch_update_weibo_note_comments,
+                    callback=self.weibo_store.batch_update_weibo_note_comments,
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES
                 )
             except DataFetchError as ex:
@@ -239,7 +242,7 @@ class WeiboCrawler(AbstractCrawler):
             content = await self.wb_client.get_note_image(url)
             if content != None:
                 extension_file_name = url.split(".")[-1]
-                await weibo_store.update_weibo_note_image(pic["pid"], content, extension_file_name)
+                await self.weibo_store.update_weibo_note_image(pic["pid"], content, extension_file_name)
 
 
     async def get_creators_and_notes(self) -> None:
@@ -256,14 +259,14 @@ class WeiboCrawler(AbstractCrawler):
                 utils.logger.info(f"[WeiboCrawler.get_creators_and_notes] creator info: {createor_info}")
                 if not createor_info:
                     raise DataFetchError("Get creator info error")
-                await weibo_store.save_creator(user_id, user_info=createor_info)
+                await self.weibo_store.save_creator(user_id, user_info=createor_info)
 
                 # Get all note information of the creator
                 all_notes_list = await self.wb_client.get_all_notes_by_creator_id(
                     creator_id=user_id,
                     container_id=createor_info_res.get("lfid_container_id"),
                     crawl_interval=0,
-                    callback=weibo_store.batch_update_weibo_notes
+                    callback=self.weibo_store.batch_update_weibo_notes
                 )
 
                 note_ids = [note_item.get("mblog", {}).get("id") for note_item in all_notes_list if
@@ -335,3 +338,105 @@ class WeiboCrawler(AbstractCrawler):
                 user_agent=user_agent
             )
             return browser_context
+
+    async def search_by_keywords(self, keywords: str, max_count: int = 50, 
+                                account_id: str = None, session_id: str = None,
+                                login_type: str = "qrcode", get_comments: bool = False,
+                                save_data_option: str = "db", use_proxy: bool = False,
+                                proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        根据关键词搜索微博内容
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 搜索结果列表
+        """
+        try:
+            utils.logger.info(f"[WeiboCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 设置配置
+            import config
+            config.KEYWORDS = keywords
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'weibo_store') and hasattr(self.weibo_store, 'get_all_content'):
+                results = await self.weibo_store.get_all_content()
+            
+            utils.logger.info(f"[WeiboCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[WeiboCrawler.search_by_keywords] 搜索失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[WeiboCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
+
+    async def get_user_notes(self, user_id: str, max_count: int = 50,
+                            account_id: str = None, session_id: str = None,
+                            login_type: str = "qrcode", get_comments: bool = False,
+                            save_data_option: str = "db", use_proxy: bool = False,
+                            proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        获取用户发布的微博
+        :param user_id: 用户ID
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 微博列表
+        """
+        try:
+            utils.logger.info(f"[WeiboCrawler.get_user_notes] 开始获取用户微博: {user_id}")
+            
+            # 设置配置
+            import config
+            config.WEIBO_SPECIFIED_ID_LIST = [user_id]
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'weibo_store') and hasattr(self.weibo_store, 'get_all_content'):
+                results = await self.weibo_store.get_all_content()
+            
+            utils.logger.info(f"[WeiboCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[WeiboCrawler.get_user_notes] 获取失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[WeiboCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

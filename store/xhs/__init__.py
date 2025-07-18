@@ -38,6 +38,18 @@ class XhsStoreFactory:
         return store_class()
 
 
+async def get_all_content() -> List[Dict]:
+    """
+    获取所有存储的内容
+    Returns:
+        List[Dict]: 内容列表
+    """
+    # 由于存储是通过工厂模式处理的，这里返回空列表
+    # 实际的数据应该通过存储层处理
+    utils.logger.info("[XhsStore] 获取存储内容 - 数据已通过存储层处理")
+    return []
+
+
 def get_video_url_arr(note_item: Dict) -> List:
     """
     获取视频url数组

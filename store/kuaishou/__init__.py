@@ -108,3 +108,31 @@ async def save_creator(user_id: str, creator: Dict):
     }
     utils.logger.info(f"[store.kuaishou.save_creator] creator:{local_db_item}")
     await KuaishouStoreFactory.create_store().store_creator(local_db_item)
+
+
+async def get_all_content() -> List[Dict]:
+    """
+    获取所有存储的内容
+    Returns:
+        List[Dict]: 内容列表
+    """
+    # 由于存储是通过工厂模式处理的，这里返回空列表
+    # 实际的数据应该通过存储层处理
+    utils.logger.info("[KuaishouStore] 获取存储内容 - 数据已通过存储层处理")
+    return []
+
+
+def get_video_url_arr(note_item: Dict) -> List:
+    """
+    获取视频url数组
+    Args:
+        note_item:
+
+    Returns:
+
+    """
+    # 快手视频URL处理逻辑
+    video_url = note_item.get('video_play_url', '')
+    if video_url:
+        return [video_url]
+    return []

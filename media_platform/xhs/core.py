@@ -45,6 +45,9 @@ class XiaoHongShuCrawler(AbstractCrawler):
         self.index_url = "https://www.xiaohongshu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = config.UA if config.UA else "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        # 使用存储工厂创建存储对象
+        from store.xhs import XhsStoreFactory
+        self.xhs_store = XhsStoreFactory.create_store()
 
     async def start(self) -> None:
         """Start xhs crawler"""
@@ -223,7 +226,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     note_details = await asyncio.gather(*task_list)
                     for note_detail in note_details:
                         if note_detail:
-                            await xhs_store.update_xhs_note(note_detail)
+                            await self.xhs_store.update_xhs_note(note_detail)
                             await self.get_notice_media(note_detail)
                             note_ids.append(note_detail.get("note_id"))
                             xsec_tokens.append(note_detail.get("xsec_token"))
@@ -249,7 +252,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 user_id=user_id
             )
             if createor_info:
-                await xhs_store.save_creator(user_id, creator=createor_info)
+                await self.xhs_store.save_creator(user_id, creator=createor_info)
 
             # When proxy is not enabled, increase the crawling interval
             if config.ENABLE_IP_PROXY:
@@ -288,7 +291,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
         note_details = await asyncio.gather(*task_list)
         for note_detail in note_details:
             if note_detail:
-                await xhs_store.update_xhs_note(note_detail)
+                await self.xhs_store.update_xhs_note(note_detail)
 
     async def get_specified_notes(self):
         """
@@ -318,7 +321,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             if note_detail:
                 need_get_comment_note_ids.append(note_detail.get("note_id", ""))
                 xsec_tokens.append(note_detail.get("xsec_token", ""))
-                await xhs_store.update_xhs_note(note_detail)
+                await self.xhs_store.update_xhs_note(note_detail)
         await self.batch_get_note_comments(need_get_comment_note_ids, xsec_tokens)
 
     async def get_note_detail_async_task(
@@ -430,7 +433,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 note_id=note_id,
                 xsec_token=xsec_token,
                 crawl_interval=crawl_interval,
-                callback=xhs_store.batch_update_xhs_note_comments,
+                callback=self.xhs_store.batch_update_xhs_note_comments,
                 max_count=CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
             )
 
@@ -545,7 +548,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 continue
             extension_file_name = f"{picNum}.jpg"
             picNum += 1
-            await xhs_store.update_xhs_note_image(note_id, content, extension_file_name)
+            await self.xhs_store.update_xhs_note_image(note_id, content, extension_file_name)
 
     async def get_notice_video(self, note_item: Dict):
         """
@@ -557,7 +560,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             return
         note_id = note_item.get("note_id")
 
-        videos = xhs_store.get_video_url_arr(note_item)
+        videos = self.xhs_store.get_video_url_arr(note_item)
 
         if not videos:
             return
@@ -568,4 +571,106 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 continue
             extension_file_name = f"{videoNum}.mp4"
             videoNum += 1
-            await xhs_store.update_xhs_note_image(note_id, content, extension_file_name)
+            await self.xhs_store.update_xhs_note_image(note_id, content, extension_file_name)
+
+    async def search_by_keywords(self, keywords: str, max_count: int = 50, 
+                                account_id: str = None, session_id: str = None,
+                                login_type: str = "qrcode", get_comments: bool = False,
+                                save_data_option: str = "db", use_proxy: bool = False,
+                                proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        根据关键词搜索小红书笔记
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 搜索结果列表
+        """
+        try:
+            utils.logger.info(f"[XiaoHongShuCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 设置配置
+            import config
+            config.KEYWORDS = keywords
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'xhs_store') and hasattr(self.xhs_store, 'get_all_content'):
+                results = await self.xhs_store.get_all_content()
+            
+            utils.logger.info(f"[XiaoHongShuCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuCrawler.search_by_keywords] 搜索失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[XiaoHongShuCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
+
+    async def get_user_notes(self, user_id: str, max_count: int = 50,
+                            account_id: str = None, session_id: str = None,
+                            login_type: str = "qrcode", get_comments: bool = False,
+                            save_data_option: str = "db", use_proxy: bool = False,
+                            proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        获取用户发布的笔记
+        :param user_id: 用户ID
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 笔记列表
+        """
+        try:
+            utils.logger.info(f"[XiaoHongShuCrawler.get_user_notes] 开始获取用户笔记: {user_id}")
+            
+            # 设置配置
+            import config
+            config.XHS_SPECIFIED_ID_LIST = [user_id]
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'xhs_store') and hasattr(self.xhs_store, 'get_all_content'):
+                results = await self.xhs_store.get_all_content()
+            
+            utils.logger.info(f"[XiaoHongShuCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuCrawler.get_user_notes] 获取失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[XiaoHongShuCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

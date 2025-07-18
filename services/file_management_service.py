@@ -35,6 +35,8 @@ async def _get_db_connection():
             password=db_config['password'],
             db=db_config['database'],
             autocommit=True,
+            minsize=1,
+            maxsize=10,
         )
         
         async_db_obj = AsyncMysqlDB(pool)
@@ -42,7 +44,8 @@ async def _get_db_connection():
         
     except Exception as e:
         logger.error(f"获取数据库连接失败: {e}")
-        raise
+        # 返回None而不是抛出异常，让调用方处理
+        return None
 
 class FileManagementService:
     """文件管理服务层"""
@@ -107,6 +110,16 @@ class FileManagementService:
         """获取文件列表"""
         try:
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return {
+                    'files': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0,
+                    'error': '数据库连接失败'
+                }
             
             # 构建查询条件
             where_clause = ""
@@ -157,7 +170,8 @@ class FileManagementService:
                 'total': 0,
                 'page': page,
                 'page_size': page_size,
-                'total_pages': 0
+                'total_pages': 0,
+                'error': str(e)
             }
     
     async def _check_file_exists(self, file_info: Dict[str, Any]) -> bool:
@@ -198,6 +212,9 @@ class FileManagementService:
         """获取文件详情"""
         try:
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return None
             
             query = """
                 SELECT vf.*
@@ -249,6 +266,9 @@ class FileManagementService:
         """删除文件"""
         try:
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return False
             
             # 先获取文件信息
             query = "SELECT * FROM video_files WHERE id = %s"
@@ -291,6 +311,9 @@ class FileManagementService:
         """移动文件"""
         try:
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return False
             
             # 获取文件信息
             query = "SELECT * FROM video_files WHERE id = %s"
@@ -367,20 +390,41 @@ class FileManagementService:
         """获取存储统计信息"""
         try:
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return {
+                    'total_files': 0,
+                    'total_size': 0,
+                    'storage_stats': {},
+                    'platform_stats': {},
+                    'disk_usage': {},
+                    'last_updated': datetime.now().isoformat()
+                }
+            
+            # 查询总文件数和总大小
+            total_query = """
+                SELECT 
+                    COUNT(*) as total_files,
+                    COALESCE(SUM(file_size), 0) as total_size
+                FROM video_files
+            """
+            total_result = await db.get_first(total_query)
+            total_files = total_result[0] if total_result else 0
+            total_size = total_result[1] if total_result else 0
             
             # 按存储类型统计
-            type_query = """
-                SELECT storage_type, COUNT(*) as count, SUM(file_size) as total_size
+            storage_query = """
+                SELECT 
+                    storage_type,
+                    COUNT(*) as count,
+                    COALESCE(SUM(file_size), 0) as total_size
                 FROM video_files
                 GROUP BY storage_type
             """
-            type_results = await db.query(type_query)
+            storage_results = await db.query(storage_query)
             
             storage_stats = {}
-            total_files = 0
-            total_size = 0
-            
-            for result in type_results:
+            for result in storage_results:
                 storage_type = result['storage_type']
                 count = result['count']
                 size = result['total_size'] if result['total_size'] else 0
@@ -389,31 +433,8 @@ class FileManagementService:
                     'count': count,
                     'total_size': size
                 }
-                total_files += count
-                total_size += size
             
-            # 平台统计 - 暂时注释掉，因为video_download_tasks表可能没有platform字段
-            # platform_query = """
-            #     SELECT vdt.platform, COUNT(*) as count, SUM(vf.file_size) as total_size
-            #     FROM video_files vf
-            #     LEFT JOIN video_download_tasks vdt ON vf.task_id = vdt.task_id
-            #     WHERE vdt.platform IS NOT NULL
-            #     GROUP BY vdt.platform
-            # """
-            # platform_results = await db.query(platform_query)
-            
-            # platform_stats = {}
-            # for result in platform_results:
-            #     platform = result['platform']
-            #     count = result['count']
-            #     size = result['total_size'] if result['total_size'] else 0
-            #     
-            #     platform_stats[platform] = {
-            #         'count': count,
-            #         'total_size': size
-            #     }
-            
-            # 暂时返回空的平台统计
+            # 按平台统计（暂时返回空）
             platform_stats = {}
             
             # 磁盘使用情况
@@ -470,6 +491,14 @@ class FileManagementService:
             missing_files = []
             
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return {
+                    'orphaned_files': [],
+                    'missing_files': [],
+                    'orphaned_count': 0,
+                    'missing_count': 0
+                }
             
             # 查找数据库中的所有文件记录
             query = "SELECT id, file_path, storage_type FROM video_files"
@@ -561,6 +590,14 @@ class FileManagementService:
             failed_ids = []
             
             db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return {
+                    'success_count': 0,
+                    'failed_count': len(file_ids),
+                    'failed_ids': file_ids,
+                    'total_count': len(file_ids)
+                }
             
             for file_id in file_ids:
                 try:

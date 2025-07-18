@@ -11,7 +11,6 @@ import json
 import os
 import hashlib
 from tools import utils
-from var import media_crawler_db_var
 
 class VideoFileManager:
     """视频文件元数据管理器"""
@@ -19,26 +18,58 @@ class VideoFileManager:
     def __init__(self):
         pass
     
-    @property
-    def db(self):
+    async def get_db_connection(self):
         """获取数据库连接"""
-        return media_crawler_db_var.get()
+        try:
+            from config.env_config_loader import config_loader
+            from async_db import AsyncMysqlDB
+            import aiomysql
+            
+            db_config = config_loader.get_database_config()
+            
+            pool = await aiomysql.create_pool(
+                host=db_config['host'],
+                port=db_config['port'],
+                user=db_config['username'],
+                password=db_config['password'],
+                db=db_config['database'],
+                autocommit=True,
+                minsize=1,
+                maxsize=10,
+            )
+            
+            async_db_obj = AsyncMysqlDB(pool)
+            return async_db_obj
+            
+        except Exception as e:
+            utils.logger.error(f"获取数据库连接失败: {e}")
+            return None
     
     async def execute_ddl(self, sql: str):
         """执行DDL语句（如CREATE TABLE），不传递参数以避免格式化错误"""
-        from var import db_conn_pool_var
-        
-        pool = db_conn_pool_var.get()
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(sql)
+        try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+            
+            # 使用AsyncMysqlDB的execute方法
+            await db.execute(sql)
+            
+        except Exception as e:
+            utils.logger.error(f"执行DDL失败: {e}")
+            raise
     
     async def table_exists(self, table_name: str) -> bool:
         """检查表是否存在"""
         try:
-            result = await self.db.query("SHOW TABLES LIKE %s", table_name)
+            db = await self.get_db_connection()
+            if not db:
+                return False
+                
+            result = await db.query("SHOW TABLES LIKE %s", table_name)
             return len(result) > 0
-        except Exception:
+        except Exception as e:
+            utils.logger.error(f"检查表是否存在失败: {e}")
             return False
     
     async def init_video_files_tables(self):
@@ -208,7 +239,11 @@ class VideoFileManager:
             file_hash = hashlib.md5(content_str.encode()).hexdigest()
             
             # 检查是否已存在
-            existing = await self.db.query(
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
+            existing = await db.query(
                 "SELECT id FROM video_files WHERE file_hash = %s",
                 file_hash
             )
@@ -239,7 +274,7 @@ class VideoFileManager:
                 'thumbnail_url': video_info.get('thumbnail_url')
             }
             
-            file_id = await self.db.item_to_table('video_files', video_data)
+            file_id = await db.item_to_table('video_files', video_data)
             
             utils.logger.info(f"[VIDEO_FILES] 保存视频元数据成功: {file_id}")
             return file_id
@@ -251,6 +286,10 @@ class VideoFileManager:
     async def create_download_task(self, file_id: int, target_storage: str, config: Dict) -> Optional[int]:
         """创建下载任务"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             # 使用item_to_table方法插入并获取ID
             task_data = {
                 'file_id': file_id,
@@ -261,7 +300,7 @@ class VideoFileManager:
                 'max_file_size': config.get('max_file_size')
             }
             
-            task_id = await self.db.item_to_table('video_download_tasks', task_data)
+            task_id = await db.item_to_table('video_download_tasks', task_data)
             utils.logger.info(f"[VIDEO_FILES] 创建下载任务成功: {task_id}")
             return task_id
             
@@ -272,13 +311,17 @@ class VideoFileManager:
     async def get_files_by_task(self, task_id: str) -> List[Dict]:
         """根据任务ID获取文件列表"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             sql = """
             SELECT * FROM video_files 
             WHERE task_id = %s 
             ORDER BY created_at DESC
             """
             
-            results = await self.db.query(sql, task_id)
+            results = await db.query(sql, task_id)
             return [dict(row) for row in results]
             
         except Exception as e:
@@ -288,6 +331,10 @@ class VideoFileManager:
     async def get_files_by_platform(self, platform: str, limit: int = 100) -> List[Dict]:
         """根据平台获取文件列表"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             sql = """
             SELECT * FROM video_files 
             WHERE platform = %s 
@@ -295,7 +342,7 @@ class VideoFileManager:
             LIMIT %s
             """
             
-            results = await self.db.query(sql, platform, limit)
+            results = await db.query(sql, platform, limit)
             return [dict(row) for row in results]
             
         except Exception as e:
@@ -305,6 +352,10 @@ class VideoFileManager:
     async def update_download_status(self, file_id: int, status: str, progress: float = None, error: str = None):
         """更新下载状态"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             update_fields = ["download_status = %s"]
             values = [status]
             
@@ -320,7 +371,7 @@ class VideoFileManager:
             values.append(file_id)
             
             sql = f"UPDATE video_files SET {', '.join(update_fields)} WHERE id = %s"
-            await self.db.execute(sql, *values)
+            await db.execute(sql, *values)
             
         except Exception as e:
             utils.logger.error(f"[VIDEO_FILES] 更新下载状态失败: {e}")
@@ -328,6 +379,10 @@ class VideoFileManager:
     async def get_storage_stats(self, platform: str = None) -> Dict:
         """获取存储统计"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             where_clause = "WHERE platform = %s" if platform else ""
             values = [platform] if platform else []
             
@@ -342,7 +397,7 @@ class VideoFileManager:
             GROUP BY storage_type
             """
             
-            results = await self.db.query(sql, *values)
+            results = await db.query(sql, *values)
             
             stats = {}
             for row in results:
@@ -361,6 +416,10 @@ class VideoFileManager:
     async def cleanup_expired_files(self):
         """清理过期文件"""
         try:
+            db = await self.get_db_connection()
+            if not db:
+                raise Exception("无法获取数据库连接")
+
             # 查找过期文件
             sql = """
             SELECT id, local_path, minio_bucket, minio_object_key 
@@ -368,7 +427,7 @@ class VideoFileManager:
             WHERE expiry_date IS NOT NULL AND expiry_date < NOW()
             """
             
-            expired_files = await self.db.query(sql)
+            expired_files = await db.query(sql)
             
             cleaned_count = 0
             for file_info in expired_files:
@@ -382,7 +441,7 @@ class VideoFileManager:
                     #     await minio_client.remove_object(file_info['minio_bucket'], file_info['minio_object_key'])
                     
                     # 更新数据库记录
-                    await self.db.execute(
+                    await db.execute(
                         "UPDATE video_files SET storage_type = 'url_only', local_path = NULL, minio_bucket = NULL, minio_object_key = NULL WHERE id = %s",
                         file_info['id']
                     )

@@ -3,17 +3,48 @@
 包含爬虫任务启动、状态查询等核心功能
 """
 
+import asyncio
+import uuid
+import json
 from datetime import datetime
-from typing import Dict, List, Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
+from tools import utils
+from var import media_crawler_db_var
 
-import utils
+# 添加独立的数据库连接函数
+async def get_db_connection():
+    """获取数据库连接"""
+    try:
+        from config.env_config_loader import config_loader
+        from async_db import AsyncMysqlDB
+        import aiomysql
+        
+        db_config = config_loader.get_database_config()
+        
+        pool = await aiomysql.create_pool(
+            host=db_config['host'],
+            port=db_config['port'],
+            user=db_config['username'],
+            password=db_config['password'],
+            db=db_config['database'],
+            autocommit=True,
+            minsize=1,
+            maxsize=10,
+        )
+        
+        async_db_obj = AsyncMysqlDB(pool)
+        return async_db_obj
+        
+    except Exception as e:
+        utils.logger.error(f"获取数据库连接失败: {e}")
+        return None
+
 from models.content_models import (
     CrawlerRequest, CrawlerResponse, TaskStatusResponse,
     MultiPlatformCrawlerRequest, MultiPlatformTaskStatusResponse
 )
-from var import media_crawler_db_var
 
 router = APIRouter()
 
@@ -68,9 +99,9 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
     """创建任务记录到数据库"""
     try:
         # 获取数据库连接
-        async_db_obj = media_crawler_db_var.get()
+        async_db_obj = await get_db_connection()
         if not async_db_obj:
-            utils.logger.error("[TASK_RECORD] 数据库连接未初始化")
+            utils.logger.error("[TASK_RECORD] 无法获取数据库连接")
             return
         
         # 构建任务参数JSON
@@ -88,37 +119,33 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
             "proxy_strategy": request.proxy_strategy
         }
         
-        sql = """
-        INSERT INTO crawler_tasks (
-            task_id, platform, task_type, keywords, status, progress,
-            user_id, task_params, priority, is_favorite, deleted, is_pinned,
-            ip_address, user_security_id, user_signature, created_at, updated_at
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s,
-            %s, %s, %s,
-            NOW(), NOW()
-        )
-        """
+        # 使用字典方式构建数据
+        task_data = {
+            'id': task_id,
+            'platform': request.platform,
+            'task_type': 'single_platform',
+            'keywords': request.keywords,
+            'status': 'pending',
+            'progress': 0.0,
+            'result_count': 0,
+            'error_message': None,
+            'user_id': None,
+            'params': json.dumps(task_params),
+            'priority': 0,
+            'is_favorite': False,
+            'deleted': False,
+            'is_pinned': False,
+            'ip_address': None,
+            'user_security_id': None,
+            'user_signature': None,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now(),
+            'started_at': None,
+            'completed_at': None
+        }
         
-        import json
-        await async_db_obj.execute(sql, (
-            task_id,
-            request.platform,
-            "single_platform",
-            request.keywords,
-            "pending",
-            0.0,
-            None,  # user_id
-            json.dumps(task_params),
-            0,  # priority
-            False,  # is_favorite
-            False,  # deleted
-            False,  # is_pinned
-            None,  # ip_address
-            None,  # user_security_id
-            None,  # user_signature
-        ))
+        # 使用item_to_table方法，更安全
+        await async_db_obj.item_to_table('crawler_tasks', task_data)
         
         utils.logger.info(f"[TASK_RECORD] 任务记录创建成功: {task_id}")
         
@@ -129,23 +156,25 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
 async def update_task_progress(task_id: str, progress: float, status: str = None, result_count: int = None):
     """更新任务进度"""
     try:
-        update_fields = ["progress = %s"]
-        update_values = [progress]
+        async_db_obj = await get_db_connection()
+        if not async_db_obj:
+            utils.logger.error("[TASK_PROGRESS] 无法获取数据库连接")
+            return
+        
+        # 构建更新数据字典
+        update_data = {
+            'progress': progress,
+            'updated_at': datetime.now()
+        }
         
         if status:
-            update_fields.append("status = %s")
-            update_values.append(status)
+            update_data['status'] = status
         
         if result_count is not None:
-            update_fields.append("result_count = %s")
-            update_values.append(result_count)
+            update_data['result_count'] = result_count
         
-        update_fields.append("updated_at = NOW()")
-        update_values.append(task_id)
-        
-        async_db_obj = media_crawler_db_var.get()
-        sql = f"UPDATE crawler_tasks SET {', '.join(update_fields)} WHERE task_id = %s"
-        await async_db_obj.execute(sql, update_values)
+        # 使用update_table方法
+        await async_db_obj.update_table('crawler_tasks', update_data, 'id', task_id)
         
         utils.logger.info(f"[TASK_PROGRESS] 任务进度更新: {task_id}, 进度: {progress}, 状态: {status}")
         
@@ -155,22 +184,25 @@ async def update_task_progress(task_id: str, progress: float, status: str = None
 async def log_task_step(task_id: str, platform: str, step: str, message: str, log_level: str = "INFO", progress: int = None):
     """记录任务步骤日志"""
     try:
-        sql = """
-        INSERT INTO crawler_task_logs (
-            task_id, platform, account_id, log_level, message, step, progress, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-        """
+        async_db_obj = await get_db_connection()
+        if not async_db_obj:
+            utils.logger.error("[TASK_LOG] 无法获取数据库连接")
+            return
         
-        async_db_obj = media_crawler_db_var.get()
-        await async_db_obj.execute(sql, (
-            task_id,
-            platform,
-            None,  # account_id
-            log_level,
-            message,
-            step,
-            progress or 0
-        ))
+        # 构建日志数据字典
+        log_data = {
+            'task_id': task_id,
+            'platform': platform,
+            'account_id': None,
+            'log_level': log_level,
+            'message': message,
+            'step': step,
+            'progress': progress or 0,
+            'created_at': datetime.now()
+        }
+        
+        # 使用item_to_table方法
+        await async_db_obj.item_to_table('crawler_task_logs', log_data)
         
         utils.logger.info(f"[TASK_LOG] {task_id} - {step}: {message}")
         
@@ -396,7 +428,6 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         utils.logger.info("[CRAWLER_START] 参数验证通过")
         
         # 生成任务ID
-        import uuid
         task_id = str(uuid.uuid4())
         utils.logger.info(f"[CRAWLER_START] 生成任务ID: {task_id}")
         

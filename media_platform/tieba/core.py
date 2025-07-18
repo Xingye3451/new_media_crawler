@@ -41,6 +41,9 @@ class TieBaCrawler(AbstractCrawler):
     def __init__(self) -> None:
         self.index_url = "https://tieba.baidu.com"
         self.user_agent = utils.get_user_agent()
+        # 使用存储工厂创建存储对象
+        from store.tieba import TiebaStoreFactory
+        self.tieba_store = TiebaStoreFactory.create_store()
         self._page_extractor = TieBaExtractor()
 
     async def start(self) -> None:
@@ -164,7 +167,7 @@ class TieBaCrawler(AbstractCrawler):
         for note_detail in note_details:
             if note_detail is not None:
                 note_details_model.append(note_detail)
-                await tieba_store.update_tieba_note(note_detail)
+                await self.tieba_store.update_tieba_note(note_detail)
         await self.batch_get_note_comments(note_details_model)
 
     async def get_note_detail_async_task(self, note_id: str, semaphore: asyncio.Semaphore) -> Optional[TiebaNote]:
@@ -228,7 +231,7 @@ class TieBaCrawler(AbstractCrawler):
             await self.tieba_client.get_note_all_comments(
                 note_detail=note_detail,
                 crawl_interval=random.random(),
-                callback=tieba_store.batch_update_tieba_note_comments,
+                callback=self.tieba_store.batch_update_tieba_note_comments,
                 max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES
             )
 
@@ -247,13 +250,13 @@ class TieBaCrawler(AbstractCrawler):
                 if not creator_info:
                     raise Exception("Get creator info error")
 
-                await tieba_store.save_creator(user_info=creator_info)
+                await self.tieba_store.save_creator(user_info=creator_info)
 
                 # Get all note information of the creator
                 all_notes_list = await self.tieba_client.get_all_notes_by_creator_user_name(
                     user_name=creator_info.user_name,
                     crawl_interval=0,
-                    callback=tieba_store.batch_update_tieba_notes,
+                    callback=self.tieba_store.batch_update_tieba_notes,
                     max_note_count=config.CRAWLER_MAX_NOTES_COUNT,
                     creator_page_html_content=creator_page_html_content,
                 )
@@ -313,3 +316,105 @@ class TieBaCrawler(AbstractCrawler):
         """
         await self.browser_context.close()
         utils.logger.info("[BaiduTieBaCrawler.close] Browser context closed ...")
+
+    async def search_by_keywords(self, keywords: str, max_count: int = 50, 
+                                account_id: str = None, session_id: str = None,
+                                login_type: str = "qrcode", get_comments: bool = False,
+                                save_data_option: str = "db", use_proxy: bool = False,
+                                proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        根据关键词搜索贴吧内容
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 搜索结果列表
+        """
+        try:
+            utils.logger.info(f"[TieBaCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 设置配置
+            import config
+            config.KEYWORDS = keywords
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'tieba_store') and hasattr(self.tieba_store, 'get_all_content'):
+                results = await self.tieba_store.get_all_content()
+            
+            utils.logger.info(f"[TieBaCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[TieBaCrawler.search_by_keywords] 搜索失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[TieBaCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
+
+    async def get_user_notes(self, user_id: str, max_count: int = 50,
+                            account_id: str = None, session_id: str = None,
+                            login_type: str = "qrcode", get_comments: bool = False,
+                            save_data_option: str = "db", use_proxy: bool = False,
+                            proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        获取用户发布的贴子
+        :param user_id: 用户ID
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 贴子列表
+        """
+        try:
+            utils.logger.info(f"[TieBaCrawler.get_user_notes] 开始获取用户贴子: {user_id}")
+            
+            # 设置配置
+            import config
+            config.TIEBA_SPECIFIED_ID_LIST = [user_id]
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'tieba_store') and hasattr(self.tieba_store, 'get_all_content'):
+                results = await self.tieba_store.get_all_content()
+            
+            utils.logger.info(f"[TieBaCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[TieBaCrawler.get_user_notes] 获取失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[TieBaCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

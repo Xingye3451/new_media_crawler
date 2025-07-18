@@ -14,18 +14,30 @@ from tools import utils
 async def _get_db_connection():
     """获取数据库连接（兼容不同的异步上下文）"""
     try:
-        # 首先尝试从 ContextVar 获取
-        from db import media_crawler_db_var
-        db = media_crawler_db_var.get()
-        return db
-    except Exception:
-        # 如果 ContextVar 失败，重新初始化数据库连接
-        utils.logger.info("[DB_UTILS] ContextVar 访问失败，重新初始化数据库连接")
-        from db import init_mediacrawler_db
-        from db import media_crawler_db_var
-        await init_mediacrawler_db()
-        db = media_crawler_db_var.get()
-        return db
+        # 直接创建数据库连接，不依赖ContextVar
+        from config.env_config_loader import config_loader
+        from async_db import AsyncMysqlDB
+        import aiomysql
+        
+        db_config = config_loader.get_database_config()
+        
+        pool = await aiomysql.create_pool(
+            host=db_config['host'],
+            port=db_config['port'],
+            user=db_config['username'],
+            password=db_config['password'],
+            db=db_config['database'],
+            autocommit=True,
+            minsize=1,
+            maxsize=10,
+        )
+        
+        async_db_obj = AsyncMysqlDB(pool)
+        return async_db_obj
+        
+    except Exception as e:
+        utils.logger.error(f"[DB_UTILS] 获取数据库连接失败: {e}")
+        return None
 
 
 async def get_cookies_from_database(platform: str, account_id: Optional[str] = None) -> str:
@@ -33,6 +45,9 @@ async def get_cookies_from_database(platform: str, account_id: Optional[str] = N
     try:
         # 获取数据库连接
         db = await _get_db_connection()
+        if not db:
+            utils.logger.error("[DB_UTILS] 无法获取数据库连接")
+            return ""
         
         if account_id:
             # 查询指定账号的最新有效cookies
@@ -103,6 +118,9 @@ async def get_account_list_by_platform(platform: str) -> List[Dict]:
     """获取指定平台的所有账号列表"""
     try:
         db = await _get_db_connection()
+        if not db:
+            utils.logger.error("[DB_UTILS] 无法获取数据库连接")
+            return []
         
         query = """
         SELECT DISTINCT lt.account_id, 
@@ -128,6 +146,12 @@ async def check_token_validity(platform: str, account_id: Optional[str] = None) 
     """检查指定平台和账号的凭证有效性"""
     try:
         db = await _get_db_connection()
+        if not db:
+            utils.logger.error("[DB_UTILS] 无法获取数据库连接")
+            return {
+                "status": "error",
+                "message": "数据库连接失败"
+            }
         
         if account_id:
             query = """
@@ -193,6 +217,9 @@ async def mark_token_invalid(token_id: int) -> bool:
     """标记凭证为无效"""
     try:
         db = await _get_db_connection()
+        if not db:
+            utils.logger.error("[DB_UTILS] 无法获取数据库连接")
+            return False
         
         query = """
         UPDATE login_tokens 
@@ -201,10 +228,10 @@ async def mark_token_invalid(token_id: int) -> bool:
         """
         
         await db.execute(query, token_id)
-        utils.logger.info(f"[DB_UTILS] 已标记凭证为无效 - Token ID: {token_id}")
+        utils.logger.info(f"[DB_UTILS] 标记凭证为无效 - ID: {token_id}")
         return True
     except Exception as e:
-        utils.logger.error(f"[DB_UTILS] 标记凭证无效失败 - Token ID: {token_id}, 错误: {e}")
+        utils.logger.error(f"[DB_UTILS] 标记凭证无效失败 - ID: {token_id}, 错误: {e}")
         return False
 
 

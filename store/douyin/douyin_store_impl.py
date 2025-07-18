@@ -18,7 +18,7 @@ import csv
 import json
 import os
 import pathlib
-from typing import Dict
+from typing import Dict, List
 
 import aiofiles
 
@@ -366,3 +366,14 @@ class DouyinRedisStoreImplement(AbstractStore):
         """
         if self.redis_callback:
             await self.redis_callback("dy", creator, "creator")
+
+    async def get_all_content(self) -> List[Dict]:
+        """
+        获取所有存储的内容
+        Returns:
+            List[Dict]: 内容列表
+        """
+        # 由于Redis存储是通过回调函数处理的，这里返回空列表
+        # 实际的数据应该通过回调函数存储到外部系统
+        utils.logger.info("[DouyinRedisStore] 获取存储内容 - 数据已通过回调函数处理")
+        return []

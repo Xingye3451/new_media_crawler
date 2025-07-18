@@ -3,8 +3,9 @@
 包含内容查询、详情获取等功能
 """
 
+import asyncio
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,34 @@ from models.content_models import (
     ContentListRequest, ContentListResponse, UnifiedContent
 )
 from var import media_crawler_db_var
+
+# 添加独立的数据库连接函数
+async def get_db_connection():
+    """获取数据库连接"""
+    try:
+        from config.env_config_loader import config_loader
+        from async_db import AsyncMysqlDB
+        import aiomysql
+        
+        db_config = config_loader.get_database_config()
+        
+        pool = await aiomysql.create_pool(
+            host=db_config['host'],
+            port=db_config['port'],
+            user=db_config['username'],
+            password=db_config['password'],
+            db=db_config['database'],
+            autocommit=True,
+            minsize=1,
+            maxsize=10,
+        )
+        
+        async_db_obj = AsyncMysqlDB(pool)
+        return async_db_obj
+        
+    except Exception as e:
+        utils.logger.error(f"获取数据库连接失败: {e}")
+        return None
 
 router = APIRouter()
 
@@ -105,7 +134,12 @@ async def get_unified_content_from_db(request: ContentListRequest) -> ContentLis
                 offset = (request.page - 1) * request.page_size
                 
                 # 查询总数
-                async_db_obj = media_crawler_db_var.get()
+                async_db_obj = await get_db_connection()
+                if not async_db_obj:
+                    utils.logger.error(f"无法获取数据库连接 - 平台: {platform_key}")
+                    platforms_summary[platform_key] = 0
+                    continue
+                    
                 count_sql = f"SELECT COUNT(*) as total FROM {table_name} {where_clause}"
                 count_result = await async_db_obj.query(count_sql, *params)
                 total_count = count_result[0]['total'] if count_result else 0
@@ -334,7 +368,10 @@ async def get_content_detail(platform: str, content_id: str):
         platform_name = platform_info["name"]
         
         # 查询数据
-        async_db_obj = media_crawler_db_var.get()
+        async_db_obj = await get_db_connection()
+        if not async_db_obj:
+            raise HTTPException(status_code=500, detail="数据库连接失败")
+            
         sql = f"SELECT * FROM {table_name} WHERE {id_field} = %s LIMIT 1"
         rows = await async_db_obj.query(sql, content_id)
         
@@ -372,7 +409,22 @@ async def get_platforms_info():
         
         for platform_key, platform_info in PLATFORM_MAPPING.items():
             try:
-                async_db_obj = media_crawler_db_var.get()
+                async_db_obj = await get_db_connection()
+                if not async_db_obj:
+                    utils.logger.error(f"无法获取数据库连接 - 平台: {platform_key}")
+                    platforms_info[platform_key] = {
+                        "name": platform_info["name"],
+                        "description": get_platform_description(platform_key),
+                        "total_count": 0,
+                        "video_count": 0,
+                        "video_ratio": 0,
+                        "recent_keywords": [],
+                        "is_video_priority": is_video_priority_platform(platform_key),
+                        "is_todo": platform_key in TODO_PLATFORMS,
+                        "primary_content_type": platform_info.get("primary_content_type", "mixed")
+                    }
+                    continue
+                    
                 sql = f"SELECT COUNT(*) as total FROM {platform_info['table']}"
                 result = await async_db_obj.query(sql)
                 total_count = result[0]['total'] if result else 0
@@ -487,7 +539,11 @@ async def get_video_platforms_info():
                 video_count = 0
                 total_count = 0
                 try:
-                    async_db_obj = media_crawler_db_var.get()
+                    async_db_obj = await get_db_connection()
+                    if not async_db_obj:
+                        utils.logger.error(f"无法获取数据库连接 - 平台: {platform_key}")
+                        continue
+                        
                     # 总数量
                     total_sql = f"SELECT COUNT(*) as total FROM {platform_info['table']}"
                     total_result = await async_db_obj.query(total_sql)
@@ -500,7 +556,8 @@ async def get_video_platforms_info():
                         video_count = video_result[0]['total'] if video_result else 0
                     else:
                         video_count = total_count  # 如果没有视频筛选，假设全部是视频
-                except:
+                except Exception as e:
+                    utils.logger.error(f"获取平台 {platform_key} 统计失败: {e}")
                     pass
                 
                 video_platforms.append({

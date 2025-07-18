@@ -315,3 +315,105 @@ class DouYinCrawler(AbstractCrawler):
         """Close browser context"""
         await self.browser_context.close()
         utils.logger.info("[DouYinCrawler.close] Browser context closed ...")
+
+    async def search_by_keywords(self, keywords: str, max_count: int = 50, 
+                                account_id: str = None, session_id: str = None,
+                                login_type: str = "qrcode", get_comments: bool = False,
+                                save_data_option: str = "db", use_proxy: bool = False,
+                                proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        根据关键词搜索抖音视频
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 搜索结果列表
+        """
+        try:
+            utils.logger.info(f"[DouYinCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 设置配置
+            import config
+            config.KEYWORDS = keywords
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'get_all_content'):
+                results = await self.douyin_store.get_all_content()
+            
+            utils.logger.info(f"[DouYinCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[DouYinCrawler.search_by_keywords] 搜索失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
+
+    async def get_user_notes(self, user_id: str, max_count: int = 50,
+                            account_id: str = None, session_id: str = None,
+                            login_type: str = "qrcode", get_comments: bool = False,
+                            save_data_option: str = "db", use_proxy: bool = False,
+                            proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        获取用户发布的视频
+        :param user_id: 用户ID
+        :param max_count: 最大获取数量
+        :param account_id: 账号ID
+        :param session_id: 会话ID
+        :param login_type: 登录类型
+        :param get_comments: 是否获取评论
+        :param save_data_option: 数据保存方式
+        :param use_proxy: 是否使用代理
+        :param proxy_strategy: 代理策略
+        :return: 视频列表
+        """
+        try:
+            utils.logger.info(f"[DouYinCrawler.get_user_notes] 开始获取用户视频: {user_id}")
+            
+            # 设置配置
+            import config
+            config.DY_SPECIFIED_ID_LIST = [user_id]
+            config.CRAWLER_MAX_NOTES_COUNT = max_count
+            config.ENABLE_GET_COMMENTS = get_comments
+            config.SAVE_DATA_OPTION = save_data_option
+            config.ENABLE_IP_PROXY = use_proxy
+            
+            # 启动爬虫
+            await self.start()
+            
+            # 获取存储的数据
+            results = []
+            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'get_all_content'):
+                results = await self.douyin_store.get_all_content()
+            
+            utils.logger.info(f"[DouYinCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            return results
+            
+        except Exception as e:
+            utils.logger.error(f"[DouYinCrawler.get_user_notes] 获取失败: {e}")
+            raise
+        finally:
+            # 安全关闭浏览器，避免重复关闭
+            try:
+                if hasattr(self, 'browser_context') and self.browser_context:
+                    await self.close()
+            except Exception as e:
+                utils.logger.warning(f"[DouYinCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

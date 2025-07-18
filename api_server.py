@@ -166,12 +166,29 @@ async def health_check():
         # 检查数据库连接
         db_status = "unknown"
         try:
-            async_db_obj = media_crawler_db_var.get()
-            if async_db_obj:
-                await async_db_obj.query("SELECT 1")
-                db_status = "connected"
-            else:
-                db_status = "not_initialized"
+            # 直接创建数据库连接进行测试
+            from config.env_config_loader import config_loader
+            from async_db import AsyncMysqlDB
+            import aiomysql
+            
+            db_config = config_loader.get_database_config()
+            
+            pool = await aiomysql.create_pool(
+                host=db_config['host'],
+                port=db_config['port'],
+                user=db_config['username'],
+                password=db_config['password'],
+                db=db_config['database'],
+                autocommit=True,
+                minsize=1,
+                maxsize=5,
+            )
+            
+            async_db_obj = AsyncMysqlDB(pool)
+            await async_db_obj.query("SELECT 1")
+            await pool.close()
+            db_status = "connected"
+            
         except Exception as e:
             db_status = f"error: {str(e)}"
         
