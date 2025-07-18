@@ -75,6 +75,24 @@ class TaskResultRedisManager:
         """获取任务统计key"""
         return f"{self.TASK_STATS_PREFIX}{task_id}"
 
+    async def ping(self) -> bool:
+        """测试Redis连接"""
+        try:
+            result = self.redis_client.ping()
+            utils.logger.info("✅ Redis连接测试成功")
+            return True
+        except Exception as e:
+            utils.logger.error(f"❌ Redis连接测试失败: {e}")
+            return False
+
+    async def close(self) -> None:
+        """关闭Redis连接"""
+        try:
+            self.redis_client.close()
+            utils.logger.info("✅ Redis连接已关闭")
+        except Exception as e:
+            utils.logger.error(f"❌ 关闭Redis连接失败: {e}")
+
     async def store_task_result(self, task_id: str, task_info: Dict[str, Any]) -> bool:
         """
         存储任务基本信息

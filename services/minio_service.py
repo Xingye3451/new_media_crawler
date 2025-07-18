@@ -71,4 +71,4 @@ class MinIOService:
             
         except Exception as e:
             logger.error(f"获取视频URL失败 {video_id}: {str(e)}")
-            return None 
+            return None

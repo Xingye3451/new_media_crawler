@@ -11,9 +11,41 @@ from api.video_downloads import router as video_downloads_router
 from api.file_management import router as file_management_router
 from api.minio_management import router as minio_management_router
 from api.task_management import router as task_management_router
+from api.crawler_core import router as crawler_core_router
+from api.content_management import router as content_management_router
+from api.platform_management import router as platform_management_router
+from api.system_management import router as system_management_router
 
 # 创建主路由器
 api_router = APIRouter()
+
+# 爬虫核心路由
+api_router.include_router(
+    crawler_core_router,
+    prefix="/v1",
+    tags=["crawler-core"]
+)
+
+# 内容管理路由
+api_router.include_router(
+    content_management_router,
+    prefix="/v1",
+    tags=["content-management"]
+)
+
+# 平台管理路由
+api_router.include_router(
+    platform_management_router,
+    prefix="/v1",
+    tags=["platform-management"]
+)
+
+# 系统管理路由
+api_router.include_router(
+    system_management_router,
+    prefix="/v1",
+    tags=["system-management"]
+)
 
 # 任务结果相关路由
 api_router.include_router(
