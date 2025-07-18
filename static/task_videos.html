@@ -478,7 +478,7 @@
         // 加载任务信息
         async function loadTaskInfo() {
             try {
-                const response = await fetch(`/api/v1/task-management/tasks/${taskId}`);
+                const response = await fetch(`/api/v1/tasks/${taskId}`);
                 const data = await response.json();
                 
                 if (data.code === 200) {
@@ -506,7 +506,7 @@
                     page_size: pageSize.toString()
                 });
                 
-                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/videos?${params.toString()}`);
+                const response = await fetch(`/api/v1/tasks/${taskId}/videos?${params.toString()}`);
                 const data = await response.json();
                 
                 if (data.code === 200) {
@@ -622,7 +622,7 @@
         // 预览视频
         async function previewVideo(videoId) {
             try {
-                const response = await fetch(`/api/v1/task-management/videos/${videoId}`);
+                const response = await fetch(`/api/v1/videos/${videoId}`);
                 const data = await response.json();
                 
                 if (data.code === 200) {
@@ -654,7 +654,7 @@
         // 下载视频文件
         async function downloadVideoFile(videoId) {
             try {
-                const response = await fetch(`/api/v1/task-management/videos/${videoId}/action`, {
+                const response = await fetch(`/api/v1/videos/${videoId}/action`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -689,7 +689,7 @@
         async function toggleVideoCollection(videoId, currentCollected) {
             try {
                 const action = currentCollected ? 'unfavorite' : 'favorite';
-                const response = await fetch(`/api/v1/task-management/videos/${videoId}/action`, {
+                const response = await fetch(`/api/v1/videos/${videoId}/action`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

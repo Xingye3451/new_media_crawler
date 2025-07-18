@@ -30,6 +30,20 @@ async def get_task_results(
         logger.error(f"获取任务结果列表失败: {str(e)}")
         raise HTTPException(status_code=500, detail="获取任务结果列表失败")
 
+@router.get("/task-results/statistics", response_model=Dict[str, Any])
+async def get_system_statistics():
+    """获取系统统计信息"""
+    try:
+        results = await task_service.get_system_statistics()
+        return {
+            "code": 200,
+            "message": "获取成功",
+            "data": results
+        }
+    except Exception as e:
+        logger.error(f"获取系统统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取系统统计失败")
+
 @router.get("/task-results/{task_id}", response_model=Dict[str, Any])
 async def get_task_detail(task_id: str):
     """获取任务详情"""
@@ -103,20 +117,6 @@ async def get_platform_videos(
     except Exception as e:
         logger.error(f"获取平台视频列表失败 {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail="获取平台视频列表失败")
-
-@router.get("/task-results/statistics", response_model=Dict[str, Any])
-async def get_system_statistics():
-    """获取系统统计信息"""
-    try:
-        results = await task_service.get_system_statistics()
-        return {
-            "code": 200,
-            "message": "获取成功",
-            "data": results
-        }
-    except Exception as e:
-        logger.error(f"获取系统统计失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="获取系统统计失败")
 
 @router.delete("/task-results/{task_id}", response_model=Dict[str, Any])
 async def delete_task_result(task_id: str):

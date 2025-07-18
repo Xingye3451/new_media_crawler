@@ -195,49 +195,286 @@ class TaskResultRedisManager:
 
     async def store_hot_comments(self, platform: str, video_id: str, comments: List[Dict[str, Any]]) -> bool:
         """
-        存储热门评论(3-5条)
-        
+        存储热门评论
         Args:
             platform: 平台名称
             video_id: 视频ID
-            comments: 评论列表，每个评论包含：
-                - comment_id: 评论ID
-                - content: 评论内容
-                - author_name: 评论作者
-                - liked_count: 点赞数
-                - create_time: 发布时间
+            comments: 评论列表
         """
         try:
-            if not comments:
-                return True
-                
             comments_key = self._get_video_comments_key(platform, video_id)
             
-            # 只存储前5条热门评论
-            hot_comments = comments[:5]
+            # 存储评论数据
+            for i, comment in enumerate(comments):
+                field_name = f"comment_{i}"
+                self.redis_client.hset(comments_key, field_name, json.dumps(comment, ensure_ascii=False))
             
-            for i, comment in enumerate(hot_comments):
-                comment_data = {
-                    "comment_id": comment.get("comment_id", ""),
-                    "content": comment.get("content", ""),
-                    "author_name": comment.get("author_name", ""),
-                    "liked_count": comment.get("liked_count", 0),
-                    "create_time": comment.get("create_time", ""),
-                    "rank": i + 1  # 排序位置
-                }
-                
-                # 使用评论ID作为hash field
-                field_name = f"comment_{i+1}"
-                self.redis_client.hset(comments_key, field_name, json.dumps(comment_data, ensure_ascii=False))
-            
+            # 设置过期时间
             self.redis_client.expire(comments_key, self.task_result_ttl)
             
-            utils.logger.info(f"✅ 热门评论已存储: {platform}:{video_id} ({len(hot_comments)}条)")
+            utils.logger.info(f"✅ 热门评论已存储: {platform}:{video_id} ({len(comments)} 条)")
             return True
             
         except Exception as e:
             utils.logger.error(f"❌ 存储热门评论失败: {platform}:{video_id}, 错误: {e}")
             return False
+
+    async def get_task_info(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """获取任务基本信息"""
+        try:
+            task_key = self._get_task_result_key(task_id)
+            task_data = self.redis_client.hgetall(task_key)
+            
+            if not task_data:
+                return None
+                
+            return task_data
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取任务信息失败: {task_id}, 错误: {e}")
+            return None
+
+    async def get_task_statistics(self, task_id: str) -> Dict[str, Any]:
+        """获取任务统计信息"""
+        try:
+            stats_key = self._get_task_stats_key(task_id)
+            stats_data = self.redis_client.hgetall(stats_key)
+            
+            if not stats_data:
+                return {
+                    "total_videos": 0,
+                    "total_comments": 0,
+                    "platforms": "",
+                    "completed_at": ""
+                }
+                
+            return stats_data
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取任务统计失败: {task_id}, 错误: {e}")
+            return {
+                "total_videos": 0,
+                "total_comments": 0,
+                "platforms": "",
+                "completed_at": ""
+            }
+
+    async def get_task_videos(self, task_id: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+        """获取任务的视频列表（带分页）"""
+        try:
+            # 获取任务关联的视频ID列表
+            task_videos_key = self._get_task_videos_key(task_id)
+            video_ids = list(self.redis_client.smembers(task_videos_key))
+            
+            if not video_ids:
+                return {
+                    'videos': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            
+            # 分页处理
+            total = len(video_ids)
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            page_video_ids = video_ids[start_idx:end_idx]
+            
+            videos = []
+            for video_id in page_video_ids:
+                # 尝试从不同平台获取视频详情
+                for platform in ['dy', 'xhs', 'ks', 'bili', 'wb', 'zhihu']:
+                    video_key = self._get_video_detail_key(platform, video_id)
+                    video_data = self.redis_client.hgetall(video_key)
+                    
+                    if video_data:
+                        # 获取热门评论
+                        comments_key = self._get_video_comments_key(platform, video_id)
+                        comments_data = self.redis_client.hgetall(comments_key)
+                        
+                        # 解析评论数据
+                        comments = []
+                        for field, comment_json in comments_data.items():
+                            if field.startswith('comment_'):
+                                try:
+                                    comment = json.loads(comment_json)
+                                    comments.append(comment)
+                                except:
+                                    pass
+                        
+                        # 按rank排序
+                        comments.sort(key=lambda x: x.get('rank', 0))
+                        
+                        # 组装视频信息
+                        video_info = {
+                            **video_data,
+                            'hot_comments': comments
+                        }
+                        videos.append(video_info)
+                        break  # 找到后跳出平台循环
+            
+            # 按存储时间排序
+            videos.sort(key=lambda x: x.get('stored_at', ''), reverse=True)
+            
+            total_pages = (total + page_size - 1) // page_size
+            
+            return {
+                'videos': videos,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            }
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取任务视频失败: {task_id}, 错误: {e}")
+            return {
+                'videos': [],
+                'total': 0,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': 0
+            }
+
+    async def get_video_detail(self, platform: str, video_id: str) -> Optional[Dict[str, Any]]:
+        """获取视频详情"""
+        try:
+            video_key = self._get_video_detail_key(platform, video_id)
+            video_data = self.redis_client.hgetall(video_key)
+            
+            if not video_data:
+                return None
+            
+            # 获取热门评论
+            comments_key = self._get_video_comments_key(platform, video_id)
+            comments_data = self.redis_client.hgetall(comments_key)
+            
+            # 解析评论数据
+            comments = []
+            for field, comment_json in comments_data.items():
+                if field.startswith('comment_'):
+                    try:
+                        comment = json.loads(comment_json)
+                        comments.append(comment)
+                    except:
+                        pass
+            
+            # 按rank排序
+            comments.sort(key=lambda x: x.get('rank', 0))
+            
+            # 组装视频信息
+            video_info = {
+                **video_data,
+                'hot_comments': comments
+            }
+            
+            return video_info
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取视频详情失败: {platform}:{video_id}, 错误: {e}")
+            return None
+
+    async def get_system_statistics(self) -> Dict[str, Any]:
+        """获取系统统计信息"""
+        try:
+            # 获取任务统计
+            task_pattern = f"{self.TASK_RESULT_PREFIX}*"
+            task_keys = self.redis_client.keys(task_pattern)
+            
+            # 获取视频统计
+            video_pattern = f"{self.VIDEO_DETAIL_PREFIX}*"
+            video_keys = self.redis_client.keys(video_pattern)
+            
+            # 获取评论统计
+            comment_pattern = f"{self.VIDEO_COMMENTS_PREFIX}*"
+            comment_keys = self.redis_client.keys(comment_pattern)
+            
+            # 按平台统计
+            platform_stats = {}
+            for video_key in video_keys:
+                video_data = self.redis_client.hgetall(video_key)
+                if video_data and 'platform' in video_data:
+                    platform = video_data['platform']
+                    platform_stats[platform] = platform_stats.get(platform, 0) + 1
+            
+            return {
+                'total_tasks': len(task_keys),
+                'total_videos': len(video_keys),
+                'total_comments': len(comment_keys),
+                'platform_stats': platform_stats,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取系统统计失败: {e}")
+            return {
+                'total_tasks': 0,
+                'total_videos': 0,
+                'total_comments': 0,
+                'platform_stats': {},
+                'last_updated': datetime.now().isoformat()
+            }
+
+    async def delete_task_result(self, task_id: str) -> bool:
+        """删除任务结果"""
+        try:
+            # 获取任务关联的视频ID列表
+            task_videos_key = self._get_task_videos_key(task_id)
+            video_ids = self.redis_client.smembers(task_videos_key)
+            
+            # 删除视频详情
+            for video_id in video_ids:
+                for platform in ['dy', 'xhs', 'ks', 'bili', 'wb', 'zhihu']:
+                    video_key = self._get_video_detail_key(platform, video_id)
+                    comments_key = self._get_video_comments_key(platform, video_id)
+                    
+                    self.redis_client.delete(video_key)
+                    self.redis_client.delete(comments_key)
+            
+            # 删除任务相关数据
+            task_key = self._get_task_result_key(task_id)
+            stats_key = self._get_task_stats_key(task_id)
+            
+            self.redis_client.delete(task_key)
+            self.redis_client.delete(stats_key)
+            self.redis_client.delete(task_videos_key)
+            
+            utils.logger.info(f"✅ 任务结果已删除: {task_id}")
+            return True
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 删除任务结果失败: {task_id}, 错误: {e}")
+            return False
+
+    async def cleanup_expired_tasks(self, days: int = 7) -> int:
+        """清理过期任务"""
+        try:
+            # 获取所有任务key
+            pattern = f"{self.TASK_RESULT_PREFIX}*"
+            keys = self.redis_client.keys(pattern)
+            
+            cleaned_count = 0
+            cutoff_time = datetime.now() - timedelta(days=days)
+            
+            for key in keys:
+                task_data = self.redis_client.hgetall(key)
+                if task_data and 'created_at' in task_data:
+                    try:
+                        created_at = datetime.fromisoformat(task_data['created_at'])
+                        if created_at < cutoff_time:
+                            task_id = task_data.get('task_id', key.split(':')[-1])
+                            if await self.delete_task_result(task_id):
+                                cleaned_count += 1
+                    except:
+                        pass
+            
+            utils.logger.info(f"✅ 清理过期任务完成，共清理 {cleaned_count} 个任务")
+            return cleaned_count
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 清理过期任务失败: {e}")
+            return 0
 
     async def get_task_result(self, task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务结果"""
@@ -386,6 +623,65 @@ class TaskResultRedisManager:
         except Exception as e:
             utils.logger.error(f"❌ 清理过期数据失败: {e}")
             return 0
+
+    async def get_task_results(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """获取任务结果列表（带分页）"""
+        try:
+            # 获取所有任务key
+            pattern = f"{self.TASK_RESULT_PREFIX}*"
+            keys = self.redis_client.keys(pattern)
+            
+            if not keys:
+                return {
+                    'results': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            
+            # 获取所有任务数据
+            all_tasks = []
+            for key in keys:
+                task_data = self.redis_client.hgetall(key)
+                if task_data:
+                    all_tasks.append(task_data)
+            
+            # 按创建时间排序
+            all_tasks.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            # 分页处理
+            total = len(all_tasks)
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            page_tasks = all_tasks[start_idx:end_idx]
+            
+            # 为每个任务补充统计信息
+            for task in page_tasks:
+                task_id = task.get('task_id')
+                if task_id:
+                    stats = await self.get_task_statistics(task_id)
+                    task['statistics'] = stats
+            
+            total_pages = (total + page_size - 1) // page_size
+            
+            return {
+                'results': page_tasks,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            }
+            
+        except Exception as e:
+            utils.logger.error(f"❌ 获取任务结果列表失败: {e}")
+            return {
+                'results': [],
+                'total': 0,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': 0
+            }
 
 
 # 全局Redis管理器实例

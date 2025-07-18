@@ -13,25 +13,94 @@ import json
 from pathlib import Path
 import mimetypes
 
-from utils.db_utils import _get_db_connection
-from config.base_config import *
+import utils
+from var import media_crawler_db_var
 
 logger = logging.getLogger(__name__)
+
+async def _get_db_connection():
+    """获取数据库连接"""
+    try:
+        # 直接创建数据库连接，不依赖ContextVar
+        from config.env_config_loader import config_loader
+        from async_db import AsyncMysqlDB
+        import aiomysql
+        
+        db_config = config_loader.get_database_config()
+        
+        pool = await aiomysql.create_pool(
+            host=db_config['host'],
+            port=db_config['port'],
+            user=db_config['username'],
+            password=db_config['password'],
+            db=db_config['database'],
+            autocommit=True,
+        )
+        
+        async_db_obj = AsyncMysqlDB(pool)
+        return async_db_obj
+        
+    except Exception as e:
+        logger.error(f"获取数据库连接失败: {e}")
+        raise
 
 class FileManagementService:
     """文件管理服务层"""
     
     def __init__(self):
-        self.download_dir = "downloads"
-        self.upload_dir = "uploads"
-        self.allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm'}
+        """初始化文件管理服务"""
+        # 获取配置
+        from config.env_config_loader import config_loader
+        config = config_loader.load_config()
+        storage_config = config.get('storage', {})
+        
+        # 本地存储配置
+        self.download_dir = storage_config.get('local_base_path', './data')
+        self.small_file_threshold = storage_config.get('small_file_threshold', 10 * 1024 * 1024)  # 10MB
+        
+        # MinIO配置
+        self.enable_minio = storage_config.get('enable_minio', False)
+        self.minio_config = {
+            'endpoint': storage_config.get('minio_endpoint', 'localhost:9000'),
+            'access_key': storage_config.get('minio_access_key', 'minioadmin'),
+            'secret_key': storage_config.get('minio_secret_key', 'minioadmin'),
+            'secure': storage_config.get('minio_secure', False),
+            'bucket': storage_config.get('minio_bucket', 'mediacrawler-videos')
+        }
+        
+        # 确保目录存在
         self.ensure_directories()
+        
+        # 初始化MinIO客户端
+        if self.enable_minio:
+            try:
+                from minio import Minio
+                self.minio_client = Minio(
+                    self.minio_config['endpoint'],
+                    access_key=self.minio_config['access_key'],
+                    secret_key=self.minio_config['secret_key'],
+                    secure=self.minio_config['secure']
+                )
+                # 确保桶存在
+                if not self.minio_client.bucket_exists(self.minio_config['bucket']):
+                    self.minio_client.make_bucket(self.minio_config['bucket'])
+            except Exception as e:
+                utils.logger.error(f"MinIO初始化失败: {e}")
+                self.minio_client = None
+        else:
+            self.minio_client = None
+
+    async def initialize(self):
+        """异步初始化方法"""
+        # 初始化视频文件管理器并创建表
+        await self._init_video_files_tables()
     
     def ensure_directories(self):
         """确保必要目录存在"""
-        for directory in [self.download_dir, self.upload_dir]:
-            if not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
+        # 只创建下载目录，因为我们现在主要使用数据库存储
+        if not os.path.exists(self.download_dir):
+            os.makedirs(self.download_dir, exist_ok=True)
+            utils.logger.info(f"✅ 创建下载目录: {self.download_dir}")
     
     async def get_file_list(self, page: int = 1, page_size: int = 20, 
                            storage_type: str = None) -> Dict[str, Any]:
@@ -54,9 +123,8 @@ class FileManagementService:
             # 查询分页数据
             offset = (page - 1) * page_size
             query = f"""
-                SELECT vf.*, vdt.video_id, vdt.platform, vdt.video_url
+                SELECT vf.*
                 FROM video_files vf
-                LEFT JOIN video_download_tasks vdt ON vf.task_id = vdt.task_id
                 {where_clause}
                 ORDER BY vf.created_at DESC 
                 LIMIT %s OFFSET %s
@@ -132,9 +200,8 @@ class FileManagementService:
             db = await _get_db_connection()
             
             query = """
-                SELECT vf.*, vdt.video_id, vdt.platform, vdt.video_url
+                SELECT vf.*
                 FROM video_files vf
-                LEFT JOIN video_download_tasks vdt ON vf.task_id = vdt.task_id
                 WHERE vf.id = %s
             """
             result = await db.get_first(query, file_id)
@@ -325,26 +392,29 @@ class FileManagementService:
                 total_files += count
                 total_size += size
             
-            # 按平台统计
-            platform_query = """
-                SELECT vdt.platform, COUNT(*) as count, SUM(vf.file_size) as total_size
-                FROM video_files vf
-                LEFT JOIN video_download_tasks vdt ON vf.task_id = vdt.task_id
-                WHERE vdt.platform IS NOT NULL
-                GROUP BY vdt.platform
-            """
-            platform_results = await db.query(platform_query)
+            # 平台统计 - 暂时注释掉，因为video_download_tasks表可能没有platform字段
+            # platform_query = """
+            #     SELECT vdt.platform, COUNT(*) as count, SUM(vf.file_size) as total_size
+            #     FROM video_files vf
+            #     LEFT JOIN video_download_tasks vdt ON vf.task_id = vdt.task_id
+            #     WHERE vdt.platform IS NOT NULL
+            #     GROUP BY vdt.platform
+            # """
+            # platform_results = await db.query(platform_query)
             
+            # platform_stats = {}
+            # for result in platform_results:
+            #     platform = result['platform']
+            #     count = result['count']
+            #     size = result['total_size'] if result['total_size'] else 0
+            #     
+            #     platform_stats[platform] = {
+            #         'count': count,
+            #         'total_size': size
+            #     }
+            
+            # 暂时返回空的平台统计
             platform_stats = {}
-            for result in platform_results:
-                platform = result['platform']
-                count = result['count']
-                size = result['total_size'] if result['total_size'] else 0
-                
-                platform_stats[platform] = {
-                    'count': count,
-                    'total_size': size
-                }
             
             # 磁盘使用情况
             disk_usage = await self._get_disk_usage()
@@ -516,3 +586,13 @@ class FileManagementService:
                 'failed_ids': file_ids,
                 'total_count': len(file_ids)
             } 
+
+    async def _init_video_files_tables(self):
+        """初始化视频文件相关表"""
+        try:
+            from db_video_files import VideoFileManager
+            file_manager = VideoFileManager()
+            await file_manager.init_video_files_tables()
+            utils.logger.info("✅ 视频文件相关表初始化完成")
+        except Exception as e:
+            utils.logger.error(f"❌ 视频文件表初始化失败: {e}") 

@@ -412,7 +412,7 @@
         // 加载统计信息
         async function loadStatistics() {
             try {
-                const response = await fetch('/api/v1/task-management/tasks/statistics');
+                const response = await fetch('/api/v1/tasks/statistics');
                 const data = await response.json();
                 
                 if (data.code === 200) {
@@ -447,7 +447,7 @@
                 if (statusFilter) params.append('status', statusFilter);
                 if (searchKeyword) params.append('keyword', searchKeyword);
                 
-                const response = await fetch(`/api/v1/task-management/tasks?${params.toString()}`);
+                const response = await fetch(`/api/v1/tasks?${params.toString()}`);
                 const data = await response.json();
                 
                 if (data.code === 200) {
@@ -591,7 +591,7 @@
         async function toggleTaskFavorite(taskId, currentFavorite) {
             try {
                 const action = currentFavorite ? 'unfavorite' : 'favorite';
-                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                const response = await fetch(`/api/v1/tasks/${taskId}/action`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -616,7 +616,7 @@
         async function toggleTaskPin(taskId, currentPinned) {
             try {
                 const action = currentPinned ? 'unpin' : 'pin';
-                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                const response = await fetch(`/api/v1/tasks/${taskId}/action`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -644,7 +644,7 @@
             }
             
             try {
-                const response = await fetch(`/api/v1/task-management/tasks/${taskId}/action`, {
+                const response = await fetch(`/api/v1/tasks/${taskId}/action`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

@@ -1,29 +1,14 @@
-# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：  
-# 1. 不得用于任何商业用途。  
-# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。  
-# 3. 不得进行大规模爬取或对平台造成运营干扰。  
-# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。   
-# 5. 不得用于任何非法或不当的用途。
-#   
-# 详细许可条款请参阅项目根目录下的LICENSE文件。  
-# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。  
-
 """
 MediaCrawler API 服务器
-多平台媒体内容爬虫API服务
 """
 
-import asyncio
-import json
-import time
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import ValidationError as RequestValidationError
+from datetime import datetime
 
 import utils
 import db
@@ -54,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 全局变量
 task_status = {}
@@ -107,6 +95,13 @@ async def startup_event():
         await redis_manager.ping()
         utils.logger.info("✅ Redis连接初始化完成")
         
+        # 初始化文件管理服务
+        utils.logger.info("📁 初始化文件管理服务...")
+        from services.file_management_service import FileManagementService
+        file_service = FileManagementService()
+        await file_service.initialize()
+        utils.logger.info("✅ 文件管理服务初始化完成")
+        
         # 加载配置
         utils.logger.info("⚙️ 加载配置...")
         from config.env_config_loader import config_loader
@@ -146,7 +141,13 @@ async def shutdown_event():
 # 根路径
 @app.get("/")
 async def root():
-    """根路径 - 返回API信息"""
+    """根路径 - 返回主页"""
+    return FileResponse("static/index.html")
+
+# API信息路径
+@app.get("/api-info")
+async def api_info():
+    """API信息路径 - 返回API信息"""
     return {
         "name": "MediaCrawler API",
         "version": "1.0.0",

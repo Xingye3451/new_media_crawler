@@ -12,7 +12,16 @@ from services.file_management_service import FileManagementService
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-file_service = FileManagementService()
+
+# 延迟初始化文件服务实例
+_file_service = None
+
+def get_file_service():
+    """获取文件服务实例"""
+    global _file_service
+    if _file_service is None:
+        _file_service = FileManagementService()
+    return _file_service
 
 class BatchDeleteRequest(BaseModel):
     file_ids: List[int]
@@ -32,6 +41,7 @@ async def get_file_list(
 ):
     """获取文件列表"""
     try:
+        file_service = get_file_service()
         results = await file_service.get_file_list(page=page, page_size=page_size, storage_type=storage_type)
         return {
             "code": 200,
@@ -42,10 +52,27 @@ async def get_file_list(
         logger.error(f"获取文件列表失败: {str(e)}")
         raise HTTPException(status_code=500, detail="获取文件列表失败")
 
+@router.get("/files/statistics", response_model=Dict[str, Any])
+async def get_storage_statistics():
+    """获取存储统计信息"""
+    try:
+        file_service = get_file_service()
+        results = await file_service.get_storage_statistics()
+        return {
+            "code": 200,
+            "message": "获取成功",
+            "data": results
+        }
+    except Exception as e:
+        logger.error(f"获取存储统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取存储统计失败")
+
+
 @router.get("/files/{file_id}", response_model=Dict[str, Any])
 async def get_file_detail(file_id: int):
     """获取文件详情"""
     try:
+        file_service = get_file_service()
         result = await file_service.get_file_detail(file_id)
         if not result:
             raise HTTPException(status_code=404, detail="文件未找到")
@@ -65,6 +92,7 @@ async def get_file_detail(file_id: int):
 async def delete_file(file_id: int):
     """删除文件"""
     try:
+        file_service = get_file_service()
         success = await file_service.delete_file(file_id)
         if not success:
             raise HTTPException(status_code=404, detail="文件未找到")
@@ -84,6 +112,7 @@ async def delete_file(file_id: int):
 async def batch_delete_files(request: BatchDeleteRequest):
     """批量删除文件"""
     try:
+        file_service = get_file_service()
         results = await file_service.batch_delete_files(request.file_ids)
         return {
             "code": 200,
@@ -98,6 +127,7 @@ async def batch_delete_files(request: BatchDeleteRequest):
 async def move_file(file_id: int, request: MoveFileRequest):
     """移动文件"""
     try:
+        file_service = get_file_service()
         success = await file_service.move_file(file_id, request.target_dir)
         if not success:
             raise HTTPException(status_code=404, detail="文件未找到或移动失败")
@@ -113,24 +143,11 @@ async def move_file(file_id: int, request: MoveFileRequest):
         logger.error(f"移动文件失败 {file_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="移动文件失败")
 
-@router.get("/files/statistics", response_model=Dict[str, Any])
-async def get_storage_statistics():
-    """获取存储统计信息"""
-    try:
-        results = await file_service.get_storage_statistics()
-        return {
-            "code": 200,
-            "message": "获取成功",
-            "data": results
-        }
-    except Exception as e:
-        logger.error(f"获取存储统计失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="获取存储统计失败")
-
 @router.get("/files/cleanup/scan", response_model=Dict[str, Any])
 async def scan_orphaned_files():
     """扫描孤立文件"""
     try:
+        file_service = get_file_service()
         results = await file_service.cleanup_orphaned_files()
         return {
             "code": 200,
@@ -145,6 +162,7 @@ async def scan_orphaned_files():
 async def remove_orphaned_files(request: CleanupRequest):
     """删除孤立文件"""
     try:
+        file_service = get_file_service()
         results = await file_service.remove_orphaned_files(request.file_paths)
         return {
             "code": 200,
@@ -159,6 +177,7 @@ async def remove_orphaned_files(request: CleanupRequest):
 async def remove_missing_records(request: CleanupRequest):
     """删除缺失文件记录"""
     try:
+        file_service = get_file_service()
         results = await file_service.remove_missing_records(request.file_ids)
         return {
             "code": 200,

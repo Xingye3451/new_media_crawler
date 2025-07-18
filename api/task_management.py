@@ -58,6 +58,22 @@ async def create_task(request: TaskCreateRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
 
 
+@router.get("/tasks/statistics", response_model=Dict[str, Any])
+async def get_task_statistics():
+    """获取任务统计信息"""
+    try:
+        stats = await task_service.get_task_statistics()
+        
+        return {
+            "code": 200,
+            "message": "获取成功",
+            "data": stats
+        }
+    except Exception as e:
+        logger.error(f"获取任务统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取任务统计失败: {str(e)}")
+
+
 @router.get("/tasks/{task_id}", response_model=Dict[str, Any])
 async def get_task(task_id: str):
     """获取任务详情"""
@@ -339,22 +355,6 @@ async def get_task_logs(
     except Exception as e:
         logger.error(f"获取任务日志失败 {task_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取任务日志失败: {str(e)}")
-
-
-@router.get("/tasks/statistics", response_model=Dict[str, Any])
-async def get_task_statistics():
-    """获取任务统计信息"""
-    try:
-        stats = await task_service.get_task_statistics()
-        
-        return {
-            "code": 200,
-            "message": "获取成功",
-            "data": stats
-        }
-    except Exception as e:
-        logger.error(f"获取任务统计失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取任务统计失败: {str(e)}")
 
 
 @router.get("/videos", response_model=Dict[str, Any])
