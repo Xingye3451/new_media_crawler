@@ -89,6 +89,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
             self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
             # 检查登录状态
             ping_success = False
+            cookie_str = None  # 初始化cookie_str变量
+            
             try:
                 ping_success = await self.xhs_client.pong()
                 utils.logger.info(f"[XiaoHongShuCrawler] Ping result: {ping_success}")
@@ -96,7 +98,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 utils.logger.warning(f"[XiaoHongShuCrawler] Ping failed: {e}")
                 ping_success = False
             
-                # 从数据库读取cookies，支持账号选择
+            # 如果ping失败，从数据库读取cookies，支持账号选择
+            if not ping_success:
                 account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
                 cookie_str = await get_cookies_from_database("xhs", account_id)
                 

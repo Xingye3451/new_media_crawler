@@ -37,6 +37,25 @@ class KuaishouStoreFactory:
         return store_class()
 
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
+
+
 async def update_kuaishou_video(video_item: Dict):
     photo_info: Dict = video_item.get("photo", {})
     video_id = photo_info.get("id")
@@ -59,7 +78,12 @@ async def update_kuaishou_video(video_item: Dict):
         "video_cover_url": photo_info.get("coverUrl", ""),
         "video_play_url": photo_info.get("photoUrl", ""),
         "source_keyword": source_keyword_var.get(),
+        "platform": "ks",  # 添加平台标识
     }
+    
+    # 收集数据
+    _add_collected_data(save_content_item)
+    
     utils.logger.info(
         f"[store.kuaishou.update_kuaishou_video] Kuaishou video id:{video_id}, title:{save_content_item.get('title')}")
     await KuaishouStoreFactory.create_store().store_content(content_item=save_content_item)
@@ -116,10 +140,9 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[KuaishouStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[KuaishouStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
 
 
 def get_video_url_arr(note_item: Dict) -> List:

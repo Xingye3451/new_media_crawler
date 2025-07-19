@@ -348,10 +348,22 @@ class DouYinCrawler(AbstractCrawler):
             # 启动爬虫
             await self.start()
             
-            # 获取存储的数据
+            # 由于Redis存储是通过回调函数处理的，我们需要从Redis中获取数据
+            # 或者直接返回爬取过程中收集的数据
             results = []
+            
+            # 如果使用了Redis存储，尝试从Redis获取数据
             if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'get_all_content'):
                 results = await self.douyin_store.get_all_content()
+            
+            # 如果Redis中没有数据，尝试从任务结果中获取
+            if not results and hasattr(self, 'task_id'):
+                from utils.redis_manager import redis_manager
+                try:
+                    task_videos = await redis_manager.get_task_videos(self.task_id, "dy")
+                    results = task_videos
+                except Exception as e:
+                    utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
             
             utils.logger.info(f"[DouYinCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results

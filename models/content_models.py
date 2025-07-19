@@ -114,7 +114,7 @@ class CrawlerRequest(BaseModel):
     login_type: Optional[str] = Field(default="qrcode", description="登录类型", example="qrcode")
     crawler_type: Optional[str] = Field(default="search", description="爬虫类型", example="search")
     get_comments: Optional[bool] = Field(default=True, description="是否获取评论", example=True)
-    save_data_option: Optional[str] = Field(default="json", description="数据保存选项", example="db")
+    save_data_option: Optional[str] = Field(default="db", description="数据保存选项", example="db")
     use_proxy: Optional[bool] = Field(default=False, description="是否使用代理", example=False)
     proxy_strategy: Optional[str] = Field(default="disabled", description="代理策略", example="disabled")
     

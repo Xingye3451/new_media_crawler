@@ -44,10 +44,28 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[XhsStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[XhsStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
+
+
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
 
 
 def get_video_url_arr(note_item: Dict) -> List:
@@ -120,7 +138,12 @@ async def update_xhs_note(note_item: Dict):
         "note_url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={note_item.get('xsec_token')}&xsec_source=pc_search", # 帖子url
         "source_keyword": source_keyword_var.get(), # 搜索关键词
         "xsec_token": note_item.get("xsec_token"), # xsec_token
+        "platform": "xhs",  # 添加平台标识
     }
+    
+    # 收集数据
+    _add_collected_data(local_db_item)
+    
     utils.logger.info(f"[store.xhs.update_xhs_note] xhs note: {local_db_item}")
     await XhsStoreFactory.create_store().store_content(local_db_item)
 

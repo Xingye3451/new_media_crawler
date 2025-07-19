@@ -19,6 +19,25 @@ from . import tieba_store_impl
 from .tieba_store_impl import *
 
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
+
+
 class TieBaStoreFactory:
     STORES = {
         "csv": TieBaCsvStoreImplement,
@@ -56,10 +75,9 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[TiebaStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[TiebaStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
 
 
 def get_video_url_arr(note_item: Dict) -> List:
@@ -87,12 +105,29 @@ async def update_tieba_note(note_item: TiebaNote):
     Returns:
 
     """
-    note_item.source_keyword = source_keyword_var.get()
-    save_note_item = note_item.model_dump()
-    save_note_item.update({"last_modify_ts": utils.get_current_timestamp()})
-    utils.logger.info(f"[store.tieba.update_tieba_note] tieba note: {save_note_item}")
-
-    await TieBaStoreFactory.create_store().store_content(save_note_item)
+    save_content_item = {
+        "note_id": note_item.id,
+        "note_type": "tieba",
+        "title": note_item.title[:500],
+        "desc": note_item.content,
+        "create_time": note_item.create_time,
+        "user_id": note_item.author.id,
+        "nickname": note_item.author.name,
+        "avatar": note_item.author.avatar_url,
+        "liked_count": str(note_item.like_count),
+        "comment_count": str(note_item.reply_count),
+        "last_modify_ts": utils.get_current_timestamp(),
+        "note_url": note_item.url,
+        "source_keyword": source_keyword_var.get(),
+        "platform": "tieba",  # 添加平台标识
+    }
+    
+    # 收集数据
+    _add_collected_data(save_content_item)
+    
+    utils.logger.info(
+        f"[store.tieba.update_tieba_note] Tieba note id:{note_item.id}, title:{save_content_item.get('title')}")
+    await TieBaStoreFactory.create_store().store_content(content_item=save_content_item)
 
 
 async def batch_update_tieba_note_comments(note_id: str, comments: List[TiebaComment]):

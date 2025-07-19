@@ -26,6 +26,7 @@ class DouyinStoreFactory:
         "csv": DouyinCsvStoreImplement,
         "db": DouyinDbStoreImplement,
         "json": DouyinJsonStoreImplement,
+        "redis": DouyinRedisStoreImplement,
     }
 
     @staticmethod
@@ -135,9 +136,24 @@ async def update_douyin_aweme(aweme_item: Dict):
     utils.logger.info(
         f"[store.douyin.update_douyin_aweme] douyin aweme id:{aweme_id}, title:{save_content_item.get('title')}"
     )
-    await DouyinStoreFactory.create_store().store_content(
-        content_item=save_content_item
-    )
+    
+    # 根据配置选择存储方式
+    if config.SAVE_DATA_OPTION == "redis":
+        # 使用Redis存储
+        await DouyinStoreFactory.create_store().store_content(
+            content_item=aweme_item  # 传递原始数据给Redis存储
+        )
+    elif config.SAVE_DATA_OPTION == "db":
+        # 使用数据库存储
+        await DouyinStoreFactory.create_store().store_content(
+            content_item=save_content_item
+        )
+        utils.logger.info(f"✅ [store.douyin.update_douyin_aweme] 数据已存储到数据库: {aweme_id}")
+    else:
+        # 使用其他存储方式
+        await DouyinStoreFactory.create_store().store_content(
+            content_item=save_content_item
+        )
 
 
 async def batch_update_dy_aweme_comments(aweme_id: str, comments: List[Dict]):

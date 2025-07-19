@@ -101,7 +101,7 @@ class EnvConfigLoader:
                 "enable_comments": False,
                 "enable_sub_comments": False,
                 "enable_images": False,
-                "save_data_option": "json",
+                "save_data_option": "db",
                 "headless": False,
                 "max_sleep_sec": 3,
                 "max_concurrency": 1

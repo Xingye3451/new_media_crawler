@@ -160,7 +160,7 @@ def test_crawler_config():
         max_notes_count=50,
         enable_comments=True,
         enable_images=False,
-        save_data_option="json",
+        save_data_option="db",
         headless=False,
         max_sleep_sec=3,
         max_concurrency=2

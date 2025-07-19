@@ -144,6 +144,48 @@ async def root():
     """根路径 - 返回主页"""
     return FileResponse("static/index.html")
 
+# 任务详情页面
+@app.get("/task_detail.html")
+async def task_detail_page():
+    """任务详情页面"""
+    return FileResponse("static/task_detail.html")
+
+# 任务视频页面
+@app.get("/task_videos.html")
+async def task_videos_page():
+    """任务视频页面"""
+    return FileResponse("static/task_videos.html")
+
+# 任务结果页面
+@app.get("/task_results.html")
+async def task_results_page():
+    """任务结果页面"""
+    return FileResponse("static/task_results.html")
+
+# 账号管理页面
+@app.get("/account_management.html")
+async def account_management_page():
+    """账号管理页面"""
+    return FileResponse("static/account_management.html")
+
+# 视频预览页面
+@app.get("/video_preview.html")
+async def video_preview_page():
+    """视频预览页面"""
+    return FileResponse("static/video_preview.html")
+
+# 文件管理页面
+@app.get("/file_management.html")
+async def file_management_page():
+    """文件管理页面"""
+    return FileResponse("static/file_management.html")
+
+# API测试页面
+@app.get("/api_test.html")
+async def api_test_page():
+    """API测试页面"""
+    return FileResponse("static/api_test.html")
+
 # API信息路径
 @app.get("/api-info")
 async def api_info():

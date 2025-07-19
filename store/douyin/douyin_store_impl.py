@@ -265,6 +265,7 @@ class DouyinRedisStoreImplement(AbstractStore):
     
     def __init__(self, redis_callback=None):
         self.redis_callback = redis_callback
+        self.collected_data = []  # 收集爬取到的数据
     
     def set_redis_callback(self, callback):
         """设置Redis回调函数"""
@@ -341,11 +342,33 @@ class DouyinRedisStoreImplement(AbstractStore):
             "stored_at": content_item.get("stored_at", ""),
         }
 
+        # 收集数据用于返回
+        self.collected_data.append(processed_content)
+
         # 日志输出
         utils.logger.info(f"🎬 [DouyinRedisStore] 视频ID: {aweme_id}, 标题: {processed_content.get('title')}")
         utils.logger.info(f"🔗 [DouyinRedisStore] 播放页链接: {processed_content.get('aweme_url')}")
         utils.logger.info(f"📥 [DouyinRedisStore] 下载链接: {processed_content.get('download_url')}")
 
+        # 同时存储到数据库
+        try:
+            from .douyin_store_sql import (add_new_content,
+                                           query_content_by_content_id,
+                                           update_content_by_content_id)
+            
+            aweme_detail: Dict = await query_content_by_content_id(content_id=aweme_id)
+            if not aweme_detail:
+                content_item["add_ts"] = utils.get_current_timestamp()
+                if content_item.get("title") or content_item.get("desc"):
+                    await add_new_content(content_item)
+                    utils.logger.info(f"✅ [DouyinRedisStore] 数据已存储到数据库: {aweme_id}")
+            else:
+                await update_content_by_content_id(aweme_id, content_item=content_item)
+                utils.logger.info(f"✅ [DouyinRedisStore] 数据已更新到数据库: {aweme_id}")
+        except Exception as e:
+            utils.logger.error(f"❌ [DouyinRedisStore] 数据库存储失败: {aweme_id}, 错误: {e}")
+
+        # 存储到Redis
         if self.redis_callback:
             await self.redis_callback("dy", processed_content, "video")
 
@@ -373,7 +396,5 @@ class DouyinRedisStoreImplement(AbstractStore):
         Returns:
             List[Dict]: 内容列表
         """
-        # 由于Redis存储是通过回调函数处理的，这里返回空列表
-        # 实际的数据应该通过回调函数存储到外部系统
-        utils.logger.info("[DouyinRedisStore] 获取存储内容 - 数据已通过回调函数处理")
-        return []
+        utils.logger.info(f"[DouyinRedisStore] 获取存储内容 - 共收集到 {len(self.collected_data)} 条数据")
+        return self.collected_data

@@ -350,7 +350,7 @@ class AIPlatformFrontend:
             crawler_type="search",
             keywords=keywords,
             max_notes_count=max_count,
-            save_data_option="json"
+            save_data_option="db"
         )
         
         if not result["success"]:

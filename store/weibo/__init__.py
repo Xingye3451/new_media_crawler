@@ -60,10 +60,9 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[WeiboStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[WeiboStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
 
 
 def get_video_url_arr(note_item: Dict) -> List:
@@ -82,47 +81,52 @@ def get_video_url_arr(note_item: Dict) -> List:
     return []
 
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
+
+
 async def update_weibo_note(note_item: Dict):
-    """
-    Update weibo note
-    Args:
-        note_item:
-
-    Returns:
-
-    """
-    if not note_item:
-        return
-
-    mblog: Dict = note_item.get("mblog")
-    user_info: Dict = mblog.get("user")
-    note_id = mblog.get("id")
-    content_text = mblog.get("text")
-    clean_text = re.sub(r"<.*?>", "", content_text)
+    note_id = note_item.get("id")
+    user_info = note_item.get("user", {})
     save_content_item = {
-        # 微博信息
         "note_id": note_id,
-        "content": clean_text,
-        "create_time": utils.rfc2822_to_timestamp(mblog.get("created_at")),
-        "create_date_time": str(utils.rfc2822_to_china_datetime(mblog.get("created_at"))),
-        "liked_count": str(mblog.get("attitudes_count", 0)),
-        "comments_count": str(mblog.get("comments_count", 0)),
-        "shared_count": str(mblog.get("reposts_count", 0)),
+        "note_type": "weibo",
+        "title": note_item.get("text", "")[:500],
+        "desc": note_item.get("text", ""),
+        "create_time": note_item.get("created_at"),
+        "user_id": user_info.get("id"),
+        "nickname": user_info.get("screen_name"),
+        "avatar": user_info.get("avatar_hd"),
+        "liked_count": str(note_item.get("attitudes_count", 0)),
+        "viewd_count": str(note_item.get("reposts_count", 0)),
+        "comment_count": str(note_item.get("comments_count", 0)),
+        "share_count": str(note_item.get("reposts_count", 0)),
         "last_modify_ts": utils.get_current_timestamp(),
-        "note_url": f"https://m.weibo.cn/detail/{note_id}",
-        "ip_location": mblog.get("region_name", "").replace("发布于 ", ""),
-
-        # 用户信息
-        "user_id": str(user_info.get("id")),
-        "nickname": user_info.get("screen_name", ""),
-        "gender": user_info.get("gender", ""),
-        "profile_url": user_info.get("profile_url", ""),
-        "avatar": user_info.get("profile_image_url", ""),
-
+        "note_url": f"https://weibo.com/{user_info.get('id')}/{note_id}",
         "source_keyword": source_keyword_var.get(),
+        "platform": "wb",  # 添加平台标识
     }
+    
+    # 收集数据
+    _add_collected_data(save_content_item)
+    
     utils.logger.info(
-        f"[store.weibo.update_weibo_note] weibo note id:{note_id}, title:{save_content_item.get('content')[:24]} ...")
+        f"[store.weibo.update_weibo_note] Weibo note id:{note_id}, title:{save_content_item.get('title')}")
     await WeibostoreFactory.create_store().store_content(content_item=save_content_item)
 
 

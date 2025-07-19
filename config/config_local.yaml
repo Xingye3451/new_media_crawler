@@ -31,7 +31,7 @@ crawler:
   enable_comments: true
   enable_sub_comments: false
   enable_images: false
-  save_data_option: "json"  # 可选: json, csv, db
+  save_data_option: "db"  # 可选: json, csv, db
   headless: true  # Linux服务器环境无头模式
   max_sleep_sec: 3  # 开发环境增加间隔
   max_concurrency: 1  # 开发环境单线程

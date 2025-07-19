@@ -67,7 +67,7 @@ class CrawlerConfig:
     enable_comments: bool = True
     enable_sub_comments: bool = False
     enable_images: bool = False
-    save_data_option: str = "json"
+    save_data_option: str = "db"
     headless: bool = False
     max_sleep_sec: int = 2
     max_concurrency: int = 1
@@ -265,7 +265,7 @@ class ConfigManager:
             "crawler.enable_comments": os.getenv("ENABLE_GET_COMMENTS", "true").lower() == "true",
             "crawler.enable_sub_comments": os.getenv("ENABLE_GET_SUB_COMMENTS", "false").lower() == "true",
             "crawler.enable_images": os.getenv("ENABLE_GET_IMAGES", "false").lower() == "true",
-            "crawler.save_data_option": os.getenv("SAVE_DATA_OPTION", "json"),
+            "crawler.save_data_option": os.getenv("SAVE_DATA_OPTION", "db"),
             "crawler.headless": os.getenv("HEADLESS", "false").lower() == "true",
             "crawler.max_sleep_sec": int(os.getenv("CRAWLER_MAX_SLEEP_SEC", "2")),
             "crawler.max_concurrency": int(os.getenv("MAX_CONCURRENCY_NUM", "1")),
@@ -404,7 +404,7 @@ class ConfigManager:
             enable_comments=self.get("crawler.enable_comments", True),
             enable_sub_comments=self.get("crawler.enable_sub_comments", False),
             enable_images=self.get("crawler.enable_images", False),
-            save_data_option=self.get("crawler.save_data_option", "json"),
+            save_data_option=self.get("crawler.save_data_option", "db"),
             headless=self.get("crawler.headless", False),
             max_sleep_sec=self.get("crawler.max_sleep_sec", 2),
             max_concurrency=self.get("crawler.max_concurrency", 1),

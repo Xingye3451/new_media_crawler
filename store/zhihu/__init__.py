@@ -57,10 +57,9 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[ZhihuStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[ZhihuStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
 
 
 def get_video_url_arr(note_item: Dict) -> List:
@@ -79,6 +78,25 @@ def get_video_url_arr(note_item: Dict) -> List:
     return []
 
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
+
+
 async def update_zhihu_content(content_item: ZhihuContent):
     """
     更新知乎内容
@@ -88,11 +106,29 @@ async def update_zhihu_content(content_item: ZhihuContent):
     Returns:
 
     """
-    content_item.source_keyword = source_keyword_var.get()
-    local_db_item = content_item.model_dump()
-    local_db_item.update({"last_modify_ts": utils.get_current_timestamp()})
-    utils.logger.info(f"[store.zhihu.update_zhihu_content] zhihu content: {local_db_item}")
-    await ZhihuStoreFactory.create_store().store_content(local_db_item)
+    save_content_item = {
+        "note_id": content_item.id,
+        "note_type": content_item.type,
+        "title": content_item.title[:500],
+        "desc": content_item.excerpt,
+        "create_time": content_item.created_time,
+        "user_id": content_item.author.id,
+        "nickname": content_item.author.name,
+        "avatar": content_item.author.avatar_url,
+        "liked_count": str(content_item.voteup_count),
+        "comment_count": str(content_item.comment_count),
+        "last_modify_ts": utils.get_current_timestamp(),
+        "note_url": content_item.url,
+        "source_keyword": source_keyword_var.get(),
+        "platform": "zhihu",  # 添加平台标识
+    }
+    
+    # 收集数据
+    _add_collected_data(save_content_item)
+    
+    utils.logger.info(
+        f"[store.zhihu.update_zhihu_content] Zhihu content id:{content_item.id}, title:{save_content_item.get('title')}")
+    await ZhihuStoreFactory.create_store().store_content(content_item=save_content_item)
 
 
 

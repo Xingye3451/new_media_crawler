@@ -23,6 +23,25 @@ from .bilibili_store_impl import *
 from .bilibilli_store_video import *
 
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据"""
+    global _collected_data
+    _collected_data = []
+
+
 class BiliStoreFactory:
     STORES = {
         "csv": BiliCsvStoreImplement,
@@ -46,10 +65,9 @@ async def get_all_content() -> List[Dict]:
     Returns:
         List[Dict]: 内容列表
     """
-    # 由于存储是通过工厂模式处理的，这里返回空列表
-    # 实际的数据应该通过存储层处理
-    utils.logger.info("[BilibiliStore] 获取存储内容 - 数据已通过存储层处理")
-    return []
+    collected_data = _get_collected_data()
+    utils.logger.info(f"[BilibiliStore] 获取存储内容 - 共收集到 {len(collected_data)} 条数据")
+    return collected_data
 
 
 def get_video_url_arr(note_item: Dict) -> List:
@@ -69,35 +87,39 @@ def get_video_url_arr(note_item: Dict) -> List:
 
 
 async def update_bilibili_video(video_item: Dict):
-    video_item_view: Dict = video_item.get("View")
-    video_user_info: Dict = video_item_view.get("owner")
-    video_item_stat: Dict = video_item_view.get("stat")
-    video_id = str(video_item_view.get("aid"))
+    video_info: Dict = video_item.get("View", {})
+    video_id = video_info.get("aid")
+    if not video_id:
+        return
+    owner_info: Dict = video_info.get("owner", {})
+    stat_info: Dict = video_info.get("stat", {})
     save_content_item = {
         "video_id": video_id,
-        "video_type": "video",
-        "title": video_item_view.get("title", "")[:500],
-        "desc": video_item_view.get("desc", "")[:500],
-        "create_time": video_item_view.get("pubdate"),
-        "user_id": str(video_user_info.get("mid")),
-        "nickname": video_user_info.get("name"),
-        "avatar": video_user_info.get("face", ""),
-        "liked_count": str(video_item_stat.get("like", "")),
-        "disliked_count": str(video_item_stat.get("dislike", "")),
-        "video_play_count": str(video_item_stat.get("view", "")),
-        "video_favorite_count": str(video_item_stat.get("favorite", "")),
-        "video_share_count": str(video_item_stat.get("share", "")),
-        "video_coin_count": str(video_item_stat.get("coin", "")),
-        "video_danmaku": str(video_item_stat.get("danmaku", "")),
-        "video_comment": str(video_item_stat.get("reply", "")),
+        "video_type": str(video_info.get("videos", 1)),
+        "title": video_info.get("title", "")[:500],
+        "desc": video_info.get("desc", "")[:500],
+        "create_time": video_info.get("pubdate"),
+        "user_id": owner_info.get("mid"),
+        "nickname": owner_info.get("name"),
+        "avatar": owner_info.get("face"),
+        "liked_count": str(stat_info.get("like")),
+        "viewd_count": str(stat_info.get("view")),
+        "comment_count": str(stat_info.get("reply")),
+        "collected_count": str(stat_info.get("favorite")),
+        "share_count": str(stat_info.get("share")),
         "last_modify_ts": utils.get_current_timestamp(),
         "video_url": f"https://www.bilibili.com/video/av{video_id}",
-        "video_cover_url": video_item_view.get("pic", ""),
+        "video_cover_url": video_info.get("pic"),
+        "video_play_url": video_info.get("redirect_url", ""),
         "source_keyword": source_keyword_var.get(),
+        "platform": "bili",  # 添加平台标识
     }
+    
+    # 收集数据
+    _add_collected_data(save_content_item)
+    
     utils.logger.info(
-        f"[store.bilibili.update_bilibili_video] bilibili video id:{video_id}, title:{save_content_item.get('title')}"
-    )
+        f"[store.bilibili.update_bilibili_video] Bilibili video id:{video_id}, title:{save_content_item.get('title')}")
     await BiliStoreFactory.create_store().store_content(content_item=save_content_item)
 
 

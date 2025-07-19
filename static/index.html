@@ -353,12 +353,25 @@
                 </div>
             </div>
 
+            <!-- 账号管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/account_management.html'">
+                <span class="feature-icon">👤</span>
+                <div class="feature-title">账号管理</div>
+                <div class="feature-desc">
+                    管理多平台账号信息，支持远程桌面登录、滑动验证、Cookie管理等
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/account_management.html" class="btn btn-primary">账号管理</a>
+                    <a href="#" onclick="startRemoteLogin()" class="btn btn-secondary">远程登录</a>
+                </div>
+            </div>
+
             <!-- 系统设置 -->
             <div class="feature-card">
                 <span class="feature-icon">⚙️</span>
                 <div class="feature-title">系统配置管理</div>
                 <div class="feature-desc">
-                    配置爬虫参数、账号管理、存储设置、API接口等系统配置项
+                    配置爬虫参数、存储设置、API接口等系统配置项
                 </div>
                 <div class="feature-actions">
                     <a href="#" onclick="showSettings()" class="btn btn-primary">系统设置</a>
@@ -408,6 +421,14 @@
                     <div class="action-text">
                         <div class="action-title">API文档</div>
                         <div class="action-desc">查看完整的API接口文档</div>
+                    </div>
+                </a>
+                
+                <a href="/static/account_management.html" class="action-btn">
+                    <span class="action-icon">👤</span>
+                    <div class="action-text">
+                        <div class="action-title">账号管理</div>
+                        <div class="action-desc">管理多平台账号和登录</div>
                     </div>
                 </a>
                 
@@ -530,6 +551,11 @@
                     alert('清理失败，请稍后重试。');
                 }
             }
+        }
+
+        // 开始远程登录
+        function startRemoteLogin() {
+            window.location.href = '/static/account_management.html';
         }
 
         // 导出所有数据

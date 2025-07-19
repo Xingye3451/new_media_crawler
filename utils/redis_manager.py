@@ -491,8 +491,8 @@ class TaskResultRedisManager:
             utils.logger.error(f"❌ 获取任务结果失败: {task_id}, 错误: {e}")
             return None
 
-    async def get_task_videos(self, task_id: str, platform: str) -> List[Dict[str, Any]]:
-        """获取任务的视频列表"""
+    async def get_task_videos_by_platform(self, task_id: str, platform: str) -> List[Dict[str, Any]]:
+        """获取任务的视频列表（按平台）"""
         try:
             # 获取任务关联的视频ID列表
             task_videos_key = self._get_task_videos_key(task_id)

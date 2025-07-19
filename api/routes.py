@@ -15,6 +15,8 @@ from api.crawler_core import router as crawler_core_router
 from api.content_management import router as content_management_router
 from api.platform_management import router as platform_management_router
 from api.system_management import router as system_management_router
+from api.account_management import account_router
+from api.login_management import login_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -80,4 +82,18 @@ api_router.include_router(
     task_management_router,
     prefix="/v1",
     tags=["task-management"]
+)
+
+# 账号管理相关路由
+api_router.include_router(
+    account_router,
+    prefix="/v1",
+    tags=["account-management"]
+)
+
+# 登录管理相关路由
+api_router.include_router(
+    login_router,
+    prefix="/v1",
+    tags=["login-management"]
 ) 
