@@ -894,7 +894,7 @@ async def start_login(request: LoginRequest, background_tasks: BackgroundTasks, 
     finally:
         utils.logger.info(f"=== 登录请求结束 ===")
 
-@login_router.post("/login/check", response_model=LoginCheckResponse)
+@login_router.post("/login/check")
 async def check_platform_login_status(request: LoginCheckRequest):
     """检查平台登录状态"""
     db = await get_db()
@@ -908,7 +908,11 @@ async def check_platform_login_status(request: LoginCheckRequest):
             account = await db.get_first(account_query, request.account_id, request.platform)
             
             if not account:
-                raise HTTPException(status_code=404, detail="指定账号不存在")
+                return {
+                    "code": 404,
+                    "message": "指定账号不存在",
+                    "data": None
+                }
             
             # 检查该账号的登录状态
             token_query = """
@@ -922,12 +926,15 @@ async def check_platform_login_status(request: LoginCheckRequest):
             token = await db.get_first(token_query, request.account_id, request.platform)
             
             if not token:
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="not_logged_in",
-                    message=f"账号 {account['account_name']} 未登录",
-                    account_info={"account_id": account['id'], "account_name": account['account_name']}
-                )
+                return {
+                    "code": 200,
+                    "message": f"账号 {account['account_name']} 未登录",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "not_logged_in",
+                        "account_info": {"account_id": account['id'], "account_name": account['account_name']}
+                    }
+                }
             
             # 检查token是否过期
             if token['expires_at'] and token['expires_at'] < datetime.now():
@@ -935,14 +942,17 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, request.account_id, request.platform)
                 
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="expired",
-                    message=f"账号 {account['account_name']} 登录凭证已过期",
-                    account_info={"account_id": account['id'], "account_name": account['account_name']},
-                    last_login_time=token['created_at'].isoformat() if token['created_at'] else None,
-                    expires_at=token['expires_at'].isoformat() if token['expires_at'] else None
-                )
+                return {
+                    "code": 200,
+                    "message": f"账号 {account['account_name']} 登录凭证已过期",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "expired",
+                        "account_info": {"account_id": account['id'], "account_name": account['account_name']},
+                        "last_login_time": token['created_at'].isoformat() if token['created_at'] else None,
+                        "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None
+                    }
+                }
             
             # 实际验证登录状态
             utils.logger.info(f"开始实际验证账号 {account['account_name']} 在平台 {request.platform} 的登录状态")
@@ -962,27 +972,33 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 update_query = "UPDATE login_tokens SET last_used_at = %s WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, datetime.now(), request.account_id, request.platform)
                 
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="logged_in",
-                    message=f"账号 {account['account_name']} 已登录（已验证）",
-                    account_info=account_info,
-                    last_login_time=token['created_at'].isoformat() if token['created_at'] else None,
-                    expires_at=token['expires_at'].isoformat() if token['expires_at'] else None
-                )
+                return {
+                    "code": 200,
+                    "message": f"账号 {account['account_name']} 已登录（已验证）",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "logged_in",
+                        "account_info": account_info,
+                        "last_login_time": token['created_at'].isoformat() if token['created_at'] else None,
+                        "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None
+                    }
+                }
             else:
                 # 实际验证失败，将token设为无效
                 update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, request.account_id, request.platform)
                 
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="not_logged_in",
-                    message=f"账号 {account['account_name']} 登录状态验证失败：{verification_result.get('message', '未知错误')}",
-                    account_info=account_info,
-                    last_login_time=token['created_at'].isoformat() if token['created_at'] else None,
-                    expires_at=token['expires_at'].isoformat() if token['expires_at'] else None
-                )
+                return {
+                    "code": 200,
+                    "message": f"账号 {account['account_name']} 登录状态验证失败：{verification_result.get('message', '未知错误')}",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "not_logged_in",
+                        "account_info": account_info,
+                        "last_login_time": token['created_at'].isoformat() if token['created_at'] else None,
+                        "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None
+                    }
+                }
         
         else:
             # 检查该平台所有账号的登录状态
@@ -990,11 +1006,14 @@ async def check_platform_login_status(request: LoginCheckRequest):
             accounts = await db.query(accounts_query, request.platform)
             
             if not accounts:
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="not_logged_in",
-                    message=f"平台 {request.platform} 没有可用账号"
-                )
+                return {
+                    "code": 200,
+                    "message": f"平台 {request.platform} 没有可用账号",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "not_logged_in"
+                    }
+                }
             
             logged_in_accounts = []
             expired_accounts = []
@@ -1017,35 +1036,45 @@ async def check_platform_login_status(request: LoginCheckRequest):
                         expired_accounts.append(account['account_name'])
             
             if logged_in_accounts:
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="logged_in",
-                    message=f"平台 {request.platform} 有 {len(logged_in_accounts)} 个账号已登录: {', '.join(logged_in_accounts)}",
-                    account_info={"logged_in_count": len(logged_in_accounts), "logged_in_accounts": logged_in_accounts}
-                )
+                return {
+                    "code": 200,
+                    "message": f"平台 {request.platform} 有 {len(logged_in_accounts)} 个账号已登录: {', '.join(logged_in_accounts)}",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "logged_in",
+                        "account_info": {"logged_in_count": len(logged_in_accounts), "logged_in_accounts": logged_in_accounts}
+                    }
+                }
             elif expired_accounts:
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="expired",
-                    message=f"平台 {request.platform} 有 {len(expired_accounts)} 个账号登录已过期: {', '.join(expired_accounts)}",
-                    account_info={"expired_count": len(expired_accounts), "expired_accounts": expired_accounts}
-                )
+                return {
+                    "code": 200,
+                    "message": f"平台 {request.platform} 有 {len(expired_accounts)} 个账号登录已过期: {', '.join(expired_accounts)}",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "expired",
+                        "account_info": {"expired_count": len(expired_accounts), "expired_accounts": expired_accounts}
+                    }
+                }
             else:
-                return LoginCheckResponse(
-                    platform=request.platform,
-                    status="not_logged_in",
-                    message=f"平台 {request.platform} 所有账号均未登录"
-                )
+                return {
+                    "code": 200,
+                    "message": f"平台 {request.platform} 所有账号均未登录",
+                    "data": {
+                        "platform": request.platform,
+                        "status": "not_logged_in"
+                    }
+                }
     
-    except HTTPException:
-        raise
     except Exception as e:
         utils.logger.error(f"检查平台登录状态失败: {e}")
-        return LoginCheckResponse(
-            platform=request.platform,
-            status="unknown",
-            message=f"检查登录状态失败: {str(e)}"
-        )
+        return {
+            "code": 500,
+            "message": f"检查登录状态失败: {str(e)}",
+            "data": {
+                "platform": request.platform,
+                "status": "unknown"
+            }
+        }
 
 @login_router.get("/login/status/{session_id}", response_model=LoginStatusResponse)
 async def get_login_status(session_id: str):
@@ -1267,7 +1296,7 @@ async def logout_account(account_id: int):
         utils.logger.error(f"账号登出失败: {e}")
         raise HTTPException(status_code=500, detail=f"账号登出失败: {str(e)}")
 
-@login_router.get("/login/tokens/{account_id}", response_model=List[dict])
+@login_router.get("/login/tokens/{account_id}")
 async def get_account_tokens(account_id: int):
     """获取账号的登录凭证"""
     db = await get_db()
@@ -1296,11 +1325,19 @@ async def get_account_tokens(account_id: int):
             }
             tokens.append(token)
         
-        return tokens
+        return {
+            "code": 200,
+            "message": "获取账号凭证成功",
+            "data": tokens
+        }
     
     except Exception as e:
         utils.logger.error(f"获取账号凭证失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取账号凭证失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取账号凭证失败: {str(e)}",
+            "data": []
+        }
 
 @login_router.post("/login/log")
 async def add_task_log(request: TaskLogRequest):
@@ -4354,7 +4391,7 @@ async def get_captcha_info(session_id: str):
         }
 
 # 新增：远程桌面完整登录流程
-@login_router.post("/login/remote_start", response_model=LoginResponse)
+@login_router.post("/login/remote_start")
 async def start_remote_login(request: LoginRequest, background_tasks: BackgroundTasks):
     """启动远程桌面完整登录流程"""
     try:
@@ -4364,7 +4401,11 @@ async def start_remote_login(request: LoginRequest, background_tasks: Background
         account = await db.get_first(account_query, request.account_id)
         
         if not account:
-            raise HTTPException(status_code=404, detail="账号不存在")
+            return {
+                "code": 404,
+                "message": "账号不存在",
+                "data": None
+            }
         
         platform = account['platform']
         session_id = str(uuid.uuid4())
@@ -4403,12 +4444,15 @@ async def start_remote_login(request: LoginRequest, background_tasks: Background
             # 启动远程桌面登录流程
             background_tasks.add_task(handle_remote_desktop_login, session_id, platform)
             
-            return LoginResponse(
-                session_id=session_id,
-                status="remote_desktop_ready",
-                message="远程桌面访问权限已获取，正在准备登录环境...",
-                expires_at=session_data["expires_at"].isoformat()
-            )
+            return {
+                "code": 200,
+                "message": "远程桌面访问权限已获取，正在准备登录环境...",
+                "data": {
+                    "session_id": session_id,
+                    "status": "remote_desktop_ready",
+                    "expires_at": session_data["expires_at"].isoformat()
+                }
+            }
         else:
             # 未获取到权限，加入等待队列
             queue_position = remote_desktop_lock.get_queue_position(session_id)
@@ -4441,16 +4485,23 @@ async def start_remote_login(request: LoginRequest, background_tasks: Background
             if estimated_wait:
                 wait_message += f"，预计等待 {estimated_wait // 60} 分钟"
             
-            return LoginResponse(
-                session_id=session_id,
-                status="waiting_in_queue",
-                message=wait_message,
-                expires_at=session_data["expires_at"].isoformat()
-            )
+            return {
+                "code": 200,
+                "message": wait_message,
+                "data": {
+                    "session_id": session_id,
+                    "status": "waiting_in_queue",
+                    "expires_at": session_data["expires_at"].isoformat()
+                }
+            }
         
     except Exception as e:
         utils.logger.error(f"启动远程桌面登录失败: {e}")
-        raise HTTPException(status_code=500, detail=f"启动登录失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"启动登录失败: {str(e)}",
+            "data": None
+        }
 
 async def monitor_queue_position(session_id: str):
     """监控队列位置并在轮到时启动登录流程"""

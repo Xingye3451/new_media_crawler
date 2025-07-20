@@ -721,7 +721,7 @@
                     </div>
                     
                     <div class="account-actions">
-                        <button class="btn btn-sm btn-success" onclick="startLogin(${account.id}, '${account.platform}')">
+                        <button class="btn btn-sm btn-success" onclick="startRemoteLoginForAccount(${account.id}, '${account.platform}')">
                             🖥️ 远程登录
                         </button>
                         <button class="btn btn-sm btn-warning" onclick="checkAccountStatus(${account.id}, '${account.platform}')">
@@ -755,7 +755,7 @@
         // 加载平台列表
         async function loadPlatforms() {
             try {
-                const response = await fetch('/api/v1/accounts/platforms');
+                const response = await fetch('/api/v1/platforms/list');
                 if (response.ok) {
                     const data = await response.json();
                     if (data.code === 200) {
@@ -999,6 +999,16 @@
             return names[method] || method;
         }
 
+        // 打开VNC远程桌面
+        function openVNC() {
+            const vncUrl = document.getElementById('vncUrl').textContent;
+            if (vncUrl) {
+                window.open(vncUrl, '_blank', 'width=1200,height=800');
+            } else {
+                showError('VNC地址未配置');
+            }
+        }
+
         function getLoginStatusName(status) {
             const names = {
                 'logged_in': '已登录',
@@ -1044,9 +1054,125 @@
             }
         }
 
-        function startLogin(accountId, platform) {
-            // TODO: 实现直接登录功能
-            alert('直接登录功能开发中...');
+        // 为特定账号启动远程登录
+        async function startRemoteLoginForAccount(accountId, platform) {
+            try {
+                const response = await fetch('/api/v1/login/remote_start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        account_id: parseInt(accountId),
+                        login_method: 'qrcode'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.code === 200) {
+                        currentSessionId = data.data.session_id;
+                        showSuccess('远程登录会话已创建，请在VNC窗口中完成登录操作');
+                        
+                        // 打开VNC窗口
+                        const vncUrl = document.getElementById('vncUrl').textContent;
+                        window.open(vncUrl, '_blank');
+                        
+                        // 开始监控登录状态
+                        monitorLoginStatus(currentSessionId);
+                    } else {
+                        showError('启动远程登录失败: ' + data.message);
+                    }
+                } else {
+                    showError('启动远程登录失败: HTTP ' + response.status);
+                }
+            } catch (error) {
+                console.error('启动远程登录失败:', error);
+                showError('启动远程登录失败: ' + error.message);
+            }
+        }
+
+        // 检查特定账号状态
+        async function checkAccountStatus(accountId, platform) {
+            try {
+                const response = await fetch('/api/v1/login/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        platform: platform,
+                        account_id: parseInt(accountId)
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.code === 200) {
+                        const status = data.data.status;
+                        const message = data.data.message;
+                        
+                        if (status === 'logged_in') {
+                            showSuccess('登录状态正常: ' + message);
+                        } else if (status === 'not_logged_in') {
+                            showError('未登录: ' + message);
+                        } else if (status === 'expired') {
+                            showError('登录已过期: ' + message);
+                        } else {
+                            showError('登录状态未知: ' + message);
+                        }
+                    } else {
+                        showError('检查登录状态失败: ' + data.message);
+                    }
+                } else {
+                    showError('检查登录状态失败: HTTP ' + response.status);
+                }
+            } catch (error) {
+                console.error('检查登录状态失败:', error);
+                showError('检查登录状态失败: ' + error.message);
+            }
+        }
+
+        // 查看账号令牌
+        async function viewTokens(accountId) {
+            try {
+                const response = await fetch(`/api/v1/login/tokens/${accountId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.code === 200) {
+                        const tokens = data.data;
+                        if (tokens.length === 0) {
+                            alert('该账号暂无登录凭证');
+                            return;
+                        }
+                        
+                        // 创建令牌详情弹窗
+                        let tokenInfo = '登录凭证详情：\n\n';
+                        tokens.forEach((token, index) => {
+                            tokenInfo += `${index + 1}. 平台: ${getPlatformName(token.platform)}\n`;
+                            tokenInfo += `   类型: ${token.token_type}\n`;
+                            tokenInfo += `   状态: ${token.is_valid ? '有效' : '无效'}\n`;
+                            tokenInfo += `   创建时间: ${token.created_at}\n`;
+                            if (token.expires_at) {
+                                tokenInfo += `   过期时间: ${token.expires_at}\n`;
+                            }
+                            if (token.last_used_at) {
+                                tokenInfo += `   最后使用: ${token.last_used_at}\n`;
+                            }
+                            tokenInfo += '\n';
+                        });
+                        
+                        alert(tokenInfo);
+                    } else {
+                        showError('获取令牌失败: ' + data.message);
+                    }
+                } else {
+                    showError('获取令牌失败: HTTP ' + response.status);
+                }
+            } catch (error) {
+                console.error('获取令牌失败:', error);
+                showError('获取令牌失败: ' + error.message);
+            }
         }
 
         function checkAccountStatus(accountId, platform) {

@@ -227,6 +227,16 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
         utils.logger.info(f"[TASK_{task_id}]   └─ proxy_strategy: {request.proxy_strategy}")
         
+        # 🆕 初始化数据库连接（确保上下文变量可用）
+        utils.logger.info(f"[TASK_{task_id}] 📊 初始化数据库连接...")
+        try:
+            from db import init_mediacrawler_db
+            await init_mediacrawler_db()
+            utils.logger.info(f"[TASK_{task_id}] ✅ 数据库连接初始化完成")
+        except Exception as e:
+            utils.logger.error(f"[TASK_{task_id}] ❌ 数据库连接初始化失败: {e}")
+            # 继续执行，因为有些存储方式可能不需要数据库
+        
         # 🆕 创建任务记录到数据库
         utils.logger.info(f"[TASK_{task_id}] 📝 创建任务记录到数据库...")
         await create_task_record(task_id, request)

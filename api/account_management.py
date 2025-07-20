@@ -95,7 +95,7 @@ async def get_db():
         await init_mediacrawler_db()
         return media_crawler_db_var.get()
 
-@account_router.get("/accounts/platforms", response_model=List[dict])
+@account_router.get("/accounts/platforms")
 async def get_platforms():
     """获取支持的平台列表"""
     # 当前支持的视频优先平台
@@ -113,9 +113,13 @@ async def get_platforms():
         {"code": "zhihu", "name": "知乎", "description": "知乎问答和评论爬取（即将支持）", "status": "coming_soon", "type": "text"}
     ]
     
-    return supported_platforms + coming_soon_platforms
+    return {
+        "code": 200,
+        "message": "获取平台列表成功",
+        "data": supported_platforms + coming_soon_platforms
+    }
 
-@account_router.get("/accounts/", response_model=List[SocialAccountResponse])
+@account_router.get("/accounts/")
 async def get_accounts(platform: Optional[str] = None, is_active: Optional[bool] = None):
     """获取账号列表"""
     db = await get_db()
@@ -171,13 +175,21 @@ async def get_accounts(platform: Optional[str] = None, is_active: Optional[bool]
             
             accounts.append(account)
         
-        return accounts
+        return {
+            "code": 200,
+            "message": "获取账号列表成功",
+            "data": accounts
+        }
     
     except Exception as e:
         utils.logger.error(f"获取账号列表失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取账号列表失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取账号列表失败: {str(e)}",
+            "data": []
+        }
 
-@account_router.post("/accounts/", response_model=SocialAccountResponse)
+@account_router.post("/accounts/")
 async def create_account(account: SocialAccountCreate):
     """创建新账号"""
     db = await get_db()
@@ -188,7 +200,11 @@ async def create_account(account: SocialAccountCreate):
         result = await db.get_first(check_query, account.platform, account.account_name)
         
         if result and list(result.values())[0] > 0:
-            raise HTTPException(status_code=400, detail="该平台下已存在同名账号")
+            return {
+                "code": 400,
+                "message": "该平台下已存在同名账号",
+                "data": None
+            }
         
         # 加密密码
         encrypted_password = encrypt_password(account.password) if account.password else None
@@ -218,9 +234,13 @@ async def create_account(account: SocialAccountCreate):
         row = await db.get_first(select_query, account.platform, account.account_name)
         
         if not row:
-            raise HTTPException(status_code=500, detail="创建账号后无法获取账号信息")
+            return {
+                "code": 500,
+                "message": "创建账号后无法获取账号信息",
+                "data": None
+            }
         
-        return SocialAccountResponse(
+        created_account = SocialAccountResponse(
             id=row['id'],
             platform=row['platform'],
             account_name=row['account_name'],
@@ -236,14 +256,22 @@ async def create_account(account: SocialAccountCreate):
             has_password=bool(row['has_password']),
             login_status="not_logged_in"
         )
+        
+        return {
+            "code": 200,
+            "message": "账号创建成功",
+            "data": created_account
+        }
     
-    except HTTPException:
-        raise
     except Exception as e:
         utils.logger.error(f"创建账号失败: {e}")
-        raise HTTPException(status_code=500, detail=f"创建账号失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"创建账号失败: {str(e)}",
+            "data": None
+        }
 
-@account_router.get("/accounts/{account_id}", response_model=SocialAccountResponse)
+@account_router.get("/accounts/{account_id}")
 async def get_account(account_id: int):
     """获取单个账号详情"""
     db = await get_db()
@@ -260,7 +288,11 @@ async def get_account(account_id: int):
         row = await db.get_first(query, account_id)
         
         if not row:
-            raise HTTPException(status_code=404, detail="账号不存在")
+            return {
+                "code": 404,
+                "message": "账号不存在",
+                "data": None
+            }
         
         account = SocialAccountResponse(
             id=row['id'],
@@ -282,15 +314,21 @@ async def get_account(account_id: int):
         login_status = await check_login_status(db, account.id)
         account.login_status = login_status
         
-        return account
+        return {
+            "code": 200,
+            "message": "获取账号详情成功",
+            "data": account
+        }
     
-    except HTTPException:
-        raise
     except Exception as e:
         utils.logger.error(f"获取账号详情失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取账号详情失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取账号详情失败: {str(e)}",
+            "data": None
+        }
 
-@account_router.put("/accounts/{account_id}", response_model=SocialAccountResponse)
+@account_router.put("/accounts/{account_id}")
 async def update_account(account_id: int, account: SocialAccountUpdate):
     """更新账号信息"""
     db = await get_db()
@@ -301,7 +339,11 @@ async def update_account(account_id: int, account: SocialAccountUpdate):
         result = await db.get_first(check_query, account_id)
         
         if not result or list(result.values())[0] == 0:
-            raise HTTPException(status_code=404, detail="账号不存在")
+            return {
+                "code": 404,
+                "message": "账号不存在",
+                "data": None
+            }
         
         # 构建更新语句
         updates = []
@@ -344,7 +386,11 @@ async def update_account(account_id: int, account: SocialAccountUpdate):
             params.append(account.notes)
         
         if not updates:
-            raise HTTPException(status_code=400, detail="没有提供要更新的字段")
+            return {
+                "code": 400,
+                "message": "没有提供要更新的字段",
+                "data": None
+            }
         
         # 执行更新
         update_query = f"UPDATE social_accounts SET {', '.join(updates)} WHERE id = %s"
@@ -353,13 +399,16 @@ async def update_account(account_id: int, account: SocialAccountUpdate):
         await db.execute(update_query, *params)
         
         # 返回更新后的账号信息
-        return await get_account(account_id)
+        updated_account = await get_account(account_id)
+        return updated_account
     
-    except HTTPException:
-        raise
     except Exception as e:
         utils.logger.error(f"更新账号失败: {e}")
-        raise HTTPException(status_code=500, detail=f"更新账号失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"更新账号失败: {str(e)}",
+            "data": None
+        }
 
 @account_router.delete("/accounts/{account_id}")
 async def delete_account(account_id: int):
@@ -372,19 +421,29 @@ async def delete_account(account_id: int):
         result = await db.get_first(check_query, account_id)
         
         if not result or list(result.values())[0] == 0:
-            raise HTTPException(status_code=404, detail="账号不存在")
+            return {
+                "code": 404,
+                "message": "账号不存在",
+                "data": None
+            }
         
         # 删除账号（会级联删除相关的登录凭证）
         delete_query = "DELETE FROM social_accounts WHERE id = %s"
         await db.execute(delete_query, account_id)
         
-        return {"message": "账号删除成功"}
+        return {
+            "code": 200,
+            "message": "账号删除成功",
+            "data": None
+        }
     
-    except HTTPException:
-        raise
     except Exception as e:
         utils.logger.error(f"删除账号失败: {e}")
-        raise HTTPException(status_code=500, detail=f"删除账号失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"删除账号失败: {str(e)}",
+            "data": None
+        }
 
 async def check_login_status(db, account_id: int) -> str:
     """检查账号登录状态"""

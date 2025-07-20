@@ -12,11 +12,11 @@ import utils
 
 router = APIRouter()
 
-@router.get("/platforms")
+@router.get("/platforms/list")
 async def get_supported_platforms():
     """获取支持的平台列表"""
     try:
-        from models.content_models import PLATFORM_MAPPING, VIDEO_PRIORITY_PLATFORMS, TODO_PLATFORMS
+        from models.content_models import PLATFORM_MAPPING, VIDEO_PRIORITY_PLATFORMS, COMING_SOON_PLATFORMS
         
         platforms = []
         for platform_key, platform_info in PLATFORM_MAPPING.items():
@@ -25,20 +25,28 @@ async def get_supported_platforms():
                 "name": platform_info["name"],
                 "description": platform_info.get("description", ""),
                 "is_video_priority": platform_key in VIDEO_PRIORITY_PLATFORMS,
-                "is_todo": platform_key in TODO_PLATFORMS,
+                "is_todo": platform_key in COMING_SOON_PLATFORMS,
                 "primary_content_type": platform_info.get("primary_content_type", "mixed")
             })
         
         return {
-            "platforms": platforms,
-            "total": len(platforms),
-            "video_priority_count": len(VIDEO_PRIORITY_PLATFORMS),
-            "todo_count": len(TODO_PLATFORMS)
+            "code": 200,
+            "message": "获取平台列表成功",
+            "data": {
+                "platforms": platforms,
+                "total": len(platforms),
+                "video_priority_count": len(VIDEO_PRIORITY_PLATFORMS),
+                "todo_count": len(COMING_SOON_PLATFORMS)
+            }
         }
         
     except Exception as e:
         utils.logger.error(f"获取平台列表失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取平台列表失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取平台列表失败: {str(e)}",
+            "data": None
+        }
 
 @router.get("/multi-platform/info")
 async def get_multi_platform_info():
@@ -47,7 +55,7 @@ async def get_multi_platform_info():
         from models.content_models import (
             PLATFORM_MAPPING, 
             VIDEO_PRIORITY_PLATFORMS, 
-            TODO_PLATFORMS,
+            COMING_SOON_PLATFORMS,
             get_platform_description
         )
         
@@ -58,7 +66,7 @@ async def get_multi_platform_info():
                 "name": platform_info["name"],
                 "description": get_platform_description(platform_key),
                 "is_video_priority": platform_key in VIDEO_PRIORITY_PLATFORMS,
-                "is_todo": platform_key in TODO_PLATFORMS,
+                "is_todo": platform_key in COMING_SOON_PLATFORMS,
                 "primary_content_type": platform_info.get("primary_content_type", "mixed"),
                 "supported_crawler_types": platform_info.get("supported_crawler_types", ["search"]),
                 "login_required": platform_info.get("login_required", True),
@@ -70,7 +78,7 @@ async def get_multi_platform_info():
             "platforms": platforms_info,
             "total_platforms": len(platforms_info),
             "video_priority_platforms": VIDEO_PRIORITY_PLATFORMS,
-            "todo_platforms": TODO_PLATFORMS,
+            "todo_platforms": COMING_SOON_PLATFORMS,
             "supported_crawler_types": {
                 "search": "关键词搜索",
                 "user": "用户主页",
@@ -118,29 +126,28 @@ async def quick_get_proxy(
         proxy_manager = ProxyManager()
         
         # 根据策略获取代理
-        if strategy_type == "round_robin":
-            proxy = await proxy_manager.get_round_robin_proxy(platform)
-        elif strategy_type == "random":
-            proxy = await proxy_manager.get_random_proxy(platform)
-        elif strategy_type == "weighted":
-            proxy = await proxy_manager.get_weighted_proxy(platform)
-        elif strategy_type == "failover":
-            proxy = await proxy_manager.get_failover_proxy(platform)
-        elif strategy_type == "sticky":
-            proxy = await proxy_manager.get_sticky_proxy(platform)
-        else:
-            raise HTTPException(status_code=400, detail="不支持的代理策略")
+        proxy = await proxy_manager.get_proxy(strategy_type, platform)
         
         if not proxy:
             raise HTTPException(status_code=404, detail="没有可用的代理")
         
         # 检查可用性
         if check_availability:
-            is_available = await proxy_manager.check_proxy_availability(proxy)
-            proxy["is_available"] = is_available
+            is_available = await proxy_manager.check_proxy(proxy)
+            proxy.is_available = is_available
         
         return {
-            "proxy": proxy,
+            "proxy": {
+                "id": proxy.id,
+                "ip": proxy.ip,
+                "port": proxy.port,
+                "proxy_type": proxy.proxy_type,
+                "country": proxy.country,
+                "speed": proxy.speed,
+                "anonymity": proxy.anonymity,
+                "uptime": proxy.uptime,
+                "is_available": getattr(proxy, 'is_available', True)
+            } if proxy else None,
             "strategy": strategy_type,
             "platform": platform,
             "timestamp": datetime.now().isoformat()
@@ -156,7 +163,7 @@ async def quick_get_proxy(
 async def quick_proxy_stats():
     """获取代理统计信息"""
     try:
-        from proxy.proxy_tools import ProxyManager
+        from proxy.proxy_manager import ProxyManager
         
         proxy_manager = ProxyManager()
         stats = await proxy_manager.get_proxy_stats()
@@ -164,9 +171,12 @@ async def quick_proxy_stats():
         return {
             "total_proxies": stats.get("total", 0),
             "available_proxies": stats.get("available", 0),
-            "unavailable_proxies": stats.get("unavailable", 0),
-            "platform_stats": stats.get("platform_stats", {}),
-            "quality_stats": stats.get("quality_stats", {}),
+            "unavailable_proxies": stats.get("total", 0) - stats.get("available", 0),
+            "platform_stats": {},  # 当前实现不提供平台统计
+            "quality_stats": {
+                "avg_speed": stats.get("avg_speed", 0),
+                "avg_uptime": stats.get("avg_uptime", 0)
+            },
             "last_update": datetime.now().isoformat()
         }
         
@@ -178,28 +188,41 @@ async def quick_proxy_stats():
 async def get_platform_accounts(platform: str):
     """获取平台账号列表"""
     try:
-        from api.account_management import get_accounts_for_platform
+        from api.account_management import get_accounts
         
-        accounts = await get_accounts_for_platform(platform)
+        accounts_response = await get_accounts(platform=platform)
+        
+        if accounts_response["code"] != 200:
+            return accounts_response
+        
+        accounts = accounts_response["data"]
         
         return {
-            "platform": platform,
-            "accounts": accounts,
-            "total": len(accounts),
-            "valid_count": len([acc for acc in accounts if acc.get("status") == "valid"]),
-            "expired_count": len([acc for acc in accounts if acc.get("status") == "expired"]),
-            "invalid_count": len([acc for acc in accounts if acc.get("status") == "invalid"])
+            "code": 200,
+            "message": f"获取{platform}平台账号成功",
+            "data": {
+                "platform": platform,
+                "accounts": accounts,
+                "total": len(accounts),
+                "valid_count": len([acc for acc in accounts if acc.login_status == "logged_in"]),
+                "expired_count": len([acc for acc in accounts if acc.login_status == "expired"]),
+                "invalid_count": len([acc for acc in accounts if acc.login_status == "not_logged_in"])
+            }
         }
         
     except Exception as e:
         utils.logger.error(f"获取平台账号失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取平台账号失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取平台账号失败: {str(e)}",
+            "data": None
+        }
 
 @router.get("/accounts/{platform}/validity")
 async def check_platform_token_validity(platform: str, account_id: Optional[str] = None):
     """检查平台账号凭证有效性"""
     try:
-        from api.login_management import check_token_validity
+        from utils.db_utils import check_token_validity
         
         if account_id:
             # 检查指定账号
@@ -211,15 +234,15 @@ async def check_platform_token_validity(platform: str, account_id: Optional[str]
             }
         else:
             # 检查所有账号
-            from api.account_management import get_accounts_for_platform
-            accounts = await get_accounts_for_platform(platform)
+            from api.account_management import get_accounts
+            accounts = await get_accounts(platform=platform)
             
             validity_results = []
             for account in accounts:
-                validity = await check_token_validity(platform, account["id"])
+                validity = await check_token_validity(platform, account.id)
                 validity_results.append({
-                    "account_id": account["id"],
-                    "account_name": account["account_name"],
+                    "account_id": account.id,
+                    "account_name": account.account_name,
                     "validity": validity
                 })
             
@@ -240,14 +263,14 @@ async def check_platform_token_validity(platform: str, account_id: Optional[str]
 async def cleanup_expired_tokens_api():
     """清理过期凭证"""
     try:
-        from api.login_management import cleanup_expired_tokens
+        from utils.db_utils import cleanup_expired_tokens
         
-        result = await cleanup_expired_tokens()
+        cleaned_count = await cleanup_expired_tokens()
         
         return {
             "message": "过期凭证清理完成",
-            "cleaned_count": result.get("cleaned_count", 0),
-            "platforms": result.get("platforms", []),
+            "cleaned_count": cleaned_count,
+            "platforms": [],  # 当前实现不返回平台信息
             "timestamp": datetime.now().isoformat()
         }
         
@@ -259,20 +282,21 @@ async def cleanup_expired_tokens_api():
 async def get_scheduler_status_api():
     """获取调度器状态"""
     try:
-        from scheduler.task_scheduler import TaskScheduler
+        from utils.scheduler import get_scheduler_status
         
-        scheduler = TaskScheduler()
-        status = await scheduler.get_status()
+        status = await get_scheduler_status()
         
         return {
             "is_running": status.get("is_running", False),
-            "total_tasks": status.get("total_tasks", 0),
-            "running_tasks": status.get("running_tasks", 0),
-            "completed_tasks": status.get("completed_tasks", 0),
-            "failed_tasks": status.get("failed_tasks", 0),
-            "next_run": status.get("next_run"),
-            "last_run": status.get("last_run"),
-            "uptime": status.get("uptime")
+            "total_tasks": status.get("task_count", 0),
+            "running_tasks": status.get("task_count", 0) if status.get("is_running", False) else 0,
+            "completed_tasks": 0,  # 当前调度器不跟踪完成的任务
+            "failed_tasks": 0,     # 当前调度器不跟踪失败的任务
+            "next_run": None,      # 当前调度器不提供下次运行时间
+            "last_run": None,      # 当前调度器不提供上次运行时间
+            "uptime": None,        # 当前调度器不提供运行时间
+            "status": status.get("status", "stopped"),
+            "platforms": status.get("platforms", [])
         }
         
     except Exception as e:
@@ -283,10 +307,9 @@ async def get_scheduler_status_api():
 async def start_scheduler_api():
     """启动调度器"""
     try:
-        from scheduler.task_scheduler import TaskScheduler
+        from utils.scheduler import start_scheduler
         
-        scheduler = TaskScheduler()
-        await scheduler.start()
+        await start_scheduler()
         
         return {
             "message": "调度器启动成功",
@@ -302,10 +325,9 @@ async def start_scheduler_api():
 async def stop_scheduler_api():
     """停止调度器"""
     try:
-        from scheduler.task_scheduler import TaskScheduler
+        from utils.scheduler import stop_scheduler
         
-        scheduler = TaskScheduler()
-        await scheduler.stop()
+        await stop_scheduler()
         
         return {
             "message": "调度器停止成功",

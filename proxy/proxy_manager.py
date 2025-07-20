@@ -81,7 +81,15 @@ class ProxyStrategy(ABC):
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.db: AsyncMysqlDB = media_crawler_db_var.get()
+        self.db: Optional[AsyncMysqlDB] = None
+    
+    def _ensure_db_connection(self):
+        """确保数据库连接可用"""
+        if not self.db:
+            try:
+                self.db = media_crawler_db_var.get()
+            except Exception as e:
+                raise RuntimeError(f"无法获取数据库连接: {e}")
     
     @abstractmethod
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
@@ -90,6 +98,7 @@ class ProxyStrategy(ABC):
     
     async def mark_proxy_success(self, proxy_id: int):
         """标记代理成功"""
+        self._ensure_db_connection()
         await self.db.execute(
             "UPDATE proxy_pool SET success_count = success_count + 1, "
             "total_requests = total_requests + 1, total_success = total_success + 1, "
@@ -99,6 +108,7 @@ class ProxyStrategy(ABC):
     
     async def mark_proxy_failed(self, proxy_id: int, error_message: str = None):
         """标记代理失败"""
+        self._ensure_db_connection()
         await self.db.execute(
             "UPDATE proxy_pool SET fail_count = fail_count + 1, "
             "total_requests = total_requests + 1, last_check_result = 0, "
@@ -140,6 +150,7 @@ class RoundRobinStrategy(ProxyStrategy):
     
     async def _refresh_proxy_list(self):
         """刷新代理列表"""
+        self._ensure_db_connection()
         rows = await self.db.query(
             "SELECT * FROM proxy_pool WHERE status = 1 AND last_check_result = 1 "
             "ORDER BY priority DESC, speed ASC"
@@ -154,6 +165,7 @@ class RandomStrategy(ProxyStrategy):
     
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
         """随机选择代理"""
+        self._ensure_db_connection()
         rows = await self.db.query(
             "SELECT * FROM proxy_pool WHERE status = 1 AND last_check_result = 1 "
             "ORDER BY RAND() LIMIT 1"
@@ -170,6 +182,7 @@ class WeightedStrategy(ProxyStrategy):
     
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
         """根据权重选择代理"""
+        self._ensure_db_connection()
         weight_field = self.config.get("weight_field", "priority")
         
         rows = await self.db.query(
@@ -192,6 +205,7 @@ class FailoverStrategy(ProxyStrategy):
     
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
         """故障转移选择代理"""
+        self._ensure_db_connection()
         priority_order = self.config.get("priority_order", ["elite", "anonymous", "transparent"])
         
         for anonymity in priority_order:
@@ -221,6 +235,7 @@ class GeoBasedStrategy(ProxyStrategy):
     
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
         """根据地理位置选择代理"""
+        self._ensure_db_connection()
         geo_mapping = self.config.get("geo_mapping", {})
         target_countries = geo_mapping.get(platform, ["CN"])
         
@@ -252,6 +267,7 @@ class SmartStrategy(ProxyStrategy):
     
     async def select_proxy(self, platform: str = None, **kwargs) -> Optional[ProxyInfo]:
         """智能选择代理"""
+        self._ensure_db_connection()
         factors = self.config.get("factors", ["speed", "uptime", "fail_count"])
         weights = self.config.get("weights", [0.4, 0.4, 0.2])
         
@@ -312,36 +328,19 @@ class ProxyManager:
                 self._load_strategies()
                 self._initialized = True
             except Exception as e:
-                raise RuntimeError(f"代理管理器初始化失败: {e}")
-    
-    def _load_strategies(self):
-        """加载策略"""
-        if not self.db:
-            raise RuntimeError("数据库连接未初始化")
-            
-        strategy_classes = {
-            "round_robin": RoundRobinStrategy,
-            "random": RandomStrategy,
-            "weighted": WeightedStrategy,
-            "failover": FailoverStrategy,
-            "geo_based": GeoBasedStrategy,
-            "smart": SmartStrategy
-        }
-        
-        # 这里可以从数据库加载策略配置
-        # 暂时使用默认配置
-        default_configs = {
-            "round_robin": {"max_fail_count": 3, "retry_interval": 300},
-            "random": {"max_fail_count": 3, "retry_interval": 300},
-            "weighted": {"weight_field": "priority", "max_fail_count": 3},
-            "failover": {"priority_order": ["elite", "anonymous", "transparent"], "max_fail_count": 2},
-            "geo_based": {"geo_mapping": {"xhs": ["CN"], "dy": ["CN"], "ks": ["CN"]}},
-            "smart": {"factors": ["speed", "uptime", "fail_count"], "weights": [0.4, 0.4, 0.2]}
-        }
-        
-        for strategy_type, strategy_class in strategy_classes.items():
-            config = default_configs.get(strategy_type, {})
-            self.strategies[strategy_type] = strategy_class(config)
+                # 如果无法获取数据库连接，使用默认配置
+                self.db = None
+                self._load_strategies()
+                self._initialized = True
+                # 记录警告但不抛出异常
+                import logging
+                logging.warning(f"代理管理器初始化时无法获取数据库连接: {e}")
+                # 记录到tools.utils.logger
+                try:
+                    from tools import utils
+                    utils.logger.warning(f"代理管理器初始化时无法获取数据库连接: {e}")
+                except ImportError:
+                    pass
     
     def _load_strategies(self):
         """加载策略"""
@@ -376,48 +375,105 @@ class ProxyManager:
         if not strategy:
             raise ValueError(f"不支持的策略类型: {strategy_type}")
         
-        return await strategy.select_proxy(platform, **kwargs)
+        try:
+            return await strategy.select_proxy(platform, **kwargs)
+        except Exception as e:
+            # 如果获取代理失败，返回None而不是抛出异常
+            import logging
+            logging.warning(f"获取代理失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.warning(f"获取代理失败: {e}")
+            except ImportError:
+                pass
+            return None
     
     async def add_proxy(self, proxy_info: Dict[str, Any]) -> int:
         """添加代理"""
         self._ensure_initialized()
+        
+        if not self.db:
+            raise RuntimeError("数据库连接不可用")
+        
         proxy_info["add_ts"] = int(time.time() * 1000)
         proxy_info["last_modify_ts"] = int(time.time() * 1000)
         
-        result = await self.db.execute(
-            "INSERT INTO proxy_pool (proxy_type, ip, port, username, password, country, "
-            "region, city, isp, speed, anonymity, uptime, priority, tags, description, "
-            "add_ts, last_modify_ts) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (proxy_info["proxy_type"], proxy_info["ip"], proxy_info["port"], 
-             proxy_info.get("username"), proxy_info.get("password"), proxy_info.get("country"),
-             proxy_info.get("region"), proxy_info.get("city"), proxy_info.get("isp"),
-             proxy_info.get("speed"), proxy_info.get("anonymity"), proxy_info.get("uptime"),
-             proxy_info.get("priority", 0), proxy_info.get("tags"), proxy_info.get("description"),
-             proxy_info["add_ts"], proxy_info["last_modify_ts"])
-        )
-        
-        return result
+        try:
+            result = await self.db.execute(
+                "INSERT INTO proxy_pool (proxy_type, ip, port, username, password, country, "
+                "region, city, isp, speed, anonymity, uptime, priority, tags, description, "
+                "add_ts, last_modify_ts) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (proxy_info["proxy_type"], proxy_info["ip"], proxy_info["port"], 
+                 proxy_info.get("username"), proxy_info.get("password"), proxy_info.get("country"),
+                 proxy_info.get("region"), proxy_info.get("city"), proxy_info.get("isp"),
+                 proxy_info.get("speed"), proxy_info.get("anonymity"), proxy_info.get("uptime"),
+                 proxy_info.get("priority", 0), proxy_info.get("tags"), proxy_info.get("description"),
+                 proxy_info["add_ts"], proxy_info["last_modify_ts"])
+            )
+            
+            return result
+        except Exception as e:
+            import logging
+            logging.error(f"添加代理失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.error(f"添加代理失败: {e}")
+            except ImportError:
+                pass
+            raise RuntimeError(f"添加代理失败: {e}")
     
     async def update_proxy(self, proxy_id: int, update_data: Dict[str, Any]) -> bool:
         """更新代理"""
         self._ensure_initialized()
+        
+        if not self.db:
+            raise RuntimeError("数据库连接不可用")
+        
         update_data["last_modify_ts"] = int(time.time() * 1000)
         
-        set_clause = ", ".join([f"{k} = %s" for k in update_data.keys()])
-        values = list(update_data.values()) + [proxy_id]
-        
-        result = await self.db.execute(
-            f"UPDATE proxy_pool SET {set_clause} WHERE id = %s",
-            values
-        )
-        
-        return result > 0
+        try:
+            set_clause = ", ".join([f"{k} = %s" for k in update_data.keys()])
+            values = list(update_data.values()) + [proxy_id]
+            
+            result = await self.db.execute(
+                f"UPDATE proxy_pool SET {set_clause} WHERE id = %s",
+                values
+            )
+            
+            return result > 0
+        except Exception as e:
+            import logging
+            logging.error(f"更新代理失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.error(f"更新代理失败: {e}")
+            except ImportError:
+                pass
+            raise RuntimeError(f"更新代理失败: {e}")
     
     async def delete_proxy(self, proxy_id: int) -> bool:
         """删除代理"""
         self._ensure_initialized()
-        result = await self.db.execute("DELETE FROM proxy_pool WHERE id = %s", (proxy_id,))
-        return result > 0
+        
+        if not self.db:
+            raise RuntimeError("数据库连接不可用")
+        
+        try:
+            result = await self.db.execute("DELETE FROM proxy_pool WHERE id = %s", (proxy_id,))
+            return result > 0
+        except Exception as e:
+            import logging
+            logging.error(f"删除代理失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.error(f"删除代理失败: {e}")
+            except ImportError:
+                pass
+            raise RuntimeError(f"删除代理失败: {e}")
     
     async def check_proxy(self, proxy_info: ProxyInfo) -> bool:
         """检测代理可用性"""
@@ -435,48 +491,130 @@ class ProxyManager:
                     if response.status == 200:
                         data = await response.json()
                         # 记录检测日志
-                        await self.db.execute(
-                            "INSERT INTO proxy_check_log (proxy_id, check_type, check_url, "
-                            "response_time, success, check_result, add_ts) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                            (proxy_info.id, "health", "http://httpbin.org/ip", 
-                             int(response.headers.get("X-Response-Time", 0)), 1, 
-                             json.dumps(data), int(time.time() * 1000))
-                        )
+                        if self.db:
+                            try:
+                                await self.db.execute(
+                                    "INSERT INTO proxy_check_log (proxy_id, check_type, check_url, "
+                                    "response_time, success, check_result, add_ts) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                    (proxy_info.id, "health", "http://httpbin.org/ip", 
+                                     int(response.headers.get("X-Response-Time", 0)), 1, 
+                                     json.dumps(data), int(time.time() * 1000))
+                                )
+                            except Exception as log_error:
+                                # 记录日志失败不影响代理检测结果
+                                import logging
+                                logging.debug(f"记录代理检测日志失败: {log_error}")
+                                pass
                         return True
                     return False
         except Exception as e:
             # 记录失败日志
-            await self.db.execute(
-                "INSERT INTO proxy_check_log (proxy_id, check_type, check_url, "
-                "success, error_message, add_ts) VALUES (%s, %s, %s, %s, %s, %s)",
-                (proxy_info.id, "health", "http://httpbin.org/ip", 0, str(e), int(time.time() * 1000))
-            )
+            if self.db:
+                try:
+                    await self.db.execute(
+                        "INSERT INTO proxy_check_log (proxy_id, check_type, check_url, "
+                        "success, error_message, add_ts) VALUES (%s, %s, %s, %s, %s, %s)",
+                        (proxy_info.id, "health", "http://httpbin.org/ip", 0, str(e), int(time.time() * 1000))
+                    )
+                except Exception as log_error:
+                    # 记录日志失败不影响代理检测结果
+                    import logging
+                    logging.debug(f"记录代理检测日志失败: {log_error}")
+                    pass
             return False
     
     async def get_proxy_stats(self) -> Dict[str, Any]:
         """获取代理统计信息"""
         self._ensure_initialized()
-        stats = await self.db.get_first(
-            "SELECT COUNT(*) as total, "
-            "SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as active, "
-            "SUM(CASE WHEN last_check_result = 1 THEN 1 ELSE 0 END) as available, "
-            "AVG(speed) as avg_speed, "
-            "AVG(uptime) as avg_uptime "
-            "FROM proxy_pool"
-        )
         
-        return {
-            "total": stats["total"],
-            "active": stats["active"],
-            "available": stats["available"],
-            "avg_speed": round(stats["avg_speed"] or 0, 2),
-            "avg_uptime": round(stats["avg_uptime"] or 0, 2)
-        }
+        if not self.db:
+            return {
+                "total": 0,
+                "active": 0,
+                "available": 0,
+                "avg_speed": 0,
+                "avg_uptime": 0
+            }
+        
+        try:
+            stats = await self.db.get_first(
+                "SELECT COUNT(*) as total, "
+                "SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) as active, "
+                "SUM(CASE WHEN last_check_result = 1 THEN 1 ELSE 0 END) as available, "
+                "AVG(speed) as avg_speed, "
+                "AVG(uptime) as avg_uptime "
+                "FROM proxy_pool"
+            )
+            
+            if not stats:
+                return {
+                    "total": 0,
+                    "active": 0,
+                    "available": 0,
+                    "avg_speed": 0,
+                    "avg_uptime": 0
+                }
+            
+            return {
+                "total": stats.get("total", 0),
+                "active": stats.get("active", 0),
+                "available": stats.get("available", 0),
+                "avg_speed": round(stats.get("avg_speed") or 0, 2),
+                "avg_uptime": round(stats.get("avg_uptime") or 0, 2)
+            }
+        except Exception as e:
+            # 如果数据库查询失败，返回默认值
+            import logging
+            logging.warning(f"获取代理统计失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.warning(f"获取代理统计失败: {e}")
+            except ImportError:
+                pass
+            return {
+                "total": 0,
+                "active": 0,
+                "available": 0,
+                "avg_speed": 0,
+                "avg_uptime": 0
+            }
     
     async def get_strategies(self) -> List[Dict[str, Any]]:
         """获取所有策略"""
         self._ensure_initialized()
-        rows = await self.db.query(
-            "SELECT * FROM proxy_strategy WHERE status = 1 ORDER BY is_default DESC, id ASC"
-        )
-        return rows 
+        
+        if not self.db:
+            # 如果没有数据库连接，返回默认策略列表
+            return [
+                {"id": 1, "name": "round_robin", "description": "轮询策略", "is_default": 1},
+                {"id": 2, "name": "random", "description": "随机策略", "is_default": 0},
+                {"id": 3, "name": "weighted", "description": "权重策略", "is_default": 0},
+                {"id": 4, "name": "failover", "description": "故障转移策略", "is_default": 0},
+                {"id": 5, "name": "geo_based", "description": "地理位置策略", "is_default": 0},
+                {"id": 6, "name": "smart", "description": "智能策略", "is_default": 0}
+            ]
+        
+        try:
+            rows = await self.db.query(
+                "SELECT * FROM proxy_strategy WHERE status = 1 ORDER BY is_default DESC, id ASC"
+            )
+            return rows or []
+        except Exception as e:
+            # 如果表不存在或其他错误，返回默认策略列表
+            import logging
+            logging.warning(f"获取代理策略失败: {e}")
+            # 记录到tools.utils.logger
+            try:
+                from tools import utils
+                utils.logger.warning(f"获取代理策略失败: {e}")
+            except ImportError:
+                pass
+            return [
+                {"id": 1, "name": "round_robin", "description": "轮询策略", "is_default": 1},
+                {"id": 2, "name": "random", "description": "随机策略", "is_default": 0},
+                {"id": 3, "name": "weighted", "description": "权重策略", "is_default": 0},
+                {"id": 4, "name": "failover", "description": "故障转移策略", "is_default": 0},
+                {"id": 5, "name": "geo_based", "description": "地理位置策略", "is_default": 0},
+                {"id": 6, "name": "smart", "description": "智能策略", "is_default": 0}
+            ] 
