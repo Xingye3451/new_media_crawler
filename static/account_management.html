@@ -573,10 +573,7 @@
                 <div class="form-group">
                     <label class="form-label">登录方式</label>
                     <select id="newLoginMethod" class="form-select">
-                        <option value="qrcode">二维码登录</option>
-                        <option value="phone">手机号登录</option>
-                        <option value="email">邮箱登录</option>
-                        <option value="cookie">Cookie登录</option>
+                        <option value="remote_desktop">远程登录</option>
                     </select>
                 </div>
 
@@ -647,6 +644,17 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- VNC远程桌面弹窗 -->
+    <div id="vncModal" class="modal">
+      <div class="modal-content" style="max-width:90vw;max-height:90vh;width:1200px;height:800px;position:relative;">
+        <div class="modal-header">
+          <div class="modal-title">🖥️ 远程桌面</div>
+          <span class="close" onclick="closeVNCModal()">&times;</span>
+        </div>
+        <iframe id="vncIframe" src="" frameborder="0" style="width:100%;height:90%;border-radius:8px;"></iframe>
+      </div>
     </div>
 
     <script>
@@ -841,22 +849,22 @@
                     },
                     body: JSON.stringify({
                         account_id: parseInt(accountId),
-                        login_method: 'qrcode'
+                        login_method: 'remote_desktop'
                     })
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.code === 200) {
-                        currentSessionId = data.data.session_id;
+                        window.currentSessionId = data.data.session_id; // 立即赋值
                         showSuccess('远程登录会话已创建，请在VNC窗口中完成登录操作');
                         
-                        // 打开VNC窗口
+                        // 打开VNC弹窗
                         const vncUrl = document.getElementById('vncUrl').textContent;
-                        window.open(vncUrl, '_blank');
+                        openVNCModal(vncUrl);
                         
                         // 开始监控登录状态
-                        monitorLoginStatus(currentSessionId);
+                        monitorLoginStatus(window.currentSessionId);
                     } else {
                         showError('启动远程登录失败: ' + data.message);
                     }
@@ -999,13 +1007,49 @@
             return names[method] || method;
         }
 
-        // 打开VNC远程桌面
-        function openVNC() {
-            const vncUrl = document.getElementById('vncUrl').textContent;
-            if (vncUrl) {
-                window.open(vncUrl, '_blank', 'width=1200,height=800');
-            } else {
-                showError('VNC地址未配置');
+        // 打开VNC远程桌面（弹窗方式）
+        function openVNCModal(vncUrl) {
+            const modal = document.getElementById('vncModal');
+            const iframe = document.getElementById('vncIframe');
+            iframe.src = vncUrl;
+            modal.style.display = 'block';
+
+            let errorShown = false; // 防止多次弹窗
+
+            iframe.onerror = function() {
+                if (!errorShown) {
+                    errorShown = true;
+                    if (window.currentSessionId) {
+                        if (navigator.sendBeacon) {
+                            navigator.sendBeacon(`/api/v1/login/cancel/${window.currentSessionId}`);
+                        } else {
+                            fetch(`/api/v1/login/cancel/${window.currentSessionId}`, { method: 'POST', keepalive: true });
+                        }
+                        window.currentSessionId = null;
+                    }
+                    showError('远程桌面服务异常，已自动取消本次登录');
+                    closeVNCModal(true);
+                }
+            };
+            // onload 不再做内容判定，避免误判
+            iframe.onload = null;
+        }
+        // 关闭VNC弹窗，forceCancel为true时不再递归调用
+        function closeVNCModal(forceCancel) {
+            const modal = document.getElementById('vncModal');
+            const iframe = document.getElementById('vncIframe');
+            // 防止递归触发
+            iframe.onload = null;
+            iframe.onerror = null;
+            iframe.src = '';
+            modal.style.display = 'none';
+            if (window.currentSessionId && !forceCancel) {
+                if (navigator.sendBeacon) {
+                    navigator.sendBeacon(`/api/v1/login/cancel/${window.currentSessionId}`);
+                } else {
+                    fetch(`/api/v1/login/cancel/${window.currentSessionId}`, { method: 'POST', keepalive: true });
+                }
+                window.currentSessionId = null;
             }
         }
 
@@ -1064,22 +1108,22 @@
                     },
                     body: JSON.stringify({
                         account_id: parseInt(accountId),
-                        login_method: 'qrcode'
+                        login_method: 'remote_desktop'
                     })
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.code === 200) {
-                        currentSessionId = data.data.session_id;
+                        window.currentSessionId = data.data.session_id; // 立即赋值
                         showSuccess('远程登录会话已创建，请在VNC窗口中完成登录操作');
                         
-                        // 打开VNC窗口
+                        // 打开VNC弹窗
                         const vncUrl = document.getElementById('vncUrl').textContent;
-                        window.open(vncUrl, '_blank');
+                        openVNCModal(vncUrl);
                         
                         // 开始监控登录状态
-                        monitorLoginStatus(currentSessionId);
+                        monitorLoginStatus(window.currentSessionId);
                     } else {
                         showError('启动远程登录失败: ' + data.message);
                     }
@@ -1094,6 +1138,22 @@
 
         // 检查特定账号状态
         async function checkAccountStatus(accountId, platform) {
+            // 获取当前卡片元素
+            const cardSelector = `.account-card button[onclick^=\"checkAccountStatus(${accountId},\"]`;
+            const btn = document.querySelector(cardSelector);
+            const card = btn ? btn.closest('.account-card') : null;
+            let statusSpan = null;
+            if (card) {
+                // 查找或创建状态展示元素
+                statusSpan = card.querySelector('.login-status-span');
+                if (!statusSpan) {
+                    statusSpan = document.createElement('span');
+                    statusSpan.className = 'login-status-span';
+                    statusSpan.style.marginLeft = '10px';
+                    card.querySelector('.account-actions').appendChild(statusSpan);
+                }
+                statusSpan.textContent = '检查中...';
+            }
             try {
                 const response = await fetch('/api/v1/login/check', {
                     method: 'POST',
@@ -1111,23 +1171,34 @@
                     if (data.code === 200) {
                         const status = data.data.status;
                         const message = data.data.message;
-                        
+                        let statusText = '';
                         if (status === 'logged_in') {
-                            showSuccess('登录状态正常: ' + message);
+                            statusText = '已登录';
+                            if (statusSpan) statusSpan.style.color = '#28a745';
                         } else if (status === 'not_logged_in') {
-                            showError('未登录: ' + message);
+                            statusText = '未登录';
+                            if (statusSpan) statusSpan.style.color = '#ffc107';
                         } else if (status === 'expired') {
-                            showError('登录已过期: ' + message);
+                            statusText = '登录已过期';
+                            if (statusSpan) statusSpan.style.color = '#dc3545';
                         } else {
-                            showError('登录状态未知: ' + message);
+                            statusText = '未知';
+                            if (statusSpan) statusSpan.style.color = '#6c757d';
                         }
+                        if (statusSpan) statusSpan.textContent = statusText;
+                        showSuccess('账号[' + accountId + ']检查结果: ' + statusText + (message ? (' - ' + message) : ''));
+                        // 刷新账号列表，保持状态同步
+                        loadAccounts();
                     } else {
+                        if (statusSpan) statusSpan.textContent = '检查失败';
                         showError('检查登录状态失败: ' + data.message);
                     }
                 } else {
+                    if (statusSpan) statusSpan.textContent = '检查失败';
                     showError('检查登录状态失败: HTTP ' + response.status);
                 }
             } catch (error) {
+                if (statusSpan) statusSpan.textContent = '检查失败';
                 console.error('检查登录状态失败:', error);
                 showError('检查登录状态失败: ' + error.message);
             }
@@ -1141,28 +1212,26 @@
                     const data = await response.json();
                     if (data.code === 200) {
                         const tokens = data.data;
-                        if (tokens.length === 0) {
-                            alert('该账号暂无登录凭证');
+                        if (!tokens || tokens.length === 0) {
+                            showError('该账号暂无登录凭证');
                             return;
                         }
-                        
-                        // 创建令牌详情弹窗
-                        let tokenInfo = '登录凭证详情：\n\n';
-                        tokens.forEach((token, index) => {
-                            tokenInfo += `${index + 1}. 平台: ${getPlatformName(token.platform)}\n`;
-                            tokenInfo += `   类型: ${token.token_type}\n`;
-                            tokenInfo += `   状态: ${token.is_valid ? '有效' : '无效'}\n`;
-                            tokenInfo += `   创建时间: ${token.created_at}\n`;
-                            if (token.expires_at) {
-                                tokenInfo += `   过期时间: ${token.expires_at}\n`;
-                            }
-                            if (token.last_used_at) {
-                                tokenInfo += `   最后使用: ${token.last_used_at}\n`;
-                            }
-                            tokenInfo += '\n';
+                        // 构建弹窗内容
+                        let html = `<div style='max-height:400px;overflow:auto;'>`;
+                        tokens.forEach((token, idx) => {
+                            html += `<div style='border-bottom:1px solid #eee;padding:8px 0;'>`;
+                            html += `<b>平台:</b> ${getPlatformName(token.platform)}<br>`;
+                            html += `<b>类型:</b> ${token.token_type || '-'}<br>`;
+                            html += `<b>状态:</b> ${token.is_valid ? '有效' : '无效'}<br>`;
+                            html += `<b>创建时间:</b> ${token.created_at || '-'}<br>`;
+                            if (token.expires_at) html += `<b>过期时间:</b> ${token.expires_at}<br>`;
+                            if (token.last_used_at) html += `<b>最后使用:</b> ${token.last_used_at}<br>`;
+                            if (token.user_agent) html += `<b>UserAgent:</b> ${token.user_agent}<br>`;
+                            if (token.proxy_info) html += `<b>代理:</b> ${token.proxy_info}<br>`;
+                            html += `</div>`;
                         });
-                        
-                        alert(tokenInfo);
+                        html += `</div>`;
+                        showModal('令牌详情', html);
                     } else {
                         showError('获取令牌失败: ' + data.message);
                     }
@@ -1175,14 +1244,27 @@
             }
         }
 
-        function checkAccountStatus(accountId, platform) {
-            // TODO: 实现检查账号状态功能
-            alert('检查账号状态功能开发中...');
-        }
-
-        function viewTokens(accountId) {
-            // TODO: 实现查看令牌功能
-            alert('查看令牌功能开发中...');
+        // 通用弹窗展示
+        function showModal(title, htmlContent) {
+            let modal = document.getElementById('customModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'customModal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class='modal-content'>
+                        <div class='modal-header'>
+                            <div class='modal-title' id='customModalTitle'></div>
+                            <span class='close' onclick='closeModal("customModal")'>&times;</span>
+                        </div>
+                        <div id='customModalBody'></div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            document.getElementById('customModalTitle').innerText = title;
+            document.getElementById('customModalBody').innerHTML = htmlContent;
+            modal.style.display = 'block';
         }
     </script>
 </body>

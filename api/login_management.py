@@ -2206,6 +2206,10 @@ async def handle_xhs_login(session_id: str, browser_context, page):
         session_data["status"] = "error"
         session_data["message"] = f"登录失败: {str(e)}"
         session_data["progress"] = 0
+        # 新增：超时后立即释放远程桌面锁
+        if session_data.get("has_desktop_lock"):
+            await remote_desktop_lock.release(session_id)
+            session_data["has_desktop_lock"] = False
 
 # 重复的save_login_cookies函数已移除，使用后面的版本
 
@@ -3172,6 +3176,10 @@ async def handle_douyin_login(session_id: str, browser_context, page):
         session_data["status"] = "error"
         session_data["message"] = f"登录失败: {str(e)}"
         session_data["progress"] = 0
+        # 新增：异常后立即释放远程桌面锁
+        if session_data.get("has_desktop_lock"):
+            await remote_desktop_lock.release(session_id)
+            session_data["has_desktop_lock"] = False
 
 async def handle_bilibili_login(session_id: str, browser_context, page):
     """处理B站登录"""
@@ -4901,7 +4909,9 @@ async def handle_remote_desktop_login(session_id: str, platform: str):
                 
                 for i in range(max_wait_time // check_interval):
                     await asyncio.sleep(check_interval)
-                    
+                    if session_data.get('status') == 'cancelled':
+                        utils.logger.info(f"检测到会话被取消，主动终止登录流程: {session_id}")
+                        break                   
                     try:
                         # 检查cookies变化 - 获取所有域名的cookies
                         current_cookies = await context.cookies()
