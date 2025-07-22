@@ -254,55 +254,70 @@ class TaskLogRequest(BaseModel):
 # 存储登录会话
 login_sessions: Dict[str, Dict[str, Any]] = {}
 
+# 统一cookie解析逻辑为：token_data本身就是cookie的键值对
+# 可提取为一个工具函数
+def parse_cookies_from_token_data(token_data: dict, platform: str) -> list:
+    cookies = []
+    for k, v in token_data.items():
+        if k and v and isinstance(v, str) and k not in ["user_info"]:
+            cookies.append({
+                "name": k,
+                "value": v,
+                "domain": get_platform_domain(platform),
+                "path": "/"
+            })
+    return cookies
 
 async def verify_actual_login_status(platform: str, token_data_str: str) -> Dict[str, Any]:
     """实际验证登录状态"""
     try:
-        utils.logger.info(f"开始验证平台 {platform} 的实际登录状态")
-        
-        # 解析token数据
-        token_data = json.loads(token_data_str)
-        cookies_str = token_data.get('cookies', '')
-        
-        if not cookies_str:
-            return {"is_logged_in": False, "message": "没有有效的cookies数据"}
-        
-        # 解析cookies
+        utils.logger.info(f"[VERIFY_ACTUAL] 开始验证平台 {platform} 的实际登录状态")
+        utils.logger.info(f"[VERIFY_ACTUAL] token_data_str: {token_data_str}")
+        try:
+            token_data = json.loads(token_data_str)
+        except Exception as e:
+            utils.logger.error(f"[VERIFY_ACTUAL] token_data解析异常: {e}")
+            return {"is_logged_in": False, "message": f"token_data解析异常: {str(e)}"}
+        # 新逻辑：token_data本身就是cookie的键值对
         cookies = []
-        for cookie_pair in cookies_str.split('; '):
-            if '=' in cookie_pair:
-                name, value = cookie_pair.split('=', 1)
+        for k, v in token_data.items():
+            if k and v and isinstance(v, str) and k not in ["user_info"]:
                 cookies.append({
-                    "name": name.strip(),
-                    "value": value.strip(),
+                    "name": k,
+                    "value": v,
                     "domain": get_platform_domain(platform),
                     "path": "/"
                 })
-        
+        utils.logger.info(f"[VERIFY_ACTUAL] 解析后cookies数量: {len(cookies)}")
         if not cookies:
-            return {"is_logged_in": False, "message": "cookies格式无效"}
-        
+            utils.logger.warning("[VERIFY_ACTUAL] token_data无有效cookie字段")
+            return {"is_logged_in": False, "message": "token_data无有效cookie字段"}
         # 根据平台验证登录状态
         coming_soon_platforms = {"wb": "微博", "tieba": "贴吧", "zhihu": "知乎"}
         if platform in coming_soon_platforms:
             platform_name = coming_soon_platforms[platform]
+            utils.logger.info(f"[VERIFY_ACTUAL] {platform_name}平台即将支持，敬请期待！当前专注于短视频平台优化。")
             return {"is_logged_in": False, "message": f"{platform_name}平台即将支持，敬请期待！当前专注于短视频平台优化。"}
-        
         if platform == "xhs":
-            return await verify_xhs_login_status(cookies)
+            utils.logger.info("[VERIFY_ACTUAL] 调用verify_xhs_login_status_from_token")
+            return await verify_xhs_login_status_from_token(token_data, platform)
         elif platform == "dy":
-            return await verify_douyin_login_status(cookies)
+            utils.logger.info("[VERIFY_ACTUAL] 调用verify_douyin_login_status_from_token")
+            return await verify_douyin_login_status_from_token(token_data, platform)
         elif platform == "ks":
-            return await verify_kuaishou_login_status(cookies)
+            utils.logger.info("[VERIFY_ACTUAL] 调用verify_kuaishou_login_status_from_token")
+            return await verify_kuaishou_login_status_from_token(token_data, platform)
         elif platform == "bili":
-            return await verify_bilibili_login_status(cookies)
+            utils.logger.info("[VERIFY_ACTUAL] 调用verify_bilibili_login_status_from_token")
+            return await verify_bilibili_login_status_from_token(token_data, platform)
         else:
+            utils.logger.info(f"[VERIFY_ACTUAL] 不支持的平台: {platform}")
             return {"is_logged_in": False, "message": f"不支持的平台: {platform}"}
-            
     except json.JSONDecodeError:
+        utils.logger.error(f"[VERIFY_ACTUAL] token数据格式错误")
         return {"is_logged_in": False, "message": "token数据格式错误"}
     except Exception as e:
-        utils.logger.error(f"验证登录状态时出错: {e}")
+        utils.logger.error(f"[VERIFY_ACTUAL] 验证登录状态时出错: {e}")
         return {"is_logged_in": False, "message": f"验证过程出错: {str(e)}"}
 
 
@@ -319,406 +334,22 @@ def get_platform_domain(platform: str) -> str:
     }
     return domain_map.get(platform, ".example.com")
 
+# 修改verify_xhs_login_status等函数入口，支持直接传token_data和platform
+async def verify_xhs_login_status_from_token(token_data: dict, platform: str) -> Dict[str, Any]:
+    cookies = parse_cookies_from_token_data(token_data, platform)
+    return await verify_xhs_login_status(cookies)
 
-async def verify_xhs_login_status(cookies: List[Dict]) -> Dict[str, Any]:
-    """验证小红书登录状态（严格模式：Cookie检查 + 页面验证）"""
-    try:
-        utils.logger.info("🟠 [小红书] 开始验证登录状态（严格模式）")
-        
-        cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-        
-        # 打印所有cookies用于调试
-        utils.logger.info(f"🔍 [小红书调试] 所有cookies ({len(cookie_dict)}个):")
-        for name, value in cookie_dict.items():
-            utils.logger.info(f"   - {name}: {value[:30]}..." if len(value) > 30 else f"   - {name}: {value}")
-        
-        # 第一阶段：Cookie预检查（必要条件）
-        utils.logger.info("📋 [小红书] 第一阶段：Cookie预检查...")
-        
-        # 检查关键认证cookies
-        required_cookies = {
-            'a1': {'min_length': 40, 'desc': '主要认证token'},
-            'web_session': {'min_length': 30, 'desc': '会话token'}
-        }
-        
-        missing_cookies = []
-        valid_cookies = []
-        
-        for cookie_name, requirements in required_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) >= requirements['min_length']:
-                    valid_cookies.append(cookie_name)
-                    utils.logger.info(f"✓ [小红书] Cookie {cookie_name}: {cookie_value[:20]}... (长度: {len(cookie_value)})")
-                else:
-                    missing_cookies.append(f"{cookie_name}(长度不足: {len(cookie_value)})")
-                    utils.logger.warning(f"⚠️ [小红书] Cookie {cookie_name} 长度不足: {len(cookie_value)}")
-            else:
-                missing_cookies.append(f"{cookie_name}(不存在)")
-                utils.logger.warning(f"⚠️ [小红书] 缺少Cookie: {cookie_name}")
-        
-        # 如果关键cookie不足，直接返回失败
-        if len(valid_cookies) < 2:
-            return {
-                "is_logged_in": False,
-                "message": f"Cookie预检查失败 - 缺少关键认证cookies: {', '.join(missing_cookies)}"
-            }
-        
-        utils.logger.info(f"✅ [小红书] Cookie预检查通过 ({len(valid_cookies)}/2)")
-        
-        # 第二阶段：页面验证（充分条件）
-        utils.logger.info("🌐 [小红书] 第二阶段：页面验证...")
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-web-security',
-                    '--disable-features=VizDisplayCompositor'
-                ]
-            )
-            
-            context = await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            )
-            
-            # 添加cookies
-            await context.add_cookies(cookies)
-            
-            page = await context.new_page()
-            
-            try:
-                # 访问小红书主页，检查真实登录状态
-                utils.logger.info("🔗 [小红书] 访问首页验证登录状态...")
-                await page.goto("https://www.xiaohongshu.com/explore", timeout=30000)
-                await page.wait_for_load_state('domcontentloaded', timeout=15000)
-                
-                # 等待页面完全加载
-                await asyncio.sleep(3)
-                
-                # 检查1: 是否存在登录按钮（强烈的未登录信号）
-                login_selectors = [
-                    "button:has-text('登录')",
-                    "a:has-text('登录')", 
-                    "[data-testid='login-button']",
-                    ".login-btn",
-                    "xpath=//button[contains(text(), '登录')]",
-                    "xpath=//a[contains(text(), '登录')]"
-                ]
-                
-                for selector in login_selectors:
-                    try:
-                        login_element = await page.query_selector(selector)
-                        if login_element and await login_element.is_visible():
-                            utils.logger.warning(f"❌ [小红书] 发现登录按钮: {selector}")
-                            return {
-                                "is_logged_in": False,
-                                "message": "页面显示需要登录 - 检测到登录按钮"
-                            }
-                    except:
-                        continue
-                
-                # 检查2: 查找用户相关元素（已登录的积极信号）
-                user_selectors = [
-                    "[data-testid='user-avatar']",
-                    ".user-avatar",
-                    ".avatar",
-                    ".user-info", 
-                    "[data-testid='user-menu']",
-                    "xpath=//img[contains(@class, 'avatar')]",
-                    "xpath=//div[contains(@class, 'user')]"
-                ]
-                
-                user_element_found = False
-                for selector in user_selectors:
-                    try:
-                        user_element = await page.query_selector(selector)
-                        if user_element and await user_element.is_visible():
-                            utils.logger.info(f"✓ [小红书] 发现用户元素: {selector}")
-                            user_element_found = True
-                            break
-                    except:
-                        continue
-                
-                # 检查3: 页面内容分析
-                page_content = await page.content()
-                page_text = await page.inner_text('body')
-                
-                # 未登录的负面信号
-                negative_signals = [
-                    "请先登录",
-                    "立即登录",
-                    "登录后查看",
-                    "sign in",
-                    "log in"
-                ]
-                
-                negative_found = any(signal in page_text.lower() for signal in negative_signals)
-                
-                # 已登录的积极信号
-                positive_signals = [
-                    "首页",
-                    "推荐",
-                    "关注",
-                    "发现",
-                    "我的收藏"
-                ]
-                
-                positive_found = any(signal in page_text for signal in positive_signals)
-                
-                # 检查4: 检查当前cookies是否发生变化（session刷新）
-                current_cookies = await context.cookies()
-                current_cookie_dict = {cookie['name']: cookie['value'] for cookie in current_cookies}
-                
-                # 验证关键cookie是否仍然有效
-                original_web_session = cookie_dict.get('web_session', '')
-                current_web_session = current_cookie_dict.get('web_session', '')
-                
-                session_valid = (current_web_session and 
-                               len(current_web_session) > 20 and 
-                               current_web_session == original_web_session)
-                
-                utils.logger.info(f"🔍 [小红书] 页面验证结果:")
-                utils.logger.info(f"   用户元素: {user_element_found}")
-                utils.logger.info(f"   负面信号: {negative_found}")
-                utils.logger.info(f"   积极信号: {positive_found}")
-                utils.logger.info(f"   Session有效: {session_valid}")
-                
-                # 综合判断
-                if negative_found:
-                    return {
-                        "is_logged_in": False,
-                        "message": "页面验证失败 - 检测到需要登录的提示"
-                    }
-                elif user_element_found and positive_found and session_valid:
-                    return {
-                        "is_logged_in": True,
-                        "message": "登录状态有效 - 页面验证通过（用户元素 + 积极信号 + Session有效）"
-                    }
-                elif positive_found and session_valid:
-                    return {
-                        "is_logged_in": True,
-                        "message": "登录状态有效 - 页面验证通过（积极信号 + Session有效）"
-                    }
-                else:
-                    return {
-                        "is_logged_in": False,
-                        "message": f"页面验证失败 - 登录状态不明确（用户元素:{user_element_found}, 积极信号:{positive_found}, Session:{session_valid}）"
-                    }
-                
-            finally:
-                await browser.close()
-                
-    except Exception as e:
-        utils.logger.error(f"❌ [小红书] 验证登录状态失败: {e}")
-        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
+async def verify_douyin_login_status_from_token(token_data: dict, platform: str) -> Dict[str, Any]:
+    cookies = parse_cookies_from_token_data(token_data, platform)
+    return await verify_douyin_login_status(cookies)
 
+async def verify_kuaishou_login_status_from_token(token_data: dict, platform: str) -> Dict[str, Any]:
+    cookies = parse_cookies_from_token_data(token_data, platform)
+    return await verify_kuaishou_login_status(cookies)
 
-async def verify_douyin_login_status(cookies: List[Dict]) -> Dict[str, Any]:
-    """验证抖音登录状态"""
-    try:
-        utils.logger.info("开始验证抖音登录状态")
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            await context.add_cookies(cookies)
-            
-            page = await context.new_page()
-            
-            try:
-                await page.goto("https://www.douyin.com", timeout=30000)
-                await page.wait_for_load_state('domcontentloaded', timeout=10000)
-                
-                # 检查localStorage中的登录状态
-                has_user_login = await page.evaluate("() => window.localStorage.getItem('HasUserLogin')")
-                if has_user_login == "1":
-                    return {"is_logged_in": True, "message": "localStorage显示已登录"}
-                
-                # 检查是否有登录面板
-                login_panel = await page.query_selector("xpath=//div[@id='login-panel-new']")
-                if login_panel:
-                    return {"is_logged_in": False, "message": "显示登录面板"}
-                
-                # 检查LOGIN_STATUS cookie
-                current_cookies = await context.cookies()
-                login_status = None
-                for cookie in current_cookies:
-                    if cookie['name'] == 'LOGIN_STATUS':
-                        login_status = cookie['value']
-                        break
-                
-                if login_status == "1":
-                    return {"is_logged_in": True, "message": "LOGIN_STATUS显示已登录"}
-                
-                return {"is_logged_in": False, "message": "未检测到登录状态"}
-                
-            finally:
-                await browser.close()
-                
-    except Exception as e:
-        utils.logger.error(f"验证抖音登录状态失败: {e}")
-        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
-
-
-async def verify_kuaishou_login_status(cookies: List[Dict]) -> Dict[str, Any]:
-    """验证快手登录状态（严格模式）"""
-    try:
-        utils.logger.info("🎬 [快手] 开始验证登录状态（严格模式）")
-        
-        cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-        
-        # 检查核心认证cookies（必须全部存在且有效）
-        core_auth_cookies = {
-            'passToken': '认证token',
-            'userId': '用户ID'
-        }
-        
-        missing_core = []
-        found_core = []
-        
-        for cookie_name, description in core_auth_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) > 10:  # 确保值不为空且有实际内容
-                    found_core.append(f"{cookie_name}({description})")
-                    utils.logger.info(f"✓ [快手] 核心cookie {cookie_name}: {cookie_value[:20]}...")
-                else:
-                    missing_core.append(f"{cookie_name}({description}) - 值太短")
-                    utils.logger.warning(f"⚠️ [快手] 核心cookie {cookie_name} 值无效: {cookie_value}")
-            else:
-                missing_core.append(f"{cookie_name}({description}) - 不存在")
-                utils.logger.warning(f"⚠️ [快手] 缺少核心cookie: {cookie_name}")
-        
-        # 检查会话相关cookies（至少需要一个）
-        session_cookies = {
-            'kuaishou.server.webday7_st': '服务器状态token',
-            'kuaishou.server.webday7_ph': '会话hash'
-        }
-        
-        found_session = []
-        for cookie_name, description in session_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) > 20:  # 会话token通常比较长
-                    found_session.append(f"{cookie_name}({description})")
-                    utils.logger.info(f"✓ [快手] 会话cookie {cookie_name}: {cookie_value[:30]}...")
-        
-        # 严格验证：核心cookies必须全部存在，会话cookies至少一个
-        if len(found_core) == len(core_auth_cookies) and len(found_session) >= 1:
-            utils.logger.info(f"✅ [快手] 登录状态验证通过！")
-            utils.logger.info(f"   核心cookies({len(found_core)}): {', '.join(found_core)}")
-            utils.logger.info(f"   会话cookies({len(found_session)}): {', '.join(found_session)}")
-            return {
-                "is_logged_in": True, 
-                "message": f"登录状态有效 - 核心cookies: {len(found_core)}/{len(core_auth_cookies)}, 会话cookies: {len(found_session)}"
-            }
-        else:
-            # 详细报告缺失的cookies
-            missing_report = []
-            if missing_core:
-                missing_report.append(f"缺少核心cookies: {', '.join(missing_core)}")
-            if len(found_session) == 0:
-                missing_report.append(f"缺少会话cookies: {', '.join(session_cookies.keys())}")
-            
-            utils.logger.warning(f"❌ [快手] 登录状态验证失败:")
-            for report in missing_report:
-                utils.logger.warning(f"   {report}")
-                
-            return {
-                "is_logged_in": False, 
-                "message": f"登录验证失败 - {'; '.join(missing_report)}"
-            }
-            
-    except Exception as e:
-        utils.logger.error(f"❌ [快手] 验证登录状态失败: {e}")
-        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
-
-
-async def verify_bilibili_login_status(cookies: List[Dict]) -> Dict[str, Any]:
-    """验证B站登录状态（严格模式）"""
-    try:
-        utils.logger.info("📺 [B站] 开始验证登录状态（严格模式）")
-        
-        cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-        
-        # 打印所有cookies用于调试
-        utils.logger.info(f"🔍 [B站调试] 所有cookies ({len(cookie_dict)}个):")
-        for name, value in cookie_dict.items():
-            utils.logger.info(f"   - {name}: {value[:30]}..." if len(value) > 30 else f"   - {name}: {value}")
-        
-        # 检查核心认证cookies（必须全部存在且有效）
-        core_auth_cookies = {
-            'SESSDATA': '主要会话token',
-            'DedeUserID': '用户ID',
-            'bili_jct': 'CSRF保护token'
-        }
-        
-        missing_core = []
-        found_core = []
-        
-        for cookie_name, description in core_auth_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                # SESSDATA通常很长，DedeUserID是数字，bili_jct是32位hex
-                min_length = 32 if cookie_name == 'bili_jct' else 8 if cookie_name == 'DedeUserID' else 50
-                
-                if len(cookie_value) >= min_length:
-                    found_core.append(f"{cookie_name}({description})")
-                    utils.logger.info(f"✓ [B站] 核心cookie {cookie_name}: {cookie_value[:20]}...")
-                else:
-                    missing_core.append(f"{cookie_name}({description}) - 值太短({len(cookie_value)})")
-                    utils.logger.warning(f"⚠️ [B站] 核心cookie {cookie_name} 值无效: {cookie_value}")
-            else:
-                missing_core.append(f"{cookie_name}({description}) - 不存在")
-                utils.logger.warning(f"⚠️ [B站] 缺少核心cookie: {cookie_name}")
-        
-        # 检查辅助认证信息（可选，但有助于确认）
-        auxiliary_cookies = {
-            'bili_ticket': 'JWT票据',
-            'bili_ticket_expires': '票据过期时间',
-            'DedeUserID__ckMd5': '用户ID校验'
-        }
-        
-        found_auxiliary = []
-        for cookie_name, description in auxiliary_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) > 5:  # 基本长度检查
-                    found_auxiliary.append(f"{cookie_name}({description})")
-                    utils.logger.info(f"✓ [B站] 辅助cookie {cookie_name}: {cookie_value[:20]}...")
-        
-        # 严格验证：核心cookies必须全部存在
-        if len(found_core) == len(core_auth_cookies):
-            utils.logger.info(f"✅ [B站] 登录状态验证通过！")
-            utils.logger.info(f"   核心cookies({len(found_core)}): {', '.join(found_core)}")
-            if found_auxiliary:
-                utils.logger.info(f"   辅助cookies({len(found_auxiliary)}): {', '.join(found_auxiliary)}")
-            
-            return {
-                "is_logged_in": True,
-                "message": f"登录状态有效 - 核心cookies: {len(found_core)}/{len(core_auth_cookies)}, 辅助cookies: {len(found_auxiliary)}"
-            }
-        else:
-            # 详细报告缺失的cookies
-            utils.logger.warning(f"❌ [B站] 登录状态验证失败:")
-            for missing in missing_core:
-                utils.logger.warning(f"   {missing}")
-            
-            return {
-                "is_logged_in": False,
-                "message": f"登录验证失败 - 缺少核心cookies: {', '.join(missing_core)}"
-            }
-            
-    except Exception as e:
-        utils.logger.error(f"❌ [B站] 验证登录状态失败: {e}")
-        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
-
+async def verify_bilibili_login_status_from_token(token_data: dict, platform: str) -> Dict[str, Any]:
+    cookies = parse_cookies_from_token_data(token_data, platform)
+    return await verify_bilibili_login_status(cookies)
 
 async def verify_weibo_login_status(cookies: List[Dict]) -> Dict[str, Any]:
     """验证微博登录状态"""
@@ -898,9 +529,8 @@ async def start_login(request: LoginRequest, background_tasks: BackgroundTasks, 
 async def check_platform_login_status(request: LoginCheckRequest):
     """检查平台登录状态"""
     db = await get_db()
-    
     try:
-        utils.logger.info(f"检查平台登录状态 - 平台: {request.platform}, 账号ID: {request.account_id}")
+        utils.logger.info(f"[CHECK] 检查平台登录状态 - 平台: {request.platform}, 账号ID: {request.account_id}")
         
         # 如果指定了账号ID，检查特定账号
         if request.account_id:
@@ -908,6 +538,7 @@ async def check_platform_login_status(request: LoginCheckRequest):
             account = await db.get_first(account_query, request.account_id, request.platform)
             
             if not account:
+                utils.logger.info(f"[CHECK] 指定账号不存在: {request.account_id}, {request.platform}")
                 return {
                     "code": 404,
                     "message": "指定账号不存在",
@@ -926,6 +557,7 @@ async def check_platform_login_status(request: LoginCheckRequest):
             token = await db.get_first(token_query, request.account_id, request.platform)
             
             if not token:
+                utils.logger.info(f"[CHECK] 账号无有效token: {account['account_name']}")
                 return {
                     "code": 200,
                     "message": f"账号 {account['account_name']} 未登录",
@@ -938,6 +570,7 @@ async def check_platform_login_status(request: LoginCheckRequest):
             
             # 检查token是否过期
             if token['expires_at'] and token['expires_at'] < datetime.now():
+                utils.logger.info(f"[CHECK] token已过期: {account['account_name']}")
                 # 更新token为无效
                 update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, request.account_id, request.platform)
@@ -955,8 +588,9 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 }
             
             # 实际验证登录状态
-            utils.logger.info(f"开始实际验证账号 {account['account_name']} 在平台 {request.platform} 的登录状态")
+            utils.logger.info(f"[CHECK] 开始实际验证账号 {account['account_name']} 在平台 {request.platform} 的登录状态")
             verification_result = await verify_actual_login_status(request.platform, token['token_data'])
+            utils.logger.info(f"[CHECK] verify_actual_login_status返回: {verification_result}")
             
             # 尝试解析用户信息
             account_info = {"account_id": account['id'], "account_name": account['account_name']}
@@ -968,6 +602,7 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 pass
             
             if verification_result['is_logged_in']:
+                utils.logger.info(f"[CHECK] 验证通过: {account['account_name']} 已登录")
                 # 更新最后使用时间
                 update_query = "UPDATE login_tokens SET last_used_at = %s WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, datetime.now(), request.account_id, request.platform)
@@ -984,6 +619,7 @@ async def check_platform_login_status(request: LoginCheckRequest):
                     }
                 }
             else:
+                utils.logger.info(f"[CHECK] 验证失败: {account['account_name']} 未登录，原因: {verification_result.get('message')}")
                 # 实际验证失败，将token设为无效
                 update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
                 await db.execute(update_query, request.account_id, request.platform)
@@ -1066,15 +702,8 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 }
     
     except Exception as e:
-        utils.logger.error(f"检查平台登录状态失败: {e}")
-        return {
-            "code": 500,
-            "message": f"检查登录状态失败: {str(e)}",
-            "data": {
-                "platform": request.platform,
-                "status": "unknown"
-            }
-        }
+        utils.logger.error(f"[CHECK] 检查平台登录状态异常: {e}")
+        raise
 
 @login_router.get("/login/status/{session_id}", response_model=LoginStatusResponse)
 async def get_login_status(session_id: str):
@@ -5380,4 +5009,142 @@ async def save_login_cookies(session_id: str, cookies: list, platform: str) -> b
         import traceback
         utils.logger.error(f"   堆栈跟踪: {traceback.format_exc()}")
         return False
+
+# ====== 平台登录状态检测函数（提前） ======
+
+async def verify_douyin_login_status(cookies: list) -> dict:
+    """验证抖音登录状态"""
+    try:
+        utils.logger.debug("开始验证抖音登录状态")
+        for c in cookies:
+            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            await context.add_cookies(cookies)
+            page = await context.new_page()
+            try:
+                await page.goto("https://www.douyin.com", timeout=30000)
+                await page.wait_for_load_state('domcontentloaded', timeout=10000)
+                current_url = page.url
+                title = await page.title()
+                utils.logger.debug(f"主页最终URL: {current_url}, 标题: {title}")
+                page_content = await page.content()
+                utils.logger.debug(f"主页内容前500字: {page_content[:500]}")
+                # 1. 检查localStorage
+                has_user_login = await page.evaluate("() => window.localStorage.getItem('HasUserLogin')")
+                if has_user_login == "1":
+                    utils.logger.info("localStorage显示已登录")
+                    return {"is_logged_in": True, "message": "localStorage显示已登录"}
+                # 2. 检查是否有登录面板
+                login_panel = await page.query_selector("xpath=//div[@id='login-panel-new']")
+                if login_panel:
+                    utils.logger.debug("检测到登录面板")
+                    return {"is_logged_in": False, "message": "显示登录面板"}
+                # 3. 检查LOGIN_STATUS cookie
+                current_cookies = await context.cookies()
+                login_status = None
+                for cookie in current_cookies:
+                    if cookie['name'] == 'LOGIN_STATUS':
+                        login_status = cookie['value']
+                        break
+                if login_status == "1":
+                    utils.logger.info("LOGIN_STATUS显示已登录")
+                    return {"is_logged_in": True, "message": "LOGIN_STATUS显示已登录"}
+                # 4. 访问个人主页，判断是否能获取到用户信息
+                try:
+                    await page.goto("https://www.douyin.com/user/self", timeout=20000)
+                    await page.wait_for_load_state('domcontentloaded', timeout=10000)
+                    current_url2 = page.url
+                    title2 = await page.title()
+                    page_content2 = await page.content()
+                    utils.logger.info(f"个人主页最终URL: {current_url2}, 标题: {title2}")
+                    utils.logger.info(f"个人主页内容前500字: {page_content2[:500]}")
+                    if '登录' not in page_content2 and '请登录' not in page_content2:
+                        utils.logger.info("个人主页内容未出现登录提示，判定为已登录")
+                        return {"is_logged_in": True, "message": "访问个人主页未出现登录提示"}
+                except Exception as e:
+                    utils.logger.debug(f"访问个人主页异常: {e}")
+                return {"is_logged_in": False, "message": "未检测到登录状态"}
+            finally:
+                await browser.close()
+    except Exception as e:
+        utils.logger.error(f"验证抖音登录状态失败: {e}")
+        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
+
+async def verify_kuaishou_login_status(cookies: list) -> dict:
+    """验证快手登录状态"""
+    try:
+        utils.logger.debug("开始验证快手登录状态")
+        for c in cookies:
+            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
+        # 快手登录核心cookie检测
+        cookie_dict = {c['name']: c['value'] for c in cookies}
+        core_cookies = ['passToken', 'userId']
+        session_cookies = ['kuaishou.server.webday7_st', 'kuaishou.server.webday7_ph']
+        core_found = 0
+        session_found = 0
+        for name in core_cookies:
+            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 10:
+                core_found += 1
+        for name in session_cookies:
+            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 20:
+                session_found += 1
+        if core_found >= 1 and session_found >= 1:
+            utils.logger.info(f"快手登录检测成功！核心({core_found}) 会话({session_found})")
+            return {"is_logged_in": True, "message": "快手cookie检测通过"}
+        else:
+            utils.logger.debug(f"快手登录检测失败，核心({core_found}) 会话({session_found})")
+            return {"is_logged_in": False, "message": "快手cookie缺失或无效"}
+    except Exception as e:
+        utils.logger.error(f"验证快手登录状态失败: {e}")
+        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
+
+async def verify_bilibili_login_status(cookies: list) -> dict:
+    """验证B站登录状态"""
+    try:
+        utils.logger.debug("开始验证B站登录状态")
+        for c in cookies:
+            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
+        cookie_dict = {c['name']: c['value'] for c in cookies}
+        core_cookies = ['SESSDATA', 'DedeUserID', 'bili_jct']
+        core_found = 0
+        for name in core_cookies:
+            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 8:
+                core_found += 1
+        if core_found == len(core_cookies):
+            utils.logger.info(f"B站登录检测成功！核心({core_found})")
+            return {"is_logged_in": True, "message": "B站cookie检测通过"}
+        else:
+            utils.logger.debug(f"B站登录检测失败，核心({core_found})")
+            return {"is_logged_in": False, "message": "B站cookie缺失或无效"}
+    except Exception as e:
+        utils.logger.error(f"验证B站登录状态失败: {e}")
+        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
+
+async def verify_xhs_login_status(cookies: list) -> dict:
+    """验证小红书登录状态"""
+    try:
+        utils.logger.debug("开始验证小红书登录状态")
+        for c in cookies:
+            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
+        cookie_dict = {c['name']: c['value'] for c in cookies}
+        core_cookies = ['a1', 'web_session']
+        core_found = 0
+        for name in core_cookies:
+            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 20:
+                core_found += 1
+        # 强登录指标
+        unread_cookie = cookie_dict.get('unread', '')
+        has_strong_indicator = unread_cookie and ('ub' in unread_cookie or 'ue' in unread_cookie)
+        if core_found >= 2 and has_strong_indicator:
+            utils.logger.info(f"小红书登录检测成功（严格模式）！核心({core_found}/2) + 强指标")
+            return {"is_logged_in": True, "message": "小红书cookie检测通过"}
+        else:
+            utils.logger.debug(f"小红书登录检测失败 - 核心({core_found}/2), 强指标({has_strong_indicator}) [需要两者都满足]")
+            return {"is_logged_in": False, "message": "小红书cookie缺失或无效"}
+    except Exception as e:
+        utils.logger.error(f"验证小红书登录状态失败: {e}")
+        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
 
