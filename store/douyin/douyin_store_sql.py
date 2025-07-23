@@ -14,11 +14,43 @@
 # @Time    : 2024/4/6 15:30
 # @Desc    : sql接口集合
 
+import json
 from typing import Dict, List
 from tools import utils
+import time
 
 from db import AsyncMysqlDB
 from var import media_crawler_db_var
+
+
+DOUYIN_AWEME_FIELDS = {
+    "aweme_id", "aweme_type", "title", "desc", "create_time", "user_id", "sec_uid", "short_user_id",
+    "user_unique_id", "nickname", "avatar", "user_signature", "ip_location", "liked_count", "comment_count",
+    "share_count", "collected_count", "aweme_url", "cover_url", "video_download_url", "video_play_url",
+    "video_share_url", "is_favorite", "minio_url", "task_id", "source_keyword", "add_ts", "last_modify_ts",
+    "tags", "meta", "author"
+}
+
+def filter_fields_for_table(item: dict, allowed_fields: set) -> dict:
+    return {k: v for k, v in item.items() if k in allowed_fields}
+
+
+def serialize_for_db(data):
+    """
+    只对最外层 dict 的字段值为 dict/list 的做 json.dumps，最外层 dict 保持原结构
+    """
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                new_data[k] = json.dumps(v, ensure_ascii=False)
+            else:
+                new_data[k] = v
+        return new_data
+    elif isinstance(data, list):
+        return json.dumps(data, ensure_ascii=False)
+    else:
+        return data
 
 
 async def _get_db_connection() -> AsyncMysqlDB:
@@ -47,14 +79,51 @@ async def query_content_by_content_id(content_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    sql: str = f"select * from douyin_aweme where aweme_id = '{content_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        sql: str = f"select * from douyin_aweme where aweme_id = '{content_id}'"
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询内容失败: {content_id}, 错误: {e}")
         return dict()
+
+
+def fill_fields_from_author_and_meta(safe_item):
+    # 拍平 author 字段
+    if "author" in safe_item and safe_item["author"]:
+        try:
+            author_data = json.loads(safe_item["author"]) if isinstance(safe_item["author"], str) else safe_item["author"]
+            if "user_id" in DOUYIN_AWEME_FIELDS and not safe_item.get("user_id"):
+                safe_item["user_id"] = author_data.get("uid", "")
+            if "sec_uid" in DOUYIN_AWEME_FIELDS and not safe_item.get("sec_uid"):
+                safe_item["sec_uid"] = author_data.get("sec_uid", "")
+            if "nickname" in DOUYIN_AWEME_FIELDS and not safe_item.get("nickname"):
+                safe_item["nickname"] = author_data.get("nickname", "")
+            if "avatar" in DOUYIN_AWEME_FIELDS and not safe_item.get("avatar"):
+                # avatar_thumb 可能是 dict
+                avatar_thumb = author_data.get("avatar_thumb")
+                if isinstance(avatar_thumb, dict):
+                    url_list = avatar_thumb.get("url_list")
+                    if url_list and isinstance(url_list, list):
+                        safe_item["avatar"] = url_list[0]
+                    else:
+                        safe_item["avatar"] = avatar_thumb.get("uri", "")
+                elif isinstance(avatar_thumb, str):
+                    safe_item["avatar"] = avatar_thumb
+            if "user_signature" in DOUYIN_AWEME_FIELDS and not safe_item.get("user_signature"):
+                safe_item["user_signature"] = author_data.get("signature", "")
+        except Exception as e:
+            utils.logger.warning(f"[拍平author] 解析失败: {e}")
+    # 拍平 meta 字段（如有需要，可补充更多字段）
+    if "meta" in safe_item and safe_item["meta"]:
+        try:
+            meta_data = json.loads(safe_item["meta"]) if isinstance(safe_item["meta"], str) else safe_item["meta"]
+            # 可根据实际meta内容补充拍平逻辑
+            # 例如: if "ip_location" in DOUYIN_AWEME_FIELDS and not safe_item.get("ip_location"): ...
+        except Exception as e:
+            utils.logger.warning(f"[拍平meta] 解析失败: {e}")
+    return safe_item
 
 
 async def add_new_content(content_item: Dict) -> int:
@@ -68,8 +137,26 @@ async def add_new_content(content_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    last_row_id: int = await async_db_conn.item_to_table("douyin_aweme", content_item)
-    return last_row_id
+        safe_item = serialize_for_db(content_item)
+        safe_item = filter_fields_for_table(safe_item, DOUYIN_AWEME_FIELDS)
+        # 自动补全所有 NOT NULL 且无默认值的字段
+        now_ts = int(time.time() * 1000)
+        if "last_modify_ts" not in safe_item or not safe_item["last_modify_ts"]:
+            safe_item["last_modify_ts"] = now_ts
+        if "add_ts" not in safe_item or not safe_item["add_ts"]:
+            safe_item["add_ts"] = now_ts
+        if "create_time" not in safe_item or not safe_item["create_time"]:
+            safe_item["create_time"] = int(time.time())
+        if "aweme_type" not in safe_item or not safe_item["aweme_type"]:
+            safe_item["aweme_type"] = "video"
+        if "aweme_id" not in safe_item or not safe_item["aweme_id"]:
+            safe_item["aweme_id"] = f"auto_{now_ts}"
+        # 拍平 author/meta 字段
+        safe_item = fill_fields_from_author_and_meta(safe_item)
+        utils.logger.info(f"[DEBUG] 实际插入字段: {list(safe_item.keys())}")
+        utils.logger.info(f"[DEBUG] 字段对应的值: {list(safe_item.values())}")
+        last_row_id: int = await async_db_conn.item_to_table("douyin_aweme", safe_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增内容失败: {content_item.get('aweme_id', 'unknown')}, 错误: {e}")
         raise
@@ -87,8 +174,8 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    effect_row: int = await async_db_conn.update_table("douyin_aweme", content_item, "aweme_id", content_id)
-    return effect_row
+        effect_row: int = await async_db_conn.update_table("douyin_aweme", content_item, "aweme_id", content_id)
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新内容失败: {content_id}, 错误: {e}")
         raise
@@ -105,11 +192,11 @@ async def query_comment_by_comment_id(comment_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    sql: str = f"select * from douyin_aweme_comment where comment_id = '{comment_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        sql: str = f"select * from douyin_aweme_comment where comment_id = '{comment_id}'"
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询评论失败: {comment_id}, 错误: {e}")
         return dict()
@@ -126,8 +213,8 @@ async def add_new_comment(comment_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    last_row_id: int = await async_db_conn.item_to_table("douyin_aweme_comment", comment_item)
-    return last_row_id
+        last_row_id: int = await async_db_conn.item_to_table("douyin_aweme_comment", comment_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增评论失败: {comment_item.get('comment_id', 'unknown')}, 错误: {e}")
         raise
@@ -145,8 +232,8 @@ async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> i
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    effect_row: int = await async_db_conn.update_table("douyin_aweme_comment", comment_item, "comment_id", comment_id)
-    return effect_row
+        effect_row: int = await async_db_conn.update_table("douyin_aweme_comment", comment_item, "comment_id", comment_id)
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新评论失败: {comment_id}, 错误: {e}")
         raise
@@ -163,11 +250,11 @@ async def query_creator_by_user_id(user_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    sql: str = f"select * from dy_creator where user_id = '{user_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        sql: str = f"select * from dy_creator where user_id = '{user_id}'"
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询创作者失败: {user_id}, 错误: {e}")
         return dict()
@@ -184,8 +271,8 @@ async def add_new_creator(creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    last_row_id: int = await async_db_conn.item_to_table("dy_creator", creator_item)
-    return last_row_id
+        last_row_id: int = await async_db_conn.item_to_table("dy_creator", creator_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增创作者失败: {creator_item.get('user_id', 'unknown')}, 错误: {e}")
         raise
@@ -203,8 +290,8 @@ async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    effect_row: int = await async_db_conn.update_table("dy_creator", creator_item, "user_id", user_id)
-    return effect_row
+        effect_row: int = await async_db_conn.update_table("dy_creator", creator_item, "user_id", user_id)
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新创作者失败: {user_id}, 错误: {e}")
         raise

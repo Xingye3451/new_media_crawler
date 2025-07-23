@@ -12,6 +12,7 @@
 # -*- coding: utf-8 -*-
 from typing import Dict, List
 from tools import utils
+import json
 
 from db import AsyncMysqlDB
 from var import media_crawler_db_var
@@ -32,6 +33,24 @@ async def _get_db_connection() -> AsyncMysqlDB:
             raise
 
 
+def serialize_for_db(data):
+    """
+    只对最外层 dict 的字段值为 dict/list 的做 json.dumps，最外层 dict 保持原结构
+    """
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                new_data[k] = json.dumps(v, ensure_ascii=False)
+            else:
+                new_data[k] = v
+        return new_data
+    elif isinstance(data, list):
+        return json.dumps(data, ensure_ascii=False)
+    else:
+        return data
+
+
 async def query_content_by_content_id(content_id: str) -> Dict:
     """
     查询一条内容记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
@@ -43,11 +62,11 @@ async def query_content_by_content_id(content_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    sql: str = f"select * from tieba_note where note_id = '{content_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        sql: str = f"select * from tieba_note where note_id = '{content_id}'"
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询内容失败: {content_id}, 错误: {e}")
         return dict()
@@ -64,8 +83,9 @@ async def add_new_content(content_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    last_row_id: int = await async_db_conn.item_to_table("tieba_note", content_item)
-    return last_row_id
+        safe_item = serialize_for_db(content_item)
+        last_row_id: int = await async_db_conn.item_to_table("tieba_note", safe_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增内容失败: {content_item.get('note_id', 'unknown')}, 错误: {e}")
         raise
@@ -83,8 +103,8 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    effect_row: int = await async_db_conn.update_table("tieba_note", content_item, "note_id", content_id)
-    return effect_row
+        effect_row: int = await async_db_conn.update_table("tieba_note", content_item, "note_id", content_id)
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新内容失败: {content_id}, 错误: {e}")
         raise
@@ -102,10 +122,10 @@ async def query_comment_by_comment_id(comment_id: str) -> Dict:
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         sql: str = f"select * from tieba_note_comment where comment_id = '{comment_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询评论失败: {comment_id}, 错误: {e}")
         return dict()
@@ -122,8 +142,9 @@ async def add_new_comment(comment_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        last_row_id: int = await async_db_conn.item_to_table("tieba_note_comment", comment_item)
-    return last_row_id
+        safe_item = serialize_for_db(comment_item)
+        last_row_id: int = await async_db_conn.item_to_table("tieba_note_comment", safe_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增评论失败: {comment_item.get('comment_id', 'unknown')}, 错误: {e}")
         raise
@@ -142,7 +163,7 @@ async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> i
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         effect_row: int = await async_db_conn.update_table("tieba_note_comment", comment_item, "comment_id", comment_id)
-    return effect_row
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新评论失败: {comment_id}, 错误: {e}")
         raise
@@ -159,11 +180,11 @@ async def query_creator_by_user_id(user_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    sql: str = f"select * from tieba_creator where user_id = '{user_id}'"
-    rows: List[Dict] = await async_db_conn.query(sql)
-    if len(rows) > 0:
-        return rows[0]
-    return dict()
+        sql: str = f"select * from tieba_creator where user_id = '{user_id}'"
+        rows: List[Dict] = await async_db_conn.query(sql)
+        if len(rows) > 0:
+            return rows[0]
+        return dict()
     except Exception as e:
         utils.logger.error(f"查询创作者失败: {user_id}, 错误: {e}")
         return dict()
@@ -180,8 +201,9 @@ async def add_new_creator(creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    last_row_id: int = await async_db_conn.item_to_table("tieba_creator", creator_item)
-    return last_row_id
+        safe_item = serialize_for_db(creator_item)
+        last_row_id: int = await async_db_conn.item_to_table("tieba_creator", safe_item)
+        return last_row_id
     except Exception as e:
         utils.logger.error(f"新增创作者失败: {creator_item.get('user_id', 'unknown')}, 错误: {e}")
         raise
@@ -199,8 +221,8 @@ async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-    effect_row: int = await async_db_conn.update_table("tieba_creator", creator_item, "user_id", user_id)
-    return effect_row
+        effect_row: int = await async_db_conn.update_table("tieba_creator", creator_item, "user_id", user_id)
+        return effect_row
     except Exception as e:
         utils.logger.error(f"更新创作者失败: {user_id}, 错误: {e}")
         raise
