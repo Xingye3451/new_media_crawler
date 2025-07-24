@@ -95,7 +95,7 @@ def get_video_url_arr(note_item: Dict) -> List:
     return videoArr
 
 
-async def update_xhs_note(note_item: Dict):
+async def update_xhs_note(note_item: Dict, task_id: str = None):
     """
     更新小红书笔记
     Args:
@@ -139,6 +139,7 @@ async def update_xhs_note(note_item: Dict):
         "source_keyword": source_keyword_var.get(), # 搜索关键词
         "xsec_token": note_item.get("xsec_token"), # xsec_token
         "platform": "xhs",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据

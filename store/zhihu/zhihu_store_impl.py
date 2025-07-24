@@ -123,9 +123,10 @@ class ZhihuDbStoreImplement(AbstractStore):
                                       update_content_by_content_id)
         note_id = content_item.get("note_id")
         note_detail: Dict = await query_content_by_content_id(content_id=note_id)
+        task_id = content_item.get("task_id")
         if not note_detail:
             content_item["add_ts"] = utils.get_current_timestamp()
-            await add_new_content(content_item)
+            await add_new_content(content_item, task_id=task_id)
         else:
             await update_content_by_content_id(note_id, content_item=content_item)
 

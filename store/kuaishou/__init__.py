@@ -56,7 +56,7 @@ def _clear_collected_data():
     _collected_data = []
 
 
-async def update_kuaishou_video(video_item: Dict):
+async def update_kuaishou_video(video_item: Dict, task_id: str = None):
     photo_info: Dict = video_item.get("photo", {})
     video_id = photo_info.get("id")
     if not video_id:
@@ -79,6 +79,7 @@ async def update_kuaishou_video(video_item: Dict):
         "video_play_url": photo_info.get("photoUrl", ""),
         "source_keyword": source_keyword_var.get(),
         "platform": "ks",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据

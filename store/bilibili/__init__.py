@@ -86,7 +86,7 @@ def get_video_url_arr(note_item: Dict) -> List:
     return []
 
 
-async def update_bilibili_video(video_item: Dict):
+async def update_bilibili_video(video_item: Dict, task_id: str = None):
     video_info: Dict = video_item.get("View", {})
     video_id = video_info.get("aid")
     if not video_id:
@@ -113,6 +113,7 @@ async def update_bilibili_video(video_item: Dict):
         "video_play_url": video_info.get("redirect_url", ""),
         "source_keyword": source_keyword_var.get(),
         "platform": "bili",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据

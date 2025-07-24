@@ -44,7 +44,7 @@ class WeiboCrawler(AbstractCrawler):
     wb_client: WeiboClient
     browser_context: BrowserContext
 
-    def __init__(self):
+    def __init__(self, task_id: str = None):
         self.index_url = "https://weibo.com"
         self.mobile_index_url = "https://m.weibo.cn"
         self.user_agent = utils.get_user_agent()
@@ -52,6 +52,7 @@ class WeiboCrawler(AbstractCrawler):
         # 使用存储工厂创建存储对象
         from store.weibo import WeiboStoreFactory
         self.weibo_store = WeiboStoreFactory.create_store()
+        self.task_id = task_id
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -142,7 +143,7 @@ class WeiboCrawler(AbstractCrawler):
                         mblog: Dict = note_item.get("mblog")
                         if mblog:
                             note_id_list.append(mblog.get("id"))
-                            await self.weibo_store.update_weibo_note(note_item)
+                            await self.weibo_store.update_weibo_note(note_item, task_id=self.task_id)
                             await self.get_note_images(mblog)
 
                 page += 1
@@ -161,7 +162,7 @@ class WeiboCrawler(AbstractCrawler):
         video_details = await asyncio.gather(*task_list)
         for note_item in video_details:
             if note_item:
-                await self.weibo_store.update_weibo_note(note_item)
+                await self.weibo_store.update_weibo_note(note_item, task_id=self.task_id)
         await self.batch_get_notes_comments(config.WEIBO_SPECIFIED_ID_LIST)
 
     async def get_note_info_task(self, note_id: str, semaphore: asyncio.Semaphore) -> Optional[Dict]:

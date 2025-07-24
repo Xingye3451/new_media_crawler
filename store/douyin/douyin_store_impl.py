@@ -126,10 +126,11 @@ class DouyinDbStoreImplement(AbstractStore):
                                        update_content_by_content_id)
         aweme_id = content_item.get("aweme_id")
         aweme_detail: Dict = await query_content_by_content_id(content_id=aweme_id)
+        task_id = content_item.get("task_id")
         if not aweme_detail:
             content_item["add_ts"] = utils.get_current_timestamp()
             if content_item.get("title"):
-                await add_new_content(content_item)
+                await add_new_content(content_item, task_id=task_id)
         else:
             await update_content_by_content_id(aweme_id, content_item=content_item)
 
@@ -357,10 +358,11 @@ class DouyinRedisStoreImplement(AbstractStore):
                                            update_content_by_content_id)
             
             aweme_detail: Dict = await query_content_by_content_id(content_id=aweme_id)
+            task_id = content_item.get("task_id")
             if not aweme_detail:
                 content_item["add_ts"] = utils.get_current_timestamp()
                 if content_item.get("title") or content_item.get("desc"):
-                    await add_new_content(content_item)
+                    await add_new_content(content_item, task_id=task_id)
                     utils.logger.info(f"✅ [DouyinRedisStore] 数据已存储到数据库: {aweme_id}")
             else:
                 await update_content_by_content_id(aweme_id, content_item=content_item)

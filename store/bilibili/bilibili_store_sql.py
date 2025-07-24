@@ -66,11 +66,11 @@ async def query_content_by_content_id(content_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        sql: str = f"select * from bilibili_video where video_id = '{content_id}'"
-        rows: List[Dict] = await async_db_conn.query(sql)
-        if len(rows) > 0:
-            return rows[0]
-        return dict()
+    sql: str = f"select * from bilibili_video where video_id = '{content_id}'"
+    rows: List[Dict] = await async_db_conn.query(sql)
+    if len(rows) > 0:
+        return rows[0]
+    return dict()
     except Exception as e:
         utils.logger.error(f"查询内容失败: {content_id}, 错误: {e}")
         return dict()
@@ -89,7 +89,7 @@ async def add_new_content(content_item: Dict) -> int:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         safe_item = serialize_for_db(content_item)
         last_row_id: int = await async_db_conn.item_to_table("bilibili_video", safe_item)
-        return last_row_id
+    return last_row_id
     except Exception as e:
         utils.logger.error(f"新增内容失败: {content_item.get('video_id', 'unknown')}, 错误: {e}")
         raise
@@ -107,8 +107,8 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        effect_row: int = await async_db_conn.update_table("bilibili_video", content_item, "video_id", content_id)
-        return effect_row
+    effect_row: int = await async_db_conn.update_table("bilibili_video", content_item, "video_id", content_id)
+    return effect_row
     except Exception as e:
         utils.logger.error(f"更新内容失败: {content_id}, 错误: {e}")
         raise
@@ -125,11 +125,11 @@ async def query_comment_by_comment_id(comment_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        sql: str = f"select * from bilibili_video_comment where comment_id = '{comment_id}'"
-        rows: List[Dict] = await async_db_conn.query(sql)
-        if len(rows) > 0:
-            return rows[0]
-        return dict()
+    sql: str = f"select * from bilibili_video_comment where comment_id = '{comment_id}'"
+    rows: List[Dict] = await async_db_conn.query(sql)
+    if len(rows) > 0:
+        return rows[0]
+    return dict()
     except Exception as e:
         utils.logger.error(f"查询评论失败: {comment_id}, 错误: {e}")
         return dict()
@@ -148,7 +148,7 @@ async def add_new_comment(comment_item: Dict) -> int:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         safe_item = serialize_for_db(comment_item)
         last_row_id: int = await async_db_conn.item_to_table("bilibili_video_comment", safe_item)
-        return last_row_id
+    return last_row_id
     except Exception as e:
         utils.logger.error(f"新增评论失败: {comment_item.get('comment_id', 'unknown')}, 错误: {e}")
         raise
@@ -166,8 +166,8 @@ async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> i
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        effect_row: int = await async_db_conn.update_table("bilibili_video_comment", comment_item, "comment_id", comment_id)
-        return effect_row
+    effect_row: int = await async_db_conn.update_table("bilibili_video_comment", comment_item, "comment_id", comment_id)
+    return effect_row
     except Exception as e:
         utils.logger.error(f"更新评论失败: {comment_id}, 错误: {e}")
         raise
@@ -185,10 +185,10 @@ async def query_creator_by_user_id(user_id: str) -> Dict:
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         sql: str = f"select * from bili_creator where user_id = '{user_id}'"
-        rows: List[Dict] = await async_db_conn.query(sql)
-        if len(rows) > 0:
-            return rows[0]
-        return dict()
+    rows: List[Dict] = await async_db_conn.query(sql)
+    if len(rows) > 0:
+        return rows[0]
+    return dict()
     except Exception as e:
         utils.logger.error(f"查询创作者失败: {user_id}, 错误: {e}")
         return dict()
@@ -207,7 +207,7 @@ async def add_new_creator(creator_item: Dict) -> int:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         safe_item = serialize_for_db(creator_item)
         last_row_id: int = await async_db_conn.item_to_table("bili_creator", safe_item)
-        return last_row_id
+    return last_row_id
     except Exception as e:
         utils.logger.error(f"新增创作者失败: {creator_item.get('user_id', 'unknown')}, 错误: {e}")
         raise
@@ -226,7 +226,7 @@ async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         effect_row: int = await async_db_conn.update_table("bili_creator", creator_item, "user_id", user_id)
-        return effect_row
+    return effect_row
     except Exception as e:
         utils.logger.error(f"更新创作者失败: {user_id}, 错误: {e}")
         raise

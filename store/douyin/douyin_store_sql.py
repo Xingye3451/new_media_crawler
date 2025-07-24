@@ -89,56 +89,111 @@ async def query_content_by_content_id(content_id: str) -> Dict:
         return dict()
 
 
-def fill_fields_from_author_and_meta(safe_item):
-    # 拍平 author 字段
+def fill_fields_from_all_sources(safe_item, content_item):
+    # 1. 顶层字段优先赋值
+    for k in [
+        "aweme_id", "aweme_type", "title", "desc", "create_time", "user_id", "sec_uid", "short_user_id",
+        "user_unique_id", "nickname", "avatar", "user_signature", "ip_location", "is_favorite", "minio_url",
+        "task_id", "source_keyword", "add_ts", "last_modify_ts", "tags"
+    ]:
+        if not safe_item.get(k) and content_item.get(k) is not None:
+            safe_item[k] = content_item[k]
+
+    # 2. author 字段拍平
     if "author" in safe_item and safe_item["author"]:
         try:
-            author_data = json.loads(safe_item["author"]) if isinstance(safe_item["author"], str) else safe_item["author"]
-            if "user_id" in DOUYIN_AWEME_FIELDS and not safe_item.get("user_id"):
-                safe_item["user_id"] = author_data.get("uid", "")
-            if "sec_uid" in DOUYIN_AWEME_FIELDS and not safe_item.get("sec_uid"):
-                safe_item["sec_uid"] = author_data.get("sec_uid", "")
-            if "nickname" in DOUYIN_AWEME_FIELDS and not safe_item.get("nickname"):
-                safe_item["nickname"] = author_data.get("nickname", "")
-            if "avatar" in DOUYIN_AWEME_FIELDS and not safe_item.get("avatar"):
-                # avatar_thumb 可能是 dict
-                avatar_thumb = author_data.get("avatar_thumb")
+            author_data = safe_item["author"]
+            if isinstance(author_data, str):
+                import json
+                author_data = json.loads(author_data)
+            safe_item.setdefault("user_id", author_data.get("uid", ""))
+            safe_item.setdefault("sec_uid", author_data.get("sec_uid", ""))
+            safe_item.setdefault("nickname", author_data.get("nickname", ""))
+            avatar_thumb = author_data.get("avatar_thumb")
+            if avatar_thumb:
                 if isinstance(avatar_thumb, dict):
                     url_list = avatar_thumb.get("url_list")
                     if url_list and isinstance(url_list, list):
-                        safe_item["avatar"] = url_list[0]
+                        safe_item.setdefault("avatar", url_list[0])
                     else:
-                        safe_item["avatar"] = avatar_thumb.get("uri", "")
+                        safe_item.setdefault("avatar", avatar_thumb.get("uri", ""))
                 elif isinstance(avatar_thumb, str):
-                    safe_item["avatar"] = avatar_thumb
-            if "user_signature" in DOUYIN_AWEME_FIELDS and not safe_item.get("user_signature"):
-                safe_item["user_signature"] = author_data.get("signature", "")
+                    safe_item.setdefault("avatar", avatar_thumb)
+            safe_item.setdefault("user_signature", author_data.get("signature", ""))
+            # user_unique_id/short_user_id
+            safe_item.setdefault("user_unique_id", author_data.get("unique_id", ""))
+            safe_item.setdefault("short_user_id", author_data.get("short_id", ""))
         except Exception as e:
             utils.logger.warning(f"[拍平author] 解析失败: {e}")
-    # 拍平 meta 字段（如有需要，可补充更多字段）
-    if "meta" in safe_item and safe_item["meta"]:
-        try:
-            meta_data = json.loads(safe_item["meta"]) if isinstance(safe_item["meta"], str) else safe_item["meta"]
-            # 可根据实际meta内容补充拍平逻辑
-            # 例如: if "ip_location" in DOUYIN_AWEME_FIELDS and not safe_item.get("ip_location"): ...
-        except Exception as e:
-            utils.logger.warning(f"[拍平meta] 解析失败: {e}")
+
+    # 3. video 字段拍平
+    video = content_item.get("video")
+    if video:
+        play_addr = video.get("play_addr")
+        if play_addr and play_addr.get("url_list"):
+            safe_item.setdefault("video_play_url", play_addr["url_list"][0])
+        download_addr = video.get("download_addr")
+        if download_addr and download_addr.get("url_list"):
+            safe_item.setdefault("video_download_url", download_addr["url_list"][0])
+        cover = video.get("cover")
+        if cover and cover.get("url_list"):
+            safe_item.setdefault("cover_url", cover["url_list"][0])
+
+    # 4. statistics 字段拍平
+    statistics = content_item.get("statistics")
+    if statistics:
+        safe_item.setdefault("liked_count", str(statistics.get("digg_count", "")))
+        safe_item.setdefault("comment_count", str(statistics.get("comment_count", "")))
+        safe_item.setdefault("share_count", str(statistics.get("share_count", "")))
+        safe_item.setdefault("collected_count", str(statistics.get("collect_count", "")))
+
+    # 5. share_info 字段拍平
+    share_info = content_item.get("share_info")
+    if share_info:
+        safe_item.setdefault("aweme_url", share_info.get("share_url", ""))
+        safe_item.setdefault("title", share_info.get("share_title", content_item.get("desc", "")))
+        safe_item.setdefault("video_share_url", share_info.get("share_url", ""))
+    elif safe_item.get("aweme_url"):
+        safe_item.setdefault("video_share_url", safe_item["aweme_url"])
+
+    # 6. tags from text_extra
+    text_extra = content_item.get("text_extra")
+    if text_extra and isinstance(text_extra, list):
+        tags_list = [x.get("hashtag_name") for x in text_extra if x.get("hashtag_name")]
+        if tags_list:
+            import json
+            safe_item["tags"] = json.dumps(tags_list, ensure_ascii=False)
+
+    # 7. meta as a union of several subfields
+    meta_dict = {}
+    for k in ["video", "statistics", "status", "video_control", "music", "share_info"]:
+        if content_item.get(k) is not None:
+            meta_dict[k] = content_item[k]
+    if meta_dict:
+        import json
+        safe_item["meta"] = json.dumps(meta_dict, ensure_ascii=False)
+
     return safe_item
 
 
-async def add_new_content(content_item: Dict) -> int:
+async def add_new_content(content_item: Dict, task_id: str = None) -> int:
     """
     新增一条内容记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
     Args:
-        content_item:
-
+        content_item: 原始内容数据
+        task_id: 任务ID（可选，强制关联）
     Returns:
-
+        新增行ID
     """
     try:
+        utils.logger.info(f"[DEBUG] content_item原始内容: {content_item}")
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
         safe_item = serialize_for_db(content_item)
+        safe_item = fill_fields_from_all_sources(safe_item, content_item)
         safe_item = filter_fields_for_table(safe_item, DOUYIN_AWEME_FIELDS)
+        # 强制覆盖 task_id
+        if task_id:
+            safe_item["task_id"] = task_id
         # 自动补全所有 NOT NULL 且无默认值的字段
         now_ts = int(time.time() * 1000)
         if "last_modify_ts" not in safe_item or not safe_item["last_modify_ts"]:
@@ -151,8 +206,6 @@ async def add_new_content(content_item: Dict) -> int:
             safe_item["aweme_type"] = "video"
         if "aweme_id" not in safe_item or not safe_item["aweme_id"]:
             safe_item["aweme_id"] = f"auto_{now_ts}"
-        # 拍平 author/meta 字段
-        safe_item = fill_fields_from_author_and_meta(safe_item)
         utils.logger.info(f"[DEBUG] 实际插入字段: {list(safe_item.keys())}")
         utils.logger.info(f"[DEBUG] 字段对应的值: {list(safe_item.values())}")
         last_row_id: int = await async_db_conn.item_to_table("douyin_aweme", safe_item)

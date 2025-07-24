@@ -100,7 +100,7 @@ def _clear_collected_data():
     _collected_data = []
 
 
-async def update_weibo_note(note_item: Dict):
+async def update_weibo_note(note_item: Dict, task_id: str = None):
     note_id = note_item.get("id")
     user_info = note_item.get("user", {})
     save_content_item = {
@@ -120,6 +120,7 @@ async def update_weibo_note(note_item: Dict):
         "note_url": f"https://weibo.com/{user_info.get('id')}/{note_id}",
         "source_keyword": source_keyword_var.get(),
         "platform": "wb",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据

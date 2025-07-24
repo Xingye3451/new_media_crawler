@@ -41,13 +41,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
     xhs_client: XiaoHongShuClient
     browser_context: BrowserContext
 
-    def __init__(self) -> None:
+    def __init__(self, task_id: str = None) -> None:
         self.index_url = "https://www.xiaohongshu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = config.UA if config.UA else "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         # 使用存储工厂创建存储对象
         from store.xhs import XhsStoreFactory
         self.xhs_store = XhsStoreFactory.create_store()
+        self.task_id = task_id
 
     async def start(self) -> None:
         """Start xhs crawler"""
@@ -229,7 +230,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     note_details = await asyncio.gather(*task_list)
                     for note_detail in note_details:
                         if note_detail:
-                            await self.xhs_store.update_xhs_note(note_detail)
+                            await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
                             await self.get_notice_media(note_detail)
                             note_ids.append(note_detail.get("note_id"))
                             xsec_tokens.append(note_detail.get("xsec_token"))
@@ -294,7 +295,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
         note_details = await asyncio.gather(*task_list)
         for note_detail in note_details:
             if note_detail:
-                await self.xhs_store.update_xhs_note(note_detail)
+                await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
 
     async def get_specified_notes(self):
         """
@@ -324,7 +325,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             if note_detail:
                 need_get_comment_note_ids.append(note_detail.get("note_id", ""))
                 xsec_tokens.append(note_detail.get("xsec_token", ""))
-                await self.xhs_store.update_xhs_note(note_detail)
+                await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
         await self.batch_get_note_comments(need_get_comment_note_ids, xsec_tokens)
 
     async def get_note_detail_async_task(

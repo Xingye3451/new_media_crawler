@@ -148,9 +148,10 @@ class BiliDbStoreImplement(AbstractStore):
                                          update_content_by_content_id)
         video_id = content_item.get("video_id")
         video_detail: Dict = await query_content_by_content_id(content_id=video_id)
+        task_id = content_item.get("task_id")
         if not video_detail:
             content_item["add_ts"] = utils.get_current_timestamp()
-            await add_new_content(content_item)
+            await add_new_content(content_item, task_id=task_id)
         else:
             await update_content_by_content_id(video_id, content_item=content_item)
 

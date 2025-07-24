@@ -105,7 +105,7 @@ def _extract_video_download_url(aweme_detail: Dict) -> str:
     return actual_url_list[-1]
 
 
-async def update_douyin_aweme(aweme_item: Dict):
+async def update_douyin_aweme(aweme_item: Dict, task_id: str = None):
     aweme_id = aweme_item.get("aweme_id")
     user_info = aweme_item.get("author", {})
     interact_info = aweme_item.get("statistics", {})
@@ -132,25 +132,22 @@ async def update_douyin_aweme(aweme_item: Dict):
         "cover_url": _extract_content_cover_url(aweme_item),
         "video_download_url": _extract_video_download_url(aweme_item),
         "source_keyword": source_keyword_var.get(),
+        "task_id": task_id,
     }
     utils.logger.info(
         f"[store.douyin.update_douyin_aweme] douyin aweme id:{aweme_id}, title:{save_content_item.get('title')}"
     )
-    
     # 根据配置选择存储方式
     if config.SAVE_DATA_OPTION == "redis":
-        # 使用Redis存储
         await DouyinStoreFactory.create_store().store_content(
-            content_item=aweme_item  # 传递原始数据给Redis存储
+            content_item=aweme_item if not task_id else {**aweme_item, "task_id": task_id}
         )
     elif config.SAVE_DATA_OPTION == "db":
-        # 使用数据库存储
         await DouyinStoreFactory.create_store().store_content(
             content_item=save_content_item
         )
         utils.logger.info(f"✅ [store.douyin.update_douyin_aweme] 数据已存储到数据库: {aweme_id}")
     else:
-        # 使用其他存储方式
         await DouyinStoreFactory.create_store().store_content(
             content_item=save_content_item
         )

@@ -38,13 +38,14 @@ class TieBaCrawler(AbstractCrawler):
     tieba_client: BaiduTieBaClient
     browser_context: BrowserContext
 
-    def __init__(self) -> None:
+    def __init__(self, task_id: str = None) -> None:
         self.index_url = "https://tieba.baidu.com"
         self.user_agent = utils.get_user_agent()
         # 使用存储工厂创建存储对象
         from store.tieba import TiebaStoreFactory
         self.tieba_store = TiebaStoreFactory.create_store()
         self._page_extractor = TieBaExtractor()
+        self.task_id = task_id
 
     async def start(self) -> None:
         """
@@ -167,7 +168,7 @@ class TieBaCrawler(AbstractCrawler):
         for note_detail in note_details:
             if note_detail is not None:
                 note_details_model.append(note_detail)
-                await self.tieba_store.update_tieba_note(note_detail)
+                await self.tieba_store.update_tieba_note(note_detail, task_id=self.task_id)
         await self.batch_get_note_comments(note_details_model)
 
     async def get_note_detail_async_task(self, note_id: str, semaphore: asyncio.Semaphore) -> Optional[TiebaNote]:

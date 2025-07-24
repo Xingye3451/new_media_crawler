@@ -37,7 +37,7 @@ class DouYinCrawler(AbstractCrawler):
     dy_client: DOUYINClient
     browser_context: BrowserContext
 
-    def __init__(self) -> None:
+    def __init__(self, task_id: str = None) -> None:
         super().__init__()
         self.context_page: Page = None
         self.dy_client: DOUYINClient = None
@@ -46,6 +46,7 @@ class DouYinCrawler(AbstractCrawler):
         # 使用Redis存储实现
         from store.douyin.douyin_store_impl import DouyinRedisStoreImplement
         self.douyin_store = DouyinRedisStoreImplement()
+        self.task_id = task_id
         
     def set_storage_callback(self, callback):
         """设置存储回调函数"""
@@ -155,7 +156,7 @@ class DouYinCrawler(AbstractCrawler):
                     # 添加关键词信息
                     aweme_info["source_keyword"] = keyword
                     # 使用Redis存储
-                    await self.douyin_store.store_content(aweme_info)
+                    await self.douyin_store.store_content({**aweme_info, "task_id": self.task_id} if self.task_id else aweme_info)
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
             await self.batch_get_note_comments(aweme_list)
 
@@ -169,7 +170,7 @@ class DouYinCrawler(AbstractCrawler):
         for aweme_detail in aweme_details:
             if aweme_detail is not None:
                 # 使用Redis存储
-                await self.douyin_store.store_content(aweme_detail)
+                await self.douyin_store.store_content({**aweme_detail, "task_id": self.task_id} if self.task_id else aweme_detail)
         await self.batch_get_note_comments(config.DY_SPECIFIED_ID_LIST)
 
     async def get_aweme_detail(self, aweme_id: str, semaphore: asyncio.Semaphore) -> Any:
@@ -250,7 +251,7 @@ class DouYinCrawler(AbstractCrawler):
         for aweme_item in note_details:
             if aweme_item is not None:
                 # 使用Redis存储
-                await self.douyin_store.store_content(aweme_item)
+                await self.douyin_store.store_content({**aweme_item, "task_id": self.task_id} if self.task_id else aweme_item)
 
     @staticmethod
     def format_proxy_info(ip_proxy_info: IpInfoModel) -> Tuple[Optional[Dict], Optional[Dict]]:

@@ -36,12 +36,13 @@ class KuaishouCrawler(AbstractCrawler):
     ks_client: KuaiShouClient
     browser_context: BrowserContext
 
-    def __init__(self):
+    def __init__(self, task_id: str = None):
         self.index_url = "https://www.kuaishou.com"
         # 使用存储工厂创建存储对象
         from store.kuaishou import KuaishouStoreFactory
         self.kuaishou_store = KuaishouStoreFactory.create_store()
         self.user_agent = utils.get_user_agent()
+        self.task_id = task_id
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -148,7 +149,7 @@ class KuaishouCrawler(AbstractCrawler):
                 search_session_id = vision_search_photo.get("searchSessionId", "")
                 for video_detail in vision_search_photo.get("feeds"):
                     video_id_list.append(video_detail.get("photo", {}).get("id"))
-                    await self.kuaishou_store.update_kuaishou_video(video_item=video_detail)
+                    await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
 
                 # batch fetch video comments
                 page += 1
@@ -164,7 +165,7 @@ class KuaishouCrawler(AbstractCrawler):
         video_details = await asyncio.gather(*task_list)
         for video_detail in video_details:
             if video_detail is not None:
-                await self.kuaishou_store.update_kuaishou_video(video_detail)
+                await self.kuaishou_store.update_kuaishou_video(video_detail, task_id=self.task_id)
         await self.batch_get_video_comments(config.KS_SPECIFIED_ID_LIST)
 
     async def get_video_info_task(
@@ -356,7 +357,7 @@ class KuaishouCrawler(AbstractCrawler):
         video_details = await asyncio.gather(*task_list)
         for video_detail in video_details:
             if video_detail is not None:
-                await self.kuaishou_store.update_kuaishou_video(video_detail)
+                await self.kuaishou_store.update_kuaishou_video(video_detail, task_id=self.task_id)
 
     async def close(self):
         """Close browser context"""

@@ -43,12 +43,13 @@ class BilibiliCrawler(AbstractCrawler):
     bili_client: BilibiliClient
     browser_context: BrowserContext
 
-    def __init__(self):
+    def __init__(self, task_id: str = None):
         self.index_url = "https://www.bilibili.com"
         self.user_agent = utils.get_user_agent()
         # 使用存储工厂创建存储对象
         from store.bilibili import BilibiliStoreFactory
         self.bilibili_store = BilibiliStoreFactory.create_store()
+        self.task_id = task_id
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -186,7 +187,7 @@ class BilibiliCrawler(AbstractCrawler):
                     for video_item in video_items:
                         if video_item:
                             video_id_list.append(video_item.get("View").get("aid"))
-                            await self.bilibili_store.update_bilibili_video(video_item)
+                            await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
                             await self.bilibili_store.update_up_info(video_item)
                             await self.get_bilibili_video(video_item, semaphore)
                     page += 1
@@ -227,7 +228,7 @@ class BilibiliCrawler(AbstractCrawler):
                             for video_item in video_items:
                                 if video_item:
                                     video_id_list.append(video_item.get("View").get("aid"))
-                                    await self.bilibili_store.update_bilibili_video(video_item)
+                                    await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
                                     await self.bilibili_store.update_up_info(video_item)
                                     await self.get_bilibili_video(video_item, semaphore)
                             page += 1
@@ -320,7 +321,7 @@ class BilibiliCrawler(AbstractCrawler):
                 video_aid: str = video_item_view.get("aid")
                 if video_aid:
                     video_aids_list.append(video_aid)
-                await self.bilibili_store.update_bilibili_video(video_detail)
+                await self.bilibili_store.update_bilibili_video(video_detail, task_id=self.task_id)
                 await self.bilibili_store.update_up_info(video_detail)
                 await self.get_bilibili_video(video_detail, semaphore)
         await self.batch_get_video_comments(video_aids_list)

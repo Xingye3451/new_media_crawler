@@ -96,7 +96,7 @@ def get_video_url_arr(note_item: Dict) -> List:
     return []
 
 
-async def update_tieba_note(note_item: TiebaNote):
+async def update_tieba_note(note_item: TiebaNote, task_id: str = None):
     """
     Add or Update tieba note
     Args:
@@ -120,6 +120,7 @@ async def update_tieba_note(note_item: TiebaNote):
         "note_url": note_item.url,
         "source_keyword": source_keyword_var.get(),
         "platform": "tieba",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据

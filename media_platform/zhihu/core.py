@@ -40,13 +40,14 @@ class ZhihuCrawler(AbstractCrawler):
     zhihu_client: ZhiHuClient
     browser_context: BrowserContext
 
-    def __init__(self) -> None:
+    def __init__(self, task_id: str = None):
         self.index_url = "https://www.zhihu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         # 使用存储工厂创建存储对象
         from store.zhihu import ZhihuStoreFactory
         self.zhihu_store = ZhihuStoreFactory.create_store()
+        self.task_id = task_id
         self._extractor = ZhihuExtractor()
 
     async def start(self) -> None:
@@ -149,7 +150,7 @@ class ZhihuCrawler(AbstractCrawler):
 
                     page += 1
                     for content in content_list:
-                        await self.zhihu_store.update_zhihu_content(content)
+                        await self.zhihu_store.update_zhihu_content(content, task_id=self.task_id)
 
                     await self.batch_get_content_comments(content_list)
                 except DataFetchError:
@@ -307,7 +308,7 @@ class ZhihuCrawler(AbstractCrawler):
 
             note_detail = cast(ZhihuContent, note_detail)  # only for type check
             need_get_comment_notes.append(note_detail)
-            await self.zhihu_store.update_zhihu_content(note_detail)
+            await self.zhihu_store.update_zhihu_content(note_detail, task_id=self.task_id)
 
         await self.batch_get_content_comments(need_get_comment_notes)
 

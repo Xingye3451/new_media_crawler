@@ -85,7 +85,7 @@ class CrawlerFactory:
             raise ValueError(f"不支持的平台: {platform}")
 
     @staticmethod
-    def create_crawler(platform: str):
+    def create_crawler(platform: str, task_id: str = None):
         # 检查是否为即将支持的平台
         if platform in CrawlerFactory.COMING_SOON_PLATFORMS:
             platform_name = CrawlerFactory.COMING_SOON_PLATFORMS[platform]
@@ -93,7 +93,7 @@ class CrawlerFactory:
         
         # 检查是否为支持的视频平台
         crawler_class = CrawlerFactory._get_crawler_class(platform)
-        return crawler_class()
+        return crawler_class(task_id=task_id)
 
 async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
     """创建任务记录到数据库"""
@@ -332,7 +332,7 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         await log_task_step(task_id, request.platform, "crawler_init", "创建爬虫实例", "INFO", 40)
         
         try:
-            crawler = CrawlerFactory.create_crawler(request.platform)
+            crawler = CrawlerFactory.create_crawler(request.platform, task_id=task_id)
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
             await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45)
         except PlatformComingSoonException as e:

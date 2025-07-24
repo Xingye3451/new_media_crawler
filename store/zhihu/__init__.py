@@ -97,7 +97,7 @@ def _clear_collected_data():
     _collected_data = []
 
 
-async def update_zhihu_content(content_item: ZhihuContent):
+async def update_zhihu_content(content_item: ZhihuContent, task_id: str = None):
     """
     更新知乎内容
     Args:
@@ -121,6 +121,7 @@ async def update_zhihu_content(content_item: ZhihuContent):
         "note_url": content_item.url,
         "source_keyword": source_keyword_var.get(),
         "platform": "zhihu",  # 添加平台标识
+        "task_id": task_id,
     }
     
     # 收集数据
