@@ -17,6 +17,9 @@ from api.platform_management import router as platform_management_router
 from api.system_management import router as system_management_router
 from api.account_management import account_router
 from api.login_management import login_router
+from api.curl_video_proxy import router as curl_video_proxy_router
+from api.video_favorites import router as video_favorites_router
+from api.video_stream import router as video_stream_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -96,4 +99,25 @@ api_router.include_router(
     login_router,
     prefix="/v1",
     tags=["login-management"]
+)
+
+# 视频代理相关路由
+api_router.include_router(
+    curl_video_proxy_router,
+    prefix="/v1",
+    tags=["video-proxy"]
+)
+
+# 视频收藏相关路由
+api_router.include_router(
+    video_favorites_router,
+    prefix="/v1",
+    tags=["video-favorites"]
+)
+
+# 视频流相关路由
+api_router.include_router(
+    video_stream_router,
+    prefix="/v1",
+    tags=["video-stream"]
 ) 

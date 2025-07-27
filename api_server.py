@@ -43,6 +43,8 @@ app.add_middleware(
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+
 # 全局变量
 task_status = {}
 multi_platform_task_status = {}

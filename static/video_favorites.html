@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的收藏 - MediaCrawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-info h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header-info p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-white {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-white:hover {
+            background: #f8f9fa;
+        }
+
+        .controls-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .search-box {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 250px;
+        }
+
+        .select-box {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .view-toggle {
+            display: flex;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .view-btn {
+            padding: 8px 15px;
+            border: none;
+            background: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .view-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .favorites-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .favorites-list {
+            padding: 0;
+        }
+
+        .favorite-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .favorite-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .favorite-thumbnail {
+            width: 100%;
+            height: 180px;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .favorite-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .favorite-thumbnail .play-icon {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5em;
+        }
+
+        .favorite-info {
+            padding: 15px;
+        }
+
+        .favorite-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .favorite-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .favorite-stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #666;
+        }
+
+        .favorite-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
+        .favorite-list-item {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .favorite-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-thumbnail {
+            width: 120px;
+            height: 80px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .list-content {
+            flex: 1;
+        }
+
+        .list-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .page-btn {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .page-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .controls-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filter-group {
+                justify-content: space-between;
+            }
+            
+            .search-box {
+                width: 200px;
+            }
+            
+            .favorites-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .favorite-list-item {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-info">
+                    <h1>📚 我的收藏</h1>
+                    <p>管理您收藏的视频内容</p>
+                </div>
+                <div class="header-actions">
+                    <a href="/static/task_results.html" class="btn btn-white">← 返回任务</a>
+                    <button class="btn btn-white" onclick="cleanupCache()">清理缓存</button>
+                    <button class="btn btn-white" onclick="exportFavorites()">导出收藏</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="controls-section">
+            <div class="controls-row">
+                <div class="filter-group">
+                    <select class="select-box" id="platformFilter" onchange="filterFavorites()">
+                        <option value="">所有平台</option>
+                        <option value="dy">抖音</option>
+                        <option value="xhs">小红书</option>
+                        <option value="ks">快手</option>
+                        <option value="bili">哔哩哔哩</option>
+                        <option value="wb">微博</option>
+                        <option value="zhihu">知乎</option>
+                    </select>
+                    <select class="select-box" id="statusFilter" onchange="filterFavorites()">
+                        <option value="">所有状态</option>
+                        <option value="pending">待下载</option>
+                        <option value="completed">已下载</option>
+                        <option value="failed">下载失败</option>
+                    </select>
+                    <input type="text" class="search-box" placeholder="搜索视频..." id="searchBox" oninput="filterFavorites()">
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" onclick="switchView('grid')">网格</button>
+                    <button class="view-btn" onclick="switchView('list')">列表</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 收藏列表 -->
+        <div id="favoritesContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>正在加载收藏列表...</div>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- 视频预览模态框 -->
+    <div class="modal" id="videoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>视频预览</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalContent">
+                <!-- 动态内容 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let pageSize = 20;
+        let currentView = 'grid';
+        let favorites = [];
+        let filteredFavorites = [];
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFavorites();
+        });
+
+        // 加载收藏列表
+        async function loadFavorites() {
+            try {
+                const response = await fetch(`/api/v1/favorites/list?page=${currentPage}&page_size=${pageSize}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    favorites = data.data.items;
+                    filteredFavorites = [...favorites];
+                    renderFavorites();
+                    renderPagination(data.data.total_pages);
+                } else {
+                    console.error('加载收藏列表失败');
+                }
+            } catch (error) {
+                console.error('加载收藏列表失败:', error);
+            }
+        }
+
+        // 渲染收藏列表
+        function renderFavorites() {
+            const container = document.getElementById('favoritesContainer');
+            
+            if (filteredFavorites.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #666;">
+                        <div style="font-size: 3em; margin-bottom: 20px;">📚</div>
+                        <h3>暂无收藏内容</h3>
+                        <p>您还没有收藏任何视频</p>
+                    </div>
+                `;
+                return;
+            }
+
+            if (currentView === 'grid') {
+                renderGridView(container);
+            } else {
+                renderListView(container);
+            }
+        }
+
+        // 网格视图
+        function renderGridView(container) {
+            container.innerHTML = `<div class="favorites-grid" id="favoritesGrid"></div>`;
+            const grid = document.getElementById('favoritesGrid');
+
+            filteredFavorites.forEach(favorite => {
+                const favoriteCard = document.createElement('div');
+                favoriteCard.className = 'favorite-card';
+                favoriteCard.innerHTML = `
+                    <div class="favorite-thumbnail" onclick="previewVideo('${favorite.file_hash}')">
+                        ${favorite.thumbnail_url ? `<img src="${getThumbnail(favorite)}" alt="${favorite.title}">` : ''}
+                        <div class="play-icon">▶</div>
+                    </div>
+                    <div class="favorite-info">
+                        <div class="favorite-title">${favorite.title || '无标题'}</div>
+                        <div class="favorite-meta">
+                            <span>@${favorite.author_name || '未知用户'}</span>
+                            <span class="status-badge status-${favorite.download_status}">${getStatusText(favorite.download_status)}</span>
+                        </div>
+                        <div class="favorite-stats">
+                            <div class="stat-item">
+                                <span>📅</span>
+                                <span>${formatDate(favorite.created_at)}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>💾</span>
+                                <span>${formatBytes(favorite.file_size || 0)}</span>
+                            </div>
+                        </div>
+                        <div class="favorite-actions">
+                            <button class="btn btn-primary btn-sm" onclick="previewVideo('${favorite.file_hash}')">▶️ 预览</button>
+                            ${favorite.storage_type === 'minio' && favorite.download_status === 'completed' ? 
+                                `<button class="btn btn-success btn-sm" onclick="downloadFavoriteVideo('${favorite.file_hash}')">📥 下载</button>` :
+                                `<button class="btn btn-info btn-sm" onclick="downloadFavorite('${favorite.file_hash}')">⬇️ 下载到MinIO</button>`
+                            }
+                            <button class="btn btn-info btn-sm" onclick="viewDetails('${favorite.file_hash}')">📋 详情</button>
+                            <button class="btn btn-danger btn-sm" onclick="removeFavorite('${favorite.file_hash}')">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(favoriteCard);
+            });
+        }
+
+        // 列表视图
+        function renderListView(container) {
+            container.innerHTML = `<div class="favorites-list" id="favoritesList"></div>`;
+            const list = document.getElementById('favoritesList');
+
+            filteredFavorites.forEach(favorite => {
+                const listItem = document.createElement('div');
+                listItem.className = 'favorite-list-item';
+                listItem.innerHTML = `
+                    <div class="list-thumbnail">
+                        ${favorite.thumbnail_url ? `<img src="${getThumbnail(favorite)}" alt="${favorite.title}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 5px;">` : '📹'}
+                    </div>
+                    <div class="list-content">
+                        <div class="favorite-title">${favorite.title || '无标题'}</div>
+                        <div class="favorite-meta">
+                            <span>@${favorite.author_name || '未知用户'}</span>
+                            <span>${formatDate(favorite.created_at)}</span>
+                            <span class="status-badge status-${favorite.download_status}">${getStatusText(favorite.download_status)}</span>
+                        </div>
+                        <div class="favorite-stats">
+                            <div class="stat-item">
+                                <span>💾 ${formatBytes(favorite.file_size || 0)}</div>
+                            <div class="stat-item">
+                                <span>📅 ${formatDate(favorite.created_at)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="list-actions">
+                        <button class="btn btn-primary btn-sm" onclick="previewVideo('${favorite.file_hash}')">▶️ 预览</button>
+                        ${favorite.storage_type === 'minio' && favorite.download_status === 'completed' ? 
+                            `<button class="btn btn-success btn-sm" onclick="downloadFavoriteVideo('${favorite.file_hash}')">📥 下载</button>` :
+                            `<button class="btn btn-info btn-sm" onclick="downloadFavorite('${favorite.file_hash}')">⬇️ 下载到MinIO</button>`
+                        }
+                        <button class="btn btn-info btn-sm" onclick="viewDetails('${favorite.file_hash}')">📋 详情</button>
+                        <button class="btn btn-danger btn-sm" onclick="removeFavorite('${favorite.file_hash}')">🗑️ 删除</button>
+                    </div>
+                `;
+                list.appendChild(listItem);
+            });
+        }
+
+        // 切换视图
+        function switchView(view) {
+            currentView = view;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            renderFavorites();
+        }
+
+        // 筛选收藏
+        function filterFavorites() {
+            const platformFilter = document.getElementById('platformFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            const searchText = document.getElementById('searchBox').value.toLowerCase();
+
+            filteredFavorites = favorites.filter(favorite => {
+                const platformMatch = !platformFilter || favorite.platform === platformFilter;
+                const statusMatch = !statusFilter || favorite.download_status === statusFilter;
+                const searchMatch = !searchText || 
+                    favorite.title?.toLowerCase().includes(searchText) ||
+                    favorite.author_name?.toLowerCase().includes(searchText);
+
+                return platformMatch && statusMatch && searchMatch;
+            });
+
+            renderFavorites();
+        }
+
+        // 渲染分页
+        function renderPagination(totalPages) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `page-btn ${i === currentPage ? 'active' : ''}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => changePage(i);
+                pagination.appendChild(pageBtn);
+            }
+        }
+
+        // 切换页面
+        function changePage(page) {
+            currentPage = page;
+            loadFavorites();
+        }
+
+        // 预览视频（基于MinIO）
+        async function previewVideo(fileHash) {
+            try {
+                // 获取收藏详情
+                const detailResponse = await fetch(`/api/v1/favorites/${fileHash}`);
+                const detailData = await detailResponse.json();
+                
+                if (detailData.code !== 200) {
+                    alert('获取视频信息失败');
+                    return;
+                }
+                
+                const favorite = detailData.data;
+                const modalContent = document.getElementById('modalContent');
+                
+                // 检查是否已下载到MinIO
+                if (favorite.storage_type !== 'minio' || !favorite.minio_object_key) {
+                    modalContent.innerHTML = `
+                        <div style="text-align: center;">
+                            <h4>${favorite.title || '无标题'}</h4>
+                            <p style="color: #666; margin: 10px 0;">@${favorite.author_name || '未知用户'}</p>
+                            <p style="color: #ff6b6b; margin: 20px 0;">⚠️ 视频尚未下载到MinIO存储</p>
+                            <p style="color: #666; font-size: 0.9em;">下载状态: ${getStatusText(favorite.download_status)}</p>
+                            <div style="margin-top: 20px;">
+                                <button class="btn btn-primary" onclick="downloadFavorite('${fileHash}')">下载到MinIO</button>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('videoModal').classList.add('show');
+                    return;
+                }
+                
+                // 获取MinIO预览URL
+                const previewResponse = await fetch(`/api/v1/favorites/${fileHash}/preview`);
+                const previewData = await previewResponse.json();
+                
+                if (previewData.code === 200) {
+                    const previewUrl = previewData.data.preview_url;
+                    
+                    modalContent.innerHTML = `
+                        <div style="text-align: center;">
+                            <h4>${favorite.title || '无标题'}</h4>
+                            <p style="color: #666; margin: 10px 0;">@${favorite.author_name || '未知用户'}</p>
+                            <video controls style="max-width: 100%; max-height: 400px;">
+                                <source src="${previewUrl}" type="video/mp4">
+                                您的浏览器不支持视频播放
+                            </video>
+                            <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                💡 基于MinIO存储，稳定可靠
+                            </div>
+                            <div style="margin-top: 20px;">
+                                <button class="btn btn-success" onclick="downloadFavoriteVideo('${fileHash}')">📥 下载到本地</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    modalContent.innerHTML = `
+                        <div style="text-align: center;">
+                            <h4>${favorite.title || '无标题'}</h4>
+                            <p style="color: #666; margin: 10px 0;">@${favorite.author_name || '未知用户'}</p>
+                            <p style="color: #ff6b6b; margin: 20px 0;">❌ 获取预览链接失败</p>
+                            <p style="color: #666; font-size: 0.9em;">${previewData.message}</p>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('videoModal').classList.add('show');
+            } catch (error) {
+                console.error('预览失败:', error);
+                alert('预览失败: ' + error.message);
+            }
+        }
+
+        // 下载收藏视频到MinIO
+        async function downloadFavorite(fileHash) {
+            try {
+                const response = await fetch('/api/v1/favorites/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file_hash: fileHash,
+                        storage_type: 'minio'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert('下载任务已提交，正在下载到MinIO...');
+                    // 重新加载列表
+                    setTimeout(() => loadFavorites(), 2000);
+                } else {
+                    alert('下载失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('下载失败:', error);
+                alert('下载失败');
+            }
+        }
+
+        // 下载收藏视频到本地（基于MinIO）
+        async function downloadFavoriteVideo(fileHash) {
+            try {
+                // 显示下载中状态
+                const downloadBtn = event.target;
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = '下载中...';
+                downloadBtn.disabled = true;
+
+                // 调用MinIO下载API
+                const response = await fetch(`/api/v1/favorites/${fileHash}/download`);
+                
+                if (response.ok) {
+                    // 获取文件流并下载
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 从响应头获取文件名
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = `favorite_${fileHash}.mp4`;
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename=(.+)/);
+                        if (filenameMatch) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    alert(`✅ 下载成功！\n文件名: ${filename}\n大小: ${formatBytes(blob.size)}`);
+                } else {
+                    const errorData = await response.json();
+                    alert('❌ 下载失败: ' + (errorData.detail || '未知错误'));
+                }
+            } catch (error) {
+                console.error('下载失败:', error);
+                alert('❌ 下载失败，请稍后重试');
+            } finally {
+                // 恢复按钮状态
+                const downloadBtn = event.target;
+                downloadBtn.textContent = originalText;
+                downloadBtn.disabled = false;
+            }
+        }
+
+        // 查看详情
+        function viewDetails(fileHash) {
+            const favorite = favorites.find(f => f.file_hash === fileHash);
+            if (!favorite) return;
+
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = `
+                <div>
+                    <h4>视频详情</h4>
+                    <div style="margin: 15px 0;">
+                        <p><strong>标题:</strong> ${favorite.title || '无标题'}</p>
+                        <p><strong>作者:</strong> ${favorite.author_name || '未知用户'}</p>
+                        <p><strong>平台:</strong> ${getPlatformText(favorite.platform)}</p>
+                        <p><strong>内容ID:</strong> ${favorite.content_id}</p>
+                        <p><strong>存储类型:</strong> ${favorite.storage_type}</p>
+                        <p><strong>下载状态:</strong> <span class="status-badge status-${favorite.download_status}">${getStatusText(favorite.download_status)}</span></p>
+                        <p><strong>文件大小:</strong> ${formatBytes(favorite.file_size || 0)}</p>
+                        <p><strong>创建时间:</strong> ${formatDate(favorite.created_at)}</p>
+                        <p><strong>最后访问:</strong> ${formatDate(favorite.last_accessed_at)}</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('videoModal').classList.add('show');
+        }
+
+        // 移除收藏
+        async function removeFavorite(fileHash) {
+            if (!confirm('确定要删除这个收藏吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/favorites/${fileHash}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert('删除成功');
+                    loadFavorites();
+                } else {
+                    alert('删除失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败');
+            }
+        }
+
+        // 清理缓存
+        async function cleanupCache() {
+            try {
+                const response = await fetch('/api/v1/stream/cleanup', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert('缓存清理完成');
+                } else {
+                    alert('清理失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('清理失败:', error);
+                alert('清理失败');
+            }
+        }
+
+        // 导出收藏
+        function exportFavorites() {
+            const dataStr = JSON.stringify(filteredFavorites, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `favorites_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('videoModal').classList.remove('show');
+        }
+
+        // 工具函数
+        function getThumbnail(favorite) {
+            if (favorite.thumbnail_url) {
+                const encodedUrl = encodeURIComponent(favorite.thumbnail_url);
+                return `/api/v1/curl-proxy/thumbnail?url=${encodedUrl}`;
+            }
+            return '/static/default-thumbnail.jpg';
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '未知时间';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function getPlatformText(platform) {
+            const platforms = {
+                'dy': '抖音',
+                'xhs': '小红书',
+                'ks': '快手',
+                'bili': '哔哩哔哩',
+                'wb': '微博',
+                'zhihu': '知乎'
+            };
+            return platforms[platform] || platform;
+        }
+
+        function getStatusText(status) {
+            const statusTexts = {
+                'pending': '待下载',
+                'downloading': '下载中',
+                'completed': '已下载',
+                'failed': '下载失败',
+                'expired': '已过期'
+            };
+            return statusTexts[status] || '未知';
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('videoModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html> 
+</html> 

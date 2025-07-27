@@ -298,6 +298,15 @@
             background: #218838;
         }
 
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
         .video-list-item {
             padding: 20px;
             border-bottom: 1px solid #eee;
@@ -464,7 +473,9 @@
                 </div>
                 <div class="header-actions">
                     <a href="/static/task_results.html" class="btn btn-white">← 返回列表</a>
+                    <a href="/static/video_favorites.html" class="btn btn-white">📚 我的收藏</a>
                     <button class="btn btn-white" onclick="downloadAll()">批量下载</button>
+
                     <button class="btn btn-white" onclick="exportData()">导出数据</button>
                 </div>
             </div>
@@ -702,9 +713,10 @@
                             </div>
                         </div>
                         <div class="video-actions">
-                            <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">预览</button>
-                            <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">下载</button>
-                            <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">评论</button>
+                            <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">▶️ 预览</button>
+                            <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
+                            <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
+                            <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
                         </div>
                     </div>
                 `;
@@ -743,9 +755,10 @@
                         </div>
                     </div>
                     <div class="list-actions">
-                        <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">预览</button>
-                        <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">下载</button>
-                        <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">评论</button>
+                        <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">▶️ 预览</button>
+                        <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
+                        <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
+                        <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
                     </div>
                 `;
                 list.appendChild(listItem);
@@ -788,7 +801,7 @@
         }
 
         // 预览视频
-        function previewVideo(videoId) {
+        async function previewVideo(videoId) {
             const video = videos.find(v => 
                 v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId
             );
@@ -796,18 +809,49 @@
             if (!video) return;
 
             const modalContent = document.getElementById('modalContent');
+            
+            // 使用后端访问转换API播放视频
+            let videoSrc = '';
+            if (video.video_url) {
+                const encodedUrl = encodeURIComponent(video.video_url);
+                const platform = taskInfo.task_info?.platform || 'unknown';
+                const contentId = video.aweme_id || video.note_id || video.video_id;
+                
+                // 先获取流信息
+                try {
+                    const streamResponse = await fetch(`/api/v1/stream/video?video_url=${encodedUrl}&platform=${platform}&content_id=${contentId}`);
+                    const streamData = await streamResponse.json();
+                    
+                    if (streamData.code === 200 && streamData.data.success) {
+                        videoSrc = streamData.data.stream_url;
+                    } else {
+                        console.error('获取流信息失败:', streamData.message);
+                        // 降级到原始代理
+                        videoSrc = `/api/v1/curl-proxy/video?url=${encodedUrl}`;
+                    }
+                } catch (error) {
+                    console.error('获取流信息失败:', error);
+                    // 降级到原始代理
+                    videoSrc = `/api/v1/curl-proxy/video?url=${encodedUrl}`;
+                }
+            }
+            
             modalContent.innerHTML = `
                 <div style="text-align: center;">
                     <h4>${video.desc || video.title || '无标题'}</h4>
                     <p style="color: #666; margin: 10px 0;">@${video.nickname || video.user_name || '未知用户'}</p>
-                    ${video.video_url ? `
+                    ${videoSrc ? `
                         <video controls style="max-width: 100%; max-height: 400px;">
-                            <source src="${video.video_url}" type="video/mp4">
+                            <source src="${videoSrc}" type="video/mp4">
                             您的浏览器不支持视频播放
                         </video>
+                        <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                            💡 使用后端访问转换，避免防盗链问题
+                        </div>
                     ` : '<p>暂无视频预览</p>'}
                     <div style="margin-top: 20px;">
-                        <button class="btn btn-success" onclick="downloadVideo('${videoId}')">下载视频</button>
+                        <button class="btn btn-success" onclick="downloadVideo('${videoId}')">📥 下载到本地</button>
+                        <button class="btn btn-info" onclick="addToFavorites('${videoId}')" style="margin-left: 10px;">⭐ 收藏视频</button>
                     </div>
                 </div>
             `;
@@ -827,7 +871,17 @@
                     return;
                 }
 
-                // 调用下载API
+                // 显示下载中提示
+                const downloadBtn = event.target;
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = '下载中...';
+                downloadBtn.disabled = true;
+
+                // 生成文件名
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+                const filename = `${taskInfo.task_info?.platform || 'unknown'}_${videoId}_${timestamp}.mp4`;
+
+                // 创建下载链接
                 const response = await fetch('/api/v1/videos/download', {
                     method: 'POST',
                     headers: {
@@ -841,15 +895,30 @@
                     })
                 });
 
-                const data = await response.json();
-                if (data.code === 200) {
-                    alert('下载任务已提交');
+                if (response.ok) {
+                    // 获取文件流并下载
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    // 静默下载，不显示弹窗
                 } else {
-                    alert('下载失败: ' + data.message);
+                    alert('❌ 下载失败，请稍后重试');
                 }
             } catch (error) {
                 console.error('下载失败:', error);
-                alert('下载失败');
+                alert('❌ 下载失败，请稍后重试');
+            } finally {
+                // 恢复按钮状态
+                const downloadBtn = event.target;
+                downloadBtn.textContent = originalText;
+                downloadBtn.disabled = false;
             }
         }
 
@@ -859,21 +928,78 @@
         }
 
         // 批量下载
-        function downloadAll() {
+        async function downloadAll() {
             if (videos.length === 0) {
                 alert('没有可下载的视频');
                 return;
             }
             
-            if (confirm(`确定要下载所有 ${videos.length} 个视频吗？`)) {
-                videos.forEach(video => {
+            if (confirm(`确定要下载所有 ${videos.length} 个视频吗？\n\n注意：这将逐个下载视频到您的本地电脑，可能需要较长时间。`)) {
+                const downloadBtn = event.target;
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = '批量下载中...';
+                downloadBtn.disabled = true;
+                
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (let i = 0; i < videos.length; i++) {
+                    const video = videos[i];
                     const videoId = video.aweme_id || video.note_id || video.video_id;
-                    if (videoId) {
-                        downloadVideo(videoId);
+                    if (videoId && video.video_url) {
+                        try {
+                            // 生成文件名
+                            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+                            const filename = `${taskInfo.task_info?.platform || 'unknown'}_${videoId}_${timestamp}.mp4`;
+                            
+                            const response = await fetch('/api/v1/videos/download', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    video_url: video.video_url,
+                                    video_id: videoId,
+                                    platform: taskInfo.task_info?.platform || 'unknown',
+                                    download_type: 'local'
+                                })
+                            });
+
+                            if (response.ok) {
+                                // 获取文件流并下载
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                                document.body.removeChild(a);
+                                
+                                successCount++;
+                                
+                                // 添加延迟，避免浏览器阻止多个下载
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+                            } else {
+                                failCount++;
+                            }
+                        } catch (error) {
+                            console.error(`下载失败 ${videoId}:`, error);
+                            failCount++;
+                        }
                     }
-                });
+                }
+                
+                // 静默完成，不显示弹窗
+                
+                // 恢复按钮状态
+                downloadBtn.textContent = originalText;
+                downloadBtn.disabled = false;
             }
         }
+
+
 
         // 导出数据
         function exportData() {
@@ -900,8 +1026,67 @@
 
         // 工具函数
         function getThumbnail(video) {
-            // 这里可以添加缩略图逻辑
+            // 使用视频代理API获取缩略图
+            if (video.cover_url) {
+                const encodedUrl = encodeURIComponent(video.cover_url);
+                return `/api/v1/curl-proxy/thumbnail?url=${encodedUrl}`;
+            }
             return video.thumbnail || '/static/default-thumbnail.jpg';
+        }
+
+        // 添加收藏功能
+        async function addToFavorites(videoId) {
+            try {
+                const video = videos.find(v => 
+                    v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId
+                );
+                
+                if (!video) {
+                    alert('视频信息不存在');
+                    return;
+                }
+
+                const favoriteData = {
+                    platform: taskInfo.task_info?.platform || 'unknown',
+                    content_id: videoId,
+                    task_id: taskId,
+                    original_url: video.video_url || '',
+                    title: video.desc || video.title || '无标题',
+                    author_name: video.nickname || video.user_name || '未知用户',
+                    thumbnail_url: video.cover_url || '',
+                    metadata: {
+                        aweme_id: video.aweme_id,
+                        note_id: video.note_id,
+                        video_id: video.video_id,
+                        create_time: video.create_time,
+                        digg_count: video.digg_count,
+                        comment_count: video.comment_count,
+                        collect_count: video.collect_count
+                    }
+                };
+
+                const response = await fetch('/api/v1/favorites/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(favoriteData)
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    if (data.data.download_status === 'downloading') {
+                        alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n您可以在"我的收藏"页面查看下载进度。');
+                    } else {
+                        alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，可以在"我的收藏"页面查看和管理。');
+                    }
+                } else {
+                    alert('❌ 收藏失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('收藏失败:', error);
+                alert('收藏失败，请稍后重试');
+            }
         }
 
         function formatDate(dateString) {

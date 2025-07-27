@@ -360,12 +360,24 @@ class DouyinRedisStoreImplement(AbstractStore):
             aweme_detail: Dict = await query_content_by_content_id(content_id=aweme_id)
             task_id = content_item.get("task_id")
             if not aweme_detail:
-                content_item["add_ts"] = utils.get_current_timestamp()
-                if content_item.get("title") or content_item.get("desc"):
-                    await add_new_content(content_item, task_id=task_id)
+                # 使用处理过的数据存储到数据库，确保URL正确
+                db_content_item = content_item.copy()
+                db_content_item.update({
+                    "aweme_url": processed_content.get("aweme_url"),
+                    "download_url": processed_content.get("download_url"),
+                    "add_ts": utils.get_current_timestamp()
+                })
+                if db_content_item.get("title") or db_content_item.get("desc"):
+                    await add_new_content(db_content_item, task_id=task_id)
                     utils.logger.info(f"✅ [DouyinRedisStore] 数据已存储到数据库: {aweme_id}")
             else:
-                await update_content_by_content_id(aweme_id, content_item=content_item)
+                # 更新时也使用处理过的URL
+                update_content_item = content_item.copy()
+                update_content_item.update({
+                    "aweme_url": processed_content.get("aweme_url"),
+                    "download_url": processed_content.get("download_url")
+                })
+                await update_content_by_content_id(aweme_id, content_item=update_content_item)
                 utils.logger.info(f"✅ [DouyinRedisStore] 数据已更新到数据库: {aweme_id}")
         except Exception as e:
             utils.logger.error(f"❌ [DouyinRedisStore] 数据库存储失败: {aweme_id}, 错误: {e}")

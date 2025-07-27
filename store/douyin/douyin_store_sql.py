@@ -123,21 +123,64 @@ def fill_fields_from_all_sources(safe_item, content_item):
             # user_unique_id/short_user_id
             safe_item.setdefault("user_unique_id", author_data.get("unique_id", ""))
             safe_item.setdefault("short_user_id", author_data.get("short_id", ""))
+            # 只保留用户名称，不存储完整的 author JSON
+            safe_item["author"] = author_data.get("nickname", "")
         except Exception as e:
             utils.logger.warning(f"[拍平author] 解析失败: {e}")
+            # 如果解析失败，尝试直接获取 nickname
+            if isinstance(safe_item["author"], str):
+                try:
+                    import json
+                    author_data = json.loads(safe_item["author"])
+                    safe_item["author"] = author_data.get("nickname", "")
+                except:
+                    safe_item["author"] = ""
+            else:
+                safe_item["author"] = ""
 
     # 3. video 字段拍平
     video = content_item.get("video")
     if video:
+        # 优先使用直接播放URL（通常防盗链更宽松）
         play_addr = video.get("play_addr")
         if play_addr and play_addr.get("url_list"):
             safe_item.setdefault("video_play_url", play_addr["url_list"][0])
+        
+        # 如果没有播放URL，尝试其他可能的URL字段
+        if not safe_item.get("video_play_url"):
+            # 检查是否有其他播放URL字段
+            for url_field in ["play_url", "video_url", "url"]:
+                if video.get(url_field):
+                    if isinstance(video[url_field], list):
+                        safe_item.setdefault("video_play_url", video[url_field][0])
+                    else:
+                        safe_item.setdefault("video_play_url", video[url_field])
+                    break
+        
+        # 下载URL作为备选
         download_addr = video.get("download_addr")
         if download_addr and download_addr.get("url_list"):
             safe_item.setdefault("video_download_url", download_addr["url_list"][0])
+        
+        # 如果没有播放URL，使用下载URL作为播放URL
+        if not safe_item.get("video_play_url") and safe_item.get("video_download_url"):
+            safe_item["video_play_url"] = safe_item["video_download_url"]
+        
+        # 封面URL
         cover = video.get("cover")
         if cover and cover.get("url_list"):
             safe_item.setdefault("cover_url", cover["url_list"][0])
+    
+    # 4. 检查是否有直接的下载URL字段（如日志中显示的格式）
+    # 这些字段可能包含类似 https://www.douyin.com/aweme/v1/play/?video_id=... 的URL
+    for direct_url_field in ["download_url", "play_url", "video_url"]:
+        if content_item.get(direct_url_field) and not safe_item.get("video_download_url"):
+            safe_item["video_download_url"] = content_item[direct_url_field]
+            break
+    
+    # 5. 确保download_url字段正确映射到video_download_url
+    if content_item.get("download_url") and not safe_item.get("video_download_url"):
+        safe_item["video_download_url"] = content_item["download_url"]
 
     # 4. statistics 字段拍平
     statistics = content_item.get("statistics")
@@ -155,6 +198,16 @@ def fill_fields_from_all_sources(safe_item, content_item):
         safe_item.setdefault("video_share_url", share_info.get("share_url", ""))
     elif safe_item.get("aweme_url"):
         safe_item.setdefault("video_share_url", safe_item["aweme_url"])
+    
+    # 6. 确保aweme_url存储播放页链接，video_download_url存储下载链接
+    aweme_id = content_item.get("aweme_id")
+    if aweme_id:
+        # 优先使用构造的播放页链接，而不是share_info中的分享链接
+        safe_item["aweme_url"] = f"https://www.douyin.com/video/{aweme_id}"
+    
+    # 如果video_play_url存在，优先使用它作为video_download_url
+    if safe_item.get("video_play_url") and not safe_item.get("video_download_url"):
+        safe_item["video_download_url"] = safe_item["video_play_url"]
 
     # 6. tags from text_extra
     text_extra = content_item.get("text_extra")

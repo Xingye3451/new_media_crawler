@@ -48,16 +48,20 @@ class TaskResultService:
     async def get_task_detail(self, task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务详情"""
         try:
-            # 获取任务基本信息
+            # 先从Redis获取任务基本信息
             task_info = await self.redis_manager.get_task_info(task_id)
+            
+            # 如果Redis没有，从数据库获取
             if not task_info:
-                return None
+                task_info = await self._get_task_from_database(task_id)
+                if not task_info:
+                    return None
             
             # 获取统计信息
-            stats = await self.redis_manager.get_task_statistics(task_id)
+            stats = await self._get_task_statistics_from_database(task_id)
             
             # 获取视频列表（前10个）
-            videos = await self.redis_manager.get_task_videos(task_id, page=1, page_size=10)
+            videos = await self._get_task_videos_from_database(task_id, page=1, page_size=10)
             
             return {
                 'task_info': task_info,
@@ -73,7 +77,14 @@ class TaskResultService:
     async def get_task_videos(self, task_id: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
         """获取任务的视频列表"""
         try:
-            return await self.redis_manager.get_task_videos(task_id, page=page, page_size=page_size)
+            # 先从Redis获取
+            videos = await self.redis_manager.get_task_videos(task_id, page=page, page_size=page_size)
+            
+            # 如果Redis没有数据，从数据库获取
+            if not videos.get('videos'):
+                videos = await self._get_task_videos_from_database(task_id, page=page, page_size=page_size)
+            
+            return videos
         except Exception as e:
             logger.error(f"获取任务视频列表失败 {task_id}: {str(e)}")
             return {
@@ -324,4 +335,239 @@ class TaskResultService:
             return await self.redis_manager.cleanup_expired_tasks(days)
         except Exception as e:
             logger.error(f"清理过期任务失败: {str(e)}")
-            return 0 
+            return 0
+
+    async def _get_task_from_database(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """从数据库获取任务信息"""
+        try:
+            db = await _get_db_connection()
+            
+            # 查询crawler_tasks表
+            query = """
+                SELECT * FROM crawler_tasks 
+                WHERE id = %s AND deleted = 0
+            """
+            result = await db.get_first(query, task_id)
+            
+            if result:
+                return {
+                    'task_id': result.get('id'),
+                    'platform': result.get('platform'),
+                    'keywords': result.get('keywords', ''),
+                    'status': result.get('status'),
+                    'created_at': result.get('created_at').isoformat() if result.get('created_at') else None,
+                    'updated_at': result.get('updated_at').isoformat() if result.get('updated_at') else None,
+                    'progress': result.get('progress'),
+                    'result_count': result.get('result_count'),
+                    'error_message': result.get('error_message'),
+                    'user_id': result.get('user_id'),
+                    'task_type': result.get('task_type')
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"从数据库获取任务失败 {task_id}: {str(e)}")
+            return None
+
+    async def _get_task_statistics_from_database(self, task_id: str) -> Dict[str, Any]:
+        """从数据库获取任务统计信息"""
+        try:
+            db = await _get_db_connection()
+            
+            # 获取任务信息
+            task_query = """
+                SELECT platform FROM crawler_tasks 
+                WHERE id = %s AND deleted = 0
+            """
+            task_result = await db.get_first(task_query, task_id)
+            
+            if not task_result:
+                return {
+                    "total_videos": 0,
+                    "total_comments": 0,
+                    "platforms": "",
+                    "completed_at": ""
+                }
+            
+            platform = task_result.get('platform')
+            
+            # 根据平台查询对应的表
+            table_mapping = {
+                'dy': 'douyin_aweme',
+                'xhs': 'xhs_note',
+                'ks': 'kuaishou_video',
+                'bili': 'bilibili_video',
+                'wb': 'weibo_note',
+                'zhihu': 'zhihu_video'
+            }
+            
+            table_name = table_mapping.get(platform)
+            if not table_name:
+                return {
+                    "total_videos": 0,
+                    "total_comments": 0,
+                    "platforms": platform,
+                    "completed_at": ""
+                }
+            
+            # 统计视频数量
+            video_count_query = f"""
+                SELECT COUNT(*) as total FROM {table_name} 
+                WHERE task_id = %s
+            """
+            video_result = await db.get_first(video_count_query, task_id)
+            total_videos = video_result.get('total', 0) if video_result else 0
+            
+            # 统计评论数量（如果有评论表）
+            total_comments = 0
+            comment_table_mapping = {
+                'dy': 'douyin_aweme_comment',
+                'xhs': 'xhs_note_comment',
+                'ks': 'kuaishou_video_comment',
+                'bili': 'bilibili_video_comment',
+                'wb': 'weibo_note_comment',
+                'zhihu': 'zhihu_video_comment'
+            }
+            
+            comment_table = comment_table_mapping.get(platform)
+            if comment_table:
+                try:
+                    comment_count_query = f"""
+                        SELECT COUNT(*) as total FROM {comment_table} 
+                        WHERE task_id = %s
+                    """
+                    comment_result = await db.get_first(comment_count_query, task_id)
+                    total_comments = comment_result.get('total', 0) if comment_result else 0
+                except:
+                    pass
+            
+            return {
+                "total_videos": total_videos,
+                "total_comments": total_comments,
+                "platforms": platform,
+                "completed_at": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"从数据库获取任务统计失败 {task_id}: {str(e)}")
+            return {
+                "total_videos": 0,
+                "total_comments": 0,
+                "platforms": "",
+                "completed_at": ""
+            }
+
+    async def _get_task_videos_from_database(self, task_id: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+        """从数据库获取任务视频列表"""
+        try:
+            db = await _get_db_connection()
+            
+            # 获取任务信息
+            task_query = """
+                SELECT platform FROM crawler_tasks 
+                WHERE id = %s AND deleted = 0
+            """
+            task_result = await db.get_first(task_query, task_id)
+            
+            if not task_result:
+                return {
+                    'videos': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            
+            platform = task_result.get('platform')
+            
+            # 根据平台查询对应的表
+            table_mapping = {
+                'dy': 'douyin_aweme',
+                'xhs': 'xhs_note',
+                'ks': 'kuaishou_video',
+                'bili': 'bilibili_video',
+                'wb': 'weibo_note',
+                'zhihu': 'zhihu_video'
+            }
+            
+            table_name = table_mapping.get(platform)
+            if not table_name:
+                return {
+                    'videos': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            
+            # 计算偏移量
+            offset = (page - 1) * page_size
+            
+            # 查询总数
+            count_query = f"""
+                SELECT COUNT(*) as total FROM {table_name} 
+                WHERE task_id = %s
+            """
+            count_result = await db.get_first(count_query, task_id)
+            total = count_result.get('total', 0) if count_result else 0
+            
+            if total == 0:
+                return {
+                    'videos': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
+            
+            # 查询视频列表
+            videos_query = f"""
+                SELECT * FROM {table_name} 
+                WHERE task_id = %s
+                ORDER BY add_ts DESC
+                LIMIT %s OFFSET %s
+            """
+            videos_result = await db.query(videos_query, task_id, page_size, offset)
+            
+            # 转换视频数据格式
+            videos = []
+            for row in videos_result:
+                video_data = {
+                    'aweme_id': row.get('aweme_id') or row.get('note_id') or row.get('video_id'),
+                    'title': row.get('title') or row.get('desc', ''),
+                    'desc': row.get('desc') or row.get('title', ''),
+                    'nickname': row.get('nickname') or row.get('user_nickname', ''),
+                    'user_name': row.get('nickname') or row.get('user_nickname', ''),
+                    'create_time': row.get('create_time') or row.get('time'),
+                    'digg_count': row.get('liked_count') or row.get('voteup_count') or 0,
+                    'comment_count': row.get('comment_count') or row.get('comments_count') or 0,
+                    'collect_count': row.get('collected_count') or row.get('video_favorite_count') or 0,
+                    'view_count': row.get('video_play_count') or row.get('viewd_count') or 0,
+                    'video_url': row.get('video_play_url') or row.get('video_download_url') or row.get('video_url'),
+                    'cover_url': row.get('cover_url') or row.get('video_cover_url'),
+                    'aweme_url': row.get('aweme_url') or row.get('note_url') or row.get('content_url'),
+                    'platform': platform,
+                    'task_id': task_id
+                }
+                videos.append(video_data)
+            
+            total_pages = (total + page_size - 1) // page_size
+            
+            return {
+                'videos': videos,
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            }
+            
+        except Exception as e:
+            logger.error(f"从数据库获取任务视频失败 {task_id}: {str(e)}")
+            return {
+                'videos': [],
+                'total': 0,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': 0
+            } 

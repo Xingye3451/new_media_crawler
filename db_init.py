@@ -695,6 +695,7 @@ class DatabaseInitializer:
                     {'name': 'user_unique_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户唯一ID"'},
                     {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
                     {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
+                    {'name': 'author', 'type': 'TEXT DEFAULT NULL COMMENT "作者信息"'},
                     {'name': 'user_signature', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "用户签名"'},
                     {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
                     {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频点赞数"'},
@@ -762,6 +763,77 @@ class DatabaseInitializer:
                     {'name': 'videos_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "作品数"'},
                     {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
                     {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
+                ]
+            },
+            # 视频下载任务表
+            {
+                'name': 'video_download_tasks',
+                'columns': [
+                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT "任务ID"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "任务唯一标识"'},
+                    {'name': 'video_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "视频ID"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "平台"'},
+                    {'name': 'video_url', 'type': 'TEXT NOT NULL COMMENT "视频URL"'},
+                    {'name': 'download_type', 'type': 'VARCHAR(20) DEFAULT "local" COMMENT "下载类型"'},
+                    {'name': 'status', 'type': 'VARCHAR(20) DEFAULT "created" COMMENT "状态"'},
+                    {'name': 'result', 'type': 'JSON DEFAULT NULL COMMENT "结果信息"'},
+                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT "创建时间"'},
+                    {'name': 'updated_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT "更新时间"'}
+                ],
+                'indexes': [
+                    {'name': 'idx_video_download_tasks_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_video_download_tasks_video_id', 'columns': '(video_id)'},
+                    {'name': 'idx_video_download_tasks_platform', 'columns': '(platform)'},
+                    {'name': 'idx_video_download_tasks_status', 'columns': '(status)'},
+                    {'name': 'idx_video_download_tasks_created_at', 'columns': '(created_at)'}
+                ]
+            },
+            # 视频文件元数据表
+            {
+                'name': 'video_files',
+                'columns': [
+                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT "文件ID"'},
+                    {'name': 'file_hash', 'type': 'VARCHAR(64) NOT NULL COMMENT "文件哈希值(MD5)"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "来源平台"'},
+                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "内容ID"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "关联任务ID"'},
+                    {'name': 'original_url', 'type': 'TEXT COMMENT "原始视频URL"'},
+                    {'name': 'title', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频标题"'},
+                    {'name': 'author_name', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "作者名称"'},
+                    {'name': 'duration', 'type': 'INT DEFAULT NULL COMMENT "视频时长(秒)"'},
+                    {'name': 'file_size', 'type': 'BIGINT DEFAULT NULL COMMENT "文件大小(字节)"'},
+                    {'name': 'video_format', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "视频格式(mp4/webm等)"'},
+                    {'name': 'resolution', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "分辨率(1920x1080)"'},
+                    {'name': 'video_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "视频编码(H.264/VP9等)"'},
+                    {'name': 'audio_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "音频编码(AAC/Opus等)"'},
+                    {'name': 'bitrate', 'type': 'INT DEFAULT NULL COMMENT "码率(kbps)"'},
+                    {'name': 'fps', 'type': 'DECIMAL(5,2) DEFAULT NULL COMMENT "帧率"'},
+                    {'name': 'storage_type', 'type': 'ENUM("local","minio","url_only","temp") DEFAULT "url_only" COMMENT "存储类型"'},
+                    {'name': 'local_path', 'type': 'TEXT COMMENT "本地存储路径"'},
+                    {'name': 'minio_bucket', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "MinIO桶名"'},
+                    {'name': 'minio_object_key', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "MinIO对象键"'},
+                    {'name': 'minio_url', 'type': 'TEXT COMMENT "MinIO访问URL"'},
+                    {'name': 'cdn_url', 'type': 'TEXT COMMENT "CDN访问地址"'},
+                    {'name': 'download_status', 'type': 'ENUM("pending","downloading","completed","failed","expired") DEFAULT "pending" COMMENT "下载状态"'},
+                    {'name': 'download_progress', 'type': 'DECIMAL(5,2) DEFAULT "0.00" COMMENT "下载进度(%)"'},
+                    {'name': 'download_error', 'type': 'TEXT COMMENT "下载错误信息"'},
+                    {'name': 'download_attempts', 'type': 'INT DEFAULT "0" COMMENT "下载尝试次数"'},
+                    {'name': 'download_count', 'type': 'INT DEFAULT "0" COMMENT "下载次数"'},
+                    {'name': 'last_accessed_at', 'type': 'TIMESTAMP NULL DEFAULT NULL COMMENT "最后访问时间"'},
+                    {'name': 'expiry_date', 'type': 'TIMESTAMP NULL DEFAULT NULL COMMENT "过期时间"'},
+                    {'name': 'metadata', 'type': 'JSON DEFAULT NULL COMMENT "扩展元数据"'},
+                    {'name': 'thumbnail_url', 'type': 'TEXT COMMENT "缩略图URL"'},
+                    {'name': 'thumbnail_path', 'type': 'TEXT COMMENT "缩略图本地路径"'},
+                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT "创建时间"'},
+                    {'name': 'updated_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT "更新时间"'}
+                ],
+                'indexes': [
+                    {'name': 'idx_video_files_file_hash', 'columns': '(file_hash)'},
+                    {'name': 'idx_video_files_platform_content', 'columns': '(platform, content_id)'},
+                    {'name': 'idx_video_files_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_video_files_storage_type', 'columns': '(storage_type)'},
+                    {'name': 'idx_video_files_download_status', 'columns': '(download_status)'},
+                    {'name': 'idx_video_files_created_at', 'columns': '(created_at)'}
                 ]
             }
         ]
