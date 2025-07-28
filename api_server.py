@@ -97,12 +97,12 @@ async def startup_event():
         await redis_manager.ping()
         utils.logger.info("✅ Redis连接初始化完成")
         
-        # 初始化文件管理服务
-        utils.logger.info("📁 初始化文件管理服务...")
-        from services.file_management_service import FileManagementService
-        file_service = FileManagementService()
-        await file_service.initialize()
-        utils.logger.info("✅ 文件管理服务初始化完成")
+        # 初始化文件管理服务 (已替换为视频收藏管理)
+        # utils.logger.info("📁 初始化文件管理服务...")
+        # from services.file_management_service import FileManagementService
+        # file_service = FileManagementService()
+        # await file_service.initialize()
+        # utils.logger.info("✅ 文件管理服务初始化完成")
         
         # 加载配置
         utils.logger.info("⚙️ 加载配置...")
@@ -176,11 +176,11 @@ async def video_preview_page():
     """视频预览页面"""
     return FileResponse("static/video_preview.html")
 
-# 文件管理页面
+# 文件管理页面 (已替换为视频收藏管理)
 @app.get("/file_management.html")
 async def file_management_page():
-    """文件管理页面"""
-    return FileResponse("static/file_management.html")
+    """文件管理页面 - 重定向到视频收藏"""
+    return FileResponse("static/video_favorites.html")
 
 # API测试页面
 @app.get("/api_test.html")

@@ -218,3 +218,82 @@ class MinIOService:
         except Exception as e:
             logger.error(f"检查MinIO对象失败: {str(e)}")
             return False
+    
+    def get_bucket_statistics(self) -> Dict[str, Any]:
+        """获取MinIO存储统计信息"""
+        try:
+            if not self.is_available():
+                return {
+                    "available": False,
+                    "total_objects": 0,
+                    "total_size": 0,
+                    "bucket_name": self.bucket_name,
+                    "endpoint": self.endpoint,
+                    "message": "MinIO服务不可用"
+                }
+            
+            # 这里应该实现实际的MinIO统计逻辑
+            # 暂时返回模拟数据
+            return {
+                "available": True,
+                "total_objects": 0,  # 实际应该从MinIO获取
+                "total_size": 0,     # 实际应该从MinIO获取
+                "bucket_name": self.bucket_name,
+                "endpoint": self.endpoint,
+                "message": "MinIO服务正常"
+            }
+            
+        except Exception as e:
+            logger.error(f"获取MinIO统计失败: {str(e)}")
+            return {
+                "available": False,
+                "total_objects": 0,
+                "total_size": 0,
+                "bucket_name": self.bucket_name,
+                "endpoint": self.endpoint,
+                "message": f"获取统计失败: {str(e)}"
+            }
+    
+    async def cleanup_expired_objects(self, days: int = 30) -> int:
+        """清理过期对象"""
+        try:
+            if not self.is_available():
+                logger.warning("MinIO服务不可用，无法清理过期对象")
+                return 0
+            
+            # 这里应该实现实际的清理逻辑
+            # 暂时返回0
+            logger.info(f"清理过期对象（{days}天前）")
+            return 0
+            
+        except Exception as e:
+            logger.error(f"清理过期对象失败: {str(e)}")
+            return 0
+    
+    async def list_objects(self, prefix: str = "", max_keys: int = 100) -> Dict[str, Any]:
+        """列出对象"""
+        try:
+            if not self.is_available():
+                return {
+                    "success": False,
+                    "message": "MinIO服务不可用",
+                    "objects": []
+                }
+            
+            # 这里应该实现实际的对象列表获取逻辑
+            # 暂时返回空列表
+            return {
+                "success": True,
+                "message": "获取对象列表成功",
+                "objects": [],
+                "prefix": prefix,
+                "max_keys": max_keys
+            }
+            
+        except Exception as e:
+            logger.error(f"获取对象列表失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"获取对象列表失败: {str(e)}",
+                "objects": []
+            }

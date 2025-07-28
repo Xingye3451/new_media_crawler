@@ -193,58 +193,58 @@ class UnifiedResultResponse(BaseModel):
 PLATFORM_MAPPING = {
     "xhs": {
         "name": "小红书", 
-        "table": "xhs_note", 
-        "id_field": "note_id",
+        "table": "unified_content", 
+        "id_field": "content_id",
         "primary_content_type": "video",  # 优先视频内容
-        "video_filter": "type = 'video'",  # 视频筛选条件
+        "video_filter": "content_type = 'video'",  # 视频筛选条件
         "description": "小红书短视频内容"
     },
     "dy": {
         "name": "抖音", 
-        "table": "douyin_aweme", 
-        "id_field": "aweme_id",
+        "table": "unified_content", 
+        "id_field": "content_id",
         "primary_content_type": "video",
-        "video_filter": "aweme_type IN ('video', 'aweme')",
+        "video_filter": "content_type = 'video'",
         "description": "抖音短视频内容"
     },
     "ks": {
         "name": "快手", 
-        "table": "kuaishou_video", 
-        "id_field": "video_id",
+        "table": "unified_content", 
+        "id_field": "content_id",
         "primary_content_type": "video",
-        "video_filter": "video_type = 'video'",
+        "video_filter": "content_type = 'video'",
         "description": "快手短视频内容"
     },
     "bili": {
         "name": "B站", 
-        "table": "bilibili_video", 
-        "id_field": "video_id",
+        "table": "unified_content", 
+        "id_field": "content_id",
         "primary_content_type": "video",
-        "video_filter": "video_type IN ('video', 'short')",
+        "video_filter": "content_type = 'video'",
         "description": "B站短视频内容"
     },
     "wb": {
         "name": "微博", 
-        "table": "weibo_note", 
-        "id_field": "note_id",
+        "table": "unified_content", 
+        "id_field": "content_id",
         "primary_content_type": "mixed",  # 微博内容混合，视频为辅
-        "video_filter": "content LIKE '%视频%' OR content LIKE '%短片%'",
-        "description": "微博视频内容（TODO: 优化视频识别）"
+        "video_filter": "content_type = 'video'",
+        "description": "微博视频内容"
     },
     "tieba": {
         "name": "贴吧", 
-        "table": "tieba_note", 
-        "id_field": "note_id",
-        "primary_content_type": "text",  # TODO: 贴吧视频支持较少，暂时忽略
-        "video_filter": "title LIKE '%视频%' OR `desc` LIKE '%视频%'",
-        "description": "贴吧内容（TODO: 视频支持待开发）"
+        "table": "unified_content", 
+        "id_field": "content_id",
+        "primary_content_type": "text",  # 贴吧视频支持较少，暂时忽略
+        "video_filter": "content_type = 'video'",
+        "description": "贴吧内容"
     },
     "zhihu": {
         "name": "知乎", 
-        "table": "zhihu_content", 
+        "table": "unified_content", 
         "id_field": "content_id",
         "primary_content_type": "mixed",  # 知乎有专门的zvideo类型
-        "video_filter": "content_type = 'zvideo'",
+        "video_filter": "content_type = 'video'",
         "description": "知乎视频内容"
     }
 }

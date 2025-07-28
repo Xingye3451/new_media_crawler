@@ -445,6 +445,88 @@ class VideoFavoriteService:
             logger.error(f"异步下载失败 {file_record['file_hash']}: {str(e)}")
             await self._update_download_status(file_record["file_hash"], "failed", str(e))
     
+    async def get_favorites_statistics(self) -> Dict[str, Any]:
+        """获取收藏统计信息"""
+        try:
+            db = await _get_db_connection()
+            if not db:
+                return {
+                    "success": False,
+                    "message": "数据库连接失败"
+                }
+            
+            # 查询总收藏数 - 修复表名
+            total_query = "SELECT COUNT(*) as total FROM video_files"
+            total_result = await db.get_first(total_query)
+            total_favorites = total_result['total'] if total_result else 0
+            
+            # 查询各平台收藏数 - 修复表名
+            platform_query = """
+            SELECT platform, COUNT(*) as count 
+            FROM video_files 
+            GROUP BY platform
+            """
+            platform_results = await db.query(platform_query)
+            platform_stats = {row['platform']: row['count'] for row in platform_results}
+            
+            # 查询存储类型统计 - 修复表名
+            storage_query = """
+            SELECT storage_type, COUNT(*) as count 
+            FROM video_files 
+            GROUP BY storage_type
+            """
+            storage_results = await db.query(storage_query)
+            storage_stats = {row['storage_type']: row['count'] for row in storage_results}
+            
+            # 查询下载状态统计 - 修复表名
+            status_query = """
+            SELECT download_status, COUNT(*) as count 
+            FROM video_files 
+            GROUP BY download_status
+            """
+            status_results = await db.query(status_query)
+            status_stats = {row['download_status']: row['count'] for row in status_results}
+            
+            # 计算总文件大小 - 修复表名
+            size_query = """
+            SELECT SUM(file_size) as total_size 
+            FROM video_files 
+            WHERE file_size IS NOT NULL
+            """
+            size_result = await db.get_first(size_query)
+            total_size = size_result['total_size'] if size_result and size_result['total_size'] else 0
+            
+            return {
+                "success": True,
+                "data": {
+                    "total_favorites": total_favorites,
+                    "platform_stats": platform_stats,
+                    "storage_stats": storage_stats,
+                    "status_stats": status_stats,
+                    "total_size": total_size,
+                    "total_size_formatted": self._format_bytes(total_size)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"获取收藏统计失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"获取统计失败: {str(e)}"
+            }
+    
+    def _format_bytes(self, bytes_value: int) -> str:
+        """格式化字节数"""
+        if bytes_value == 0:
+            return "0 B"
+        k = 1024
+        sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+        i = 0
+        while bytes_value >= k and i < len(sizes) - 1:
+            bytes_value /= k
+            i += 1
+        return f"{bytes_value:.2f} {sizes[i]}"
+    
     async def _delete_physical_file(self, file_record: Dict[str, Any]):
         """删除物理文件"""
         try:

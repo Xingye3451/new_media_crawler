@@ -12,7 +12,7 @@
 # -*- coding: utf-8 -*-
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/4/6 15:30
-# @Desc    : sql接口集合
+# @Desc    : sql接口集合 - 使用统一存储系统
 
 import json
 from typing import Dict, List
@@ -21,36 +21,14 @@ import time
 
 from db import AsyncMysqlDB
 from var import media_crawler_db_var
-
-
-DOUYIN_AWEME_FIELDS = {
-    "aweme_id", "aweme_type", "title", "desc", "create_time", "user_id", "sec_uid", "short_user_id",
-    "user_unique_id", "nickname", "avatar", "user_signature", "ip_location", "liked_count", "comment_count",
-    "share_count", "collected_count", "aweme_url", "cover_url", "video_download_url", "video_play_url",
-    "video_share_url", "is_favorite", "minio_url", "task_id", "source_keyword", "add_ts", "last_modify_ts",
-    "tags", "meta", "author"
-}
-
-def filter_fields_for_table(item: dict, allowed_fields: set) -> dict:
-    return {k: v for k, v in item.items() if k in allowed_fields}
-
-
-def serialize_for_db(data):
-    """
-    只对最外层 dict 的字段值为 dict/list 的做 json.dumps，最外层 dict 保持原结构
-    """
-    if isinstance(data, dict):
-        new_data = {}
-        for k, v in data.items():
-            if isinstance(v, (dict, list)):
-                new_data[k] = json.dumps(v, ensure_ascii=False)
-            else:
-                new_data[k] = v
-        return new_data
-    elif isinstance(data, list):
-        return json.dumps(data, ensure_ascii=False)
-    else:
-        return data
+from store.unified_store import (
+    query_content_by_content_id as unified_query_content,
+    add_new_content as unified_add_content,
+    update_content_by_content_id as unified_update_content,
+    query_comment_by_comment_id as unified_query_comment,
+    add_new_comment as unified_add_comment,
+    update_comment_by_comment_id as unified_update_comment
+)
 
 
 async def _get_db_connection() -> AsyncMysqlDB:
@@ -70,7 +48,7 @@ async def _get_db_connection() -> AsyncMysqlDB:
 
 async def query_content_by_content_id(content_id: str) -> Dict:
     """
-    查询一条内容记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
+    查询一条内容记录（使用统一存储系统）
     Args:
         content_id:
 
@@ -78,191 +56,24 @@ async def query_content_by_content_id(content_id: str) -> Dict:
 
     """
     try:
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        sql: str = f"select * from douyin_aweme where aweme_id = '{content_id}'"
-        rows: List[Dict] = await async_db_conn.query(sql)
-        if len(rows) > 0:
-            return rows[0]
-        return dict()
+        return await unified_query_content("douyin", content_id)
     except Exception as e:
         utils.logger.error(f"查询内容失败: {content_id}, 错误: {e}")
         return dict()
 
 
-def fill_fields_from_all_sources(safe_item, content_item):
-    # 1. 顶层字段优先赋值
-    for k in [
-        "aweme_id", "aweme_type", "title", "desc", "create_time", "user_id", "sec_uid", "short_user_id",
-        "user_unique_id", "nickname", "avatar", "user_signature", "ip_location", "is_favorite", "minio_url",
-        "task_id", "source_keyword", "add_ts", "last_modify_ts", "tags"
-    ]:
-        if not safe_item.get(k) and content_item.get(k) is not None:
-            safe_item[k] = content_item[k]
-
-    # 2. author 字段拍平
-    if "author" in safe_item and safe_item["author"]:
-        try:
-            author_data = safe_item["author"]
-            if isinstance(author_data, str):
-                import json
-                author_data = json.loads(author_data)
-            safe_item.setdefault("user_id", author_data.get("uid", ""))
-            safe_item.setdefault("sec_uid", author_data.get("sec_uid", ""))
-            safe_item.setdefault("nickname", author_data.get("nickname", ""))
-            avatar_thumb = author_data.get("avatar_thumb")
-            if avatar_thumb:
-                if isinstance(avatar_thumb, dict):
-                    url_list = avatar_thumb.get("url_list")
-                    if url_list and isinstance(url_list, list):
-                        safe_item.setdefault("avatar", url_list[0])
-                    else:
-                        safe_item.setdefault("avatar", avatar_thumb.get("uri", ""))
-                elif isinstance(avatar_thumb, str):
-                    safe_item.setdefault("avatar", avatar_thumb)
-            safe_item.setdefault("user_signature", author_data.get("signature", ""))
-            # user_unique_id/short_user_id
-            safe_item.setdefault("user_unique_id", author_data.get("unique_id", ""))
-            safe_item.setdefault("short_user_id", author_data.get("short_id", ""))
-            # 只保留用户名称，不存储完整的 author JSON
-            safe_item["author"] = author_data.get("nickname", "")
-        except Exception as e:
-            utils.logger.warning(f"[拍平author] 解析失败: {e}")
-            # 如果解析失败，尝试直接获取 nickname
-            if isinstance(safe_item["author"], str):
-                try:
-                    import json
-                    author_data = json.loads(safe_item["author"])
-                    safe_item["author"] = author_data.get("nickname", "")
-                except:
-                    safe_item["author"] = ""
-            else:
-                safe_item["author"] = ""
-
-    # 3. video 字段拍平
-    video = content_item.get("video")
-    if video:
-        # 优先使用直接播放URL（通常防盗链更宽松）
-        play_addr = video.get("play_addr")
-        if play_addr and play_addr.get("url_list"):
-            safe_item.setdefault("video_play_url", play_addr["url_list"][0])
-        
-        # 如果没有播放URL，尝试其他可能的URL字段
-        if not safe_item.get("video_play_url"):
-            # 检查是否有其他播放URL字段
-            for url_field in ["play_url", "video_url", "url"]:
-                if video.get(url_field):
-                    if isinstance(video[url_field], list):
-                        safe_item.setdefault("video_play_url", video[url_field][0])
-                    else:
-                        safe_item.setdefault("video_play_url", video[url_field])
-                    break
-        
-        # 下载URL作为备选
-        download_addr = video.get("download_addr")
-        if download_addr and download_addr.get("url_list"):
-            safe_item.setdefault("video_download_url", download_addr["url_list"][0])
-        
-        # 如果没有播放URL，使用下载URL作为播放URL
-        if not safe_item.get("video_play_url") and safe_item.get("video_download_url"):
-            safe_item["video_play_url"] = safe_item["video_download_url"]
-        
-        # 封面URL
-        cover = video.get("cover")
-        if cover and cover.get("url_list"):
-            safe_item.setdefault("cover_url", cover["url_list"][0])
-    
-    # 4. 检查是否有直接的下载URL字段（如日志中显示的格式）
-    # 这些字段可能包含类似 https://www.douyin.com/aweme/v1/play/?video_id=... 的URL
-    for direct_url_field in ["download_url", "play_url", "video_url"]:
-        if content_item.get(direct_url_field) and not safe_item.get("video_download_url"):
-            safe_item["video_download_url"] = content_item[direct_url_field]
-            break
-    
-    # 5. 确保download_url字段正确映射到video_download_url
-    if content_item.get("download_url") and not safe_item.get("video_download_url"):
-        safe_item["video_download_url"] = content_item["download_url"]
-
-    # 4. statistics 字段拍平
-    statistics = content_item.get("statistics")
-    if statistics:
-        safe_item.setdefault("liked_count", str(statistics.get("digg_count", "")))
-        safe_item.setdefault("comment_count", str(statistics.get("comment_count", "")))
-        safe_item.setdefault("share_count", str(statistics.get("share_count", "")))
-        safe_item.setdefault("collected_count", str(statistics.get("collect_count", "")))
-
-    # 5. share_info 字段拍平
-    share_info = content_item.get("share_info")
-    if share_info:
-        safe_item.setdefault("aweme_url", share_info.get("share_url", ""))
-        safe_item.setdefault("title", share_info.get("share_title", content_item.get("desc", "")))
-        safe_item.setdefault("video_share_url", share_info.get("share_url", ""))
-    elif safe_item.get("aweme_url"):
-        safe_item.setdefault("video_share_url", safe_item["aweme_url"])
-    
-    # 6. 确保aweme_url存储播放页链接，video_download_url存储下载链接
-    aweme_id = content_item.get("aweme_id")
-    if aweme_id:
-        # 优先使用构造的播放页链接，而不是share_info中的分享链接
-        safe_item["aweme_url"] = f"https://www.douyin.com/video/{aweme_id}"
-    
-    # 如果video_play_url存在，优先使用它作为video_download_url
-    if safe_item.get("video_play_url") and not safe_item.get("video_download_url"):
-        safe_item["video_download_url"] = safe_item["video_play_url"]
-
-    # 6. tags from text_extra
-    text_extra = content_item.get("text_extra")
-    if text_extra and isinstance(text_extra, list):
-        tags_list = [x.get("hashtag_name") for x in text_extra if x.get("hashtag_name")]
-        if tags_list:
-            import json
-            safe_item["tags"] = json.dumps(tags_list, ensure_ascii=False)
-
-    # 7. meta as a union of several subfields
-    meta_dict = {}
-    for k in ["video", "statistics", "status", "video_control", "music", "share_info"]:
-        if content_item.get(k) is not None:
-            meta_dict[k] = content_item[k]
-    if meta_dict:
-        import json
-        safe_item["meta"] = json.dumps(meta_dict, ensure_ascii=False)
-
-    return safe_item
-
-
 async def add_new_content(content_item: Dict, task_id: str = None) -> int:
     """
-    新增一条内容记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
+    新增一条内容记录（使用统一存储系统）
     Args:
-        content_item: 原始内容数据
-        task_id: 任务ID（可选，强制关联）
+        content_item:
+        task_id:
+
     Returns:
-        新增行ID
+
     """
     try:
-        utils.logger.info(f"[DEBUG] content_item原始内容: {content_item}")
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        safe_item = serialize_for_db(content_item)
-        safe_item = fill_fields_from_all_sources(safe_item, content_item)
-        safe_item = filter_fields_for_table(safe_item, DOUYIN_AWEME_FIELDS)
-        # 强制覆盖 task_id
-        if task_id:
-            safe_item["task_id"] = task_id
-        # 自动补全所有 NOT NULL 且无默认值的字段
-        now_ts = int(time.time() * 1000)
-        if "last_modify_ts" not in safe_item or not safe_item["last_modify_ts"]:
-            safe_item["last_modify_ts"] = now_ts
-        if "add_ts" not in safe_item or not safe_item["add_ts"]:
-            safe_item["add_ts"] = now_ts
-        if "create_time" not in safe_item or not safe_item["create_time"]:
-            safe_item["create_time"] = int(time.time())
-        if "aweme_type" not in safe_item or not safe_item["aweme_type"]:
-            safe_item["aweme_type"] = "video"
-        if "aweme_id" not in safe_item or not safe_item["aweme_id"]:
-            safe_item["aweme_id"] = f"auto_{now_ts}"
-        utils.logger.info(f"[DEBUG] 实际插入字段: {list(safe_item.keys())}")
-        utils.logger.info(f"[DEBUG] 字段对应的值: {list(safe_item.values())}")
-        last_row_id: int = await async_db_conn.item_to_table("douyin_aweme", safe_item)
-        return last_row_id
+        return await unified_add_content("douyin", content_item, task_id)
     except Exception as e:
         utils.logger.error(f"新增内容失败: {content_item.get('aweme_id', 'unknown')}, 错误: {e}")
         raise
@@ -270,7 +81,7 @@ async def add_new_content(content_item: Dict, task_id: str = None) -> int:
 
 async def update_content_by_content_id(content_id: str, content_item: Dict) -> int:
     """
-    更新一条记录（xhs的帖子 ｜ 抖音的视频 ｜ 微博 ｜ 快手视频 ...）
+    更新一条记录（使用统一存储系统）
     Args:
         content_id:
         content_item:
@@ -279,9 +90,7 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
 
     """
     try:
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        effect_row: int = await async_db_conn.update_table("douyin_aweme", content_item, "aweme_id", content_id)
-        return effect_row
+        return await unified_update_content("douyin", content_id, content_item)
     except Exception as e:
         utils.logger.error(f"更新内容失败: {content_id}, 错误: {e}")
         raise
@@ -289,7 +98,7 @@ async def update_content_by_content_id(content_id: str, content_item: Dict) -> i
 
 async def query_comment_by_comment_id(comment_id: str) -> Dict:
     """
-    查询一条评论内容
+    查询一条评论记录（使用统一存储系统）
     Args:
         comment_id:
 
@@ -297,12 +106,7 @@ async def query_comment_by_comment_id(comment_id: str) -> Dict:
 
     """
     try:
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        sql: str = f"select * from douyin_aweme_comment where comment_id = '{comment_id}'"
-        rows: List[Dict] = await async_db_conn.query(sql)
-        if len(rows) > 0:
-            return rows[0]
-        return dict()
+        return await unified_query_comment("douyin", comment_id)
     except Exception as e:
         utils.logger.error(f"查询评论失败: {comment_id}, 错误: {e}")
         return dict()
@@ -310,7 +114,7 @@ async def query_comment_by_comment_id(comment_id: str) -> Dict:
 
 async def add_new_comment(comment_item: Dict) -> int:
     """
-    新增一条评论记录
+    新增一条评论记录（使用统一存储系统）
     Args:
         comment_item:
 
@@ -318,9 +122,7 @@ async def add_new_comment(comment_item: Dict) -> int:
 
     """
     try:
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        last_row_id: int = await async_db_conn.item_to_table("douyin_aweme_comment", comment_item)
-        return last_row_id
+        return await unified_add_comment("douyin", comment_item)
     except Exception as e:
         utils.logger.error(f"新增评论失败: {comment_item.get('comment_id', 'unknown')}, 错误: {e}")
         raise
@@ -328,7 +130,7 @@ async def add_new_comment(comment_item: Dict) -> int:
 
 async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> int:
     """
-    更新增一条评论记录
+    更新一条评论记录（使用统一存储系统）
     Args:
         comment_id:
         comment_item:
@@ -337,9 +139,7 @@ async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> i
 
     """
     try:
-        async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        effect_row: int = await async_db_conn.update_table("douyin_aweme_comment", comment_item, "comment_id", comment_id)
-        return effect_row
+        return await unified_update_comment("douyin", comment_id, comment_item)
     except Exception as e:
         utils.logger.error(f"更新评论失败: {comment_id}, 错误: {e}")
         raise
@@ -347,7 +147,7 @@ async def update_comment_by_comment_id(comment_id: str, comment_item: Dict) -> i
 
 async def query_creator_by_user_id(user_id: str) -> Dict:
     """
-    查询一条创作者记录
+    查询创作者信息（保留原有逻辑，因为统一表不包含创作者信息）
     Args:
         user_id:
 
@@ -356,7 +156,7 @@ async def query_creator_by_user_id(user_id: str) -> Dict:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        sql: str = f"select * from dy_creator where user_id = '{user_id}'"
+        sql: str = f"select * from douyin_creator where user_id = '{user_id}'"
         rows: List[Dict] = await async_db_conn.query(sql)
         if len(rows) > 0:
             return rows[0]
@@ -368,7 +168,7 @@ async def query_creator_by_user_id(user_id: str) -> Dict:
 
 async def add_new_creator(creator_item: Dict) -> int:
     """
-    新增一条创作者信息
+    新增创作者信息（保留原有逻辑）
     Args:
         creator_item:
 
@@ -377,7 +177,8 @@ async def add_new_creator(creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        last_row_id: int = await async_db_conn.item_to_table("dy_creator", creator_item)
+        safe_item = serialize_for_db(creator_item)
+        last_row_id: int = await async_db_conn.item_to_table("douyin_creator", safe_item)
         return last_row_id
     except Exception as e:
         utils.logger.error(f"新增创作者失败: {creator_item.get('user_id', 'unknown')}, 错误: {e}")
@@ -386,7 +187,7 @@ async def add_new_creator(creator_item: Dict) -> int:
 
 async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
     """
-    更新一条创作者信息
+    更新创作者信息（保留原有逻辑）
     Args:
         user_id:
         creator_item:
@@ -396,8 +197,28 @@ async def update_creator_by_user_id(user_id: str, creator_item: Dict) -> int:
     """
     try:
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
-        effect_row: int = await async_db_conn.update_table("dy_creator", creator_item, "user_id", user_id)
-        return effect_row
+        safe_item = serialize_for_db(creator_item)
+        where_conditions = {"user_id": user_id}
+        result = await async_db_conn.update_table("douyin_creator", safe_item, where_conditions)
+        return result
     except Exception as e:
         utils.logger.error(f"更新创作者失败: {user_id}, 错误: {e}")
         raise
+
+
+def serialize_for_db(data):
+    """
+    只对最外层 dict 的字段值为 dict/list 的做 json.dumps，最外层 dict 保持原结构
+    """
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                new_data[k] = json.dumps(v, ensure_ascii=False)
+            else:
+                new_data[k] = v
+        return new_data
+    elif isinstance(data, list):
+        return json.dumps(data, ensure_ascii=False)
+    else:
+        return data

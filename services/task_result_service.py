@@ -113,29 +113,15 @@ class TaskResultService:
     async def _get_video_from_database(self, platform: str, video_id: str) -> Optional[Dict[str, Any]]:
         """从数据库获取视频信息"""
         try:
-            # 平台表映射
-            table_mapping = {
-                'dy': 'douyin_aweme',
-                'xhs': 'xhs_note', 
-                'ks': 'kuaishou_video',
-                'bili': 'bilibili_video',
-                'wb': 'weibo_note',
-                'zhihu': 'zhihu_video'
-            }
-            
-            table_name = table_mapping.get(platform)
-            if not table_name:
-                return None
-            
             db = await _get_db_connection()
             
-            # 查询视频信息
-            query = f"""
-                SELECT * FROM {table_name} 
-                WHERE aweme_id = %s OR note_id = %s OR video_id = %s
-                ORDER BY create_time DESC LIMIT 1
+            # 使用统一内容表查询
+            query = """
+                SELECT * FROM unified_content 
+                WHERE platform = %s AND content_id = %s
+                ORDER BY add_ts DESC LIMIT 1
             """
-            result = await db.get_first(query, video_id, video_id, video_id)
+            result = await db.get_first(query, platform, video_id)
             
             if result:
                 # 获取热门评论
@@ -153,30 +139,16 @@ class TaskResultService:
     async def _get_hot_comments(self, platform: str, video_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         """获取热门评论"""
         try:
-            # 评论表映射
-            comment_table_mapping = {
-                'dy': 'douyin_aweme_comment',
-                'xhs': 'xhs_note_comment',
-                'ks': 'kuaishou_video_comment', 
-                'bili': 'bilibili_video_comment',
-                'wb': 'weibo_note_comment',
-                'zhihu': 'zhihu_video_comment'
-            }
-            
-            table_name = comment_table_mapping.get(platform)
-            if not table_name:
-                return []
-            
             db = await _get_db_connection()
             
-            # 查询热门评论（按点赞数排序）
-            query = f"""
-                SELECT * FROM {table_name} 
-                WHERE aweme_id = %s OR note_id = %s OR video_id = %s
-                ORDER BY digg_count DESC, create_time DESC 
+            # 使用统一评论表查询
+            query = """
+                SELECT * FROM unified_comment 
+                WHERE platform = %s AND content_id = %s
+                ORDER BY like_count DESC, add_ts DESC 
                 LIMIT %s
             """
-            results = await db.query(query, video_id, video_id, video_id, limit)
+            results = await db.query(query, platform, video_id, limit)
             
             return results
                 
@@ -187,18 +159,18 @@ class TaskResultService:
     async def get_platform_videos(self, platform: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
         """获取平台视频列表"""
         try:
-            # 平台表映射
-            table_mapping = {
-                'dy': 'douyin_aweme',
-                'xhs': 'xhs_note',
-                'ks': 'kuaishou_video',
-                'bili': 'bilibili_video', 
-                'wb': 'weibo_note',
-                'zhihu': 'zhihu_video'
-            }
+            db = await _get_db_connection()
             
-            table_name = table_mapping.get(platform)
-            if not table_name:
+            # 使用统一内容表查询
+            # 查询总数
+            count_query = """
+                SELECT COUNT(*) as total FROM unified_content 
+                WHERE platform = %s
+            """
+            count_result = await db.get_first(count_query, platform)
+            total = count_result.get('total', 0) if count_result else 0
+            
+            if total == 0:
                 return {
                     'videos': [],
                     'total': 0,
@@ -207,34 +179,49 @@ class TaskResultService:
                     'total_pages': 0
                 }
             
-            db = await _get_db_connection()
-            
-            # 查询总数
-            count_query = f"SELECT COUNT(*) FROM {table_name}"
-            count_result = await db.get_first(count_query)
-            total = count_result[0] if count_result else 0
-            
-            # 查询分页数据
+            # 查询数据
             offset = (page - 1) * page_size
-            query = f"""
-                SELECT * FROM {table_name} 
-                ORDER BY create_time DESC 
+            query = """
+                SELECT * FROM unified_content 
+                WHERE platform = %s
+                ORDER BY add_ts DESC 
                 LIMIT %s OFFSET %s
             """
-            results = await db.query(query, page_size, offset)
+            results = await db.query(query, platform, page_size, offset)
+            
+            # 转换数据格式
+            videos = []
+            for row in results:
+                video_data = {
+                    'aweme_id': row.get('content_id'),
+                    'title': row.get('title') or row.get('description', ''),
+                    'desc': row.get('description') or row.get('title', ''),
+                    'nickname': row.get('author_nickname') or row.get('author_name', ''),
+                    'user_name': row.get('author_nickname') or row.get('author_name', ''),
+                    'create_time': row.get('create_time'),
+                    'digg_count': row.get('like_count', 0),
+                    'comment_count': row.get('comment_count', 0),
+                    'collect_count': row.get('collect_count', 0),
+                    'view_count': row.get('view_count', 0),
+                    'video_url': row.get('video_url') or row.get('video_play_url'),
+                    'cover_url': row.get('cover_url'),
+                    'aweme_url': row.get('content_id'),
+                    'platform': platform
+                }
+                videos.append(video_data)
             
             total_pages = (total + page_size - 1) // page_size
             
             return {
-                'videos': results,
+                'videos': videos,
                 'total': total,
                 'page': page,
                 'page_size': page_size,
                 'total_pages': total_pages
             }
-                
+            
         except Exception as e:
-            logger.error(f"获取平台视频列表失败 {platform}: {str(e)}")
+            logger.error(f"获取平台视频失败 {platform}: {str(e)}")
             return {
                 'videos': [],
                 'total': 0,
@@ -272,54 +259,56 @@ class TaskResultService:
         try:
             stats = {}
             
-            # 各平台视频数量统计
-            platform_tables = {
-                'douyin': 'douyin_aweme',
-                'xhs': 'xhs_note',
-                'kuaishou': 'kuaishou_video',
-                'bilibili': 'bilibili_video',
-                'weibo': 'weibo_note',
-                'zhihu': 'zhihu_video'
+            # 使用统一表进行统计
+            db = await _get_db_connection()
+            if not db:
+                logger.error("无法获取数据库连接")
+                return {
+                    'total_videos': 0,
+                    'platform_stats': {}
+                }
+            
+            # 从统一内容表获取统计
+            total_query = "SELECT COUNT(*) as total FROM unified_content"
+            total_result = await db.get_first(total_query)
+            total_videos = total_result['total'] if total_result else 0
+            
+            # 各平台统计
+            platform_query = """
+            SELECT platform, COUNT(*) as count 
+            FROM unified_content 
+            GROUP BY platform
+            """
+            platform_results = await db.query(platform_query)
+            platform_stats = {}
+            for row in platform_results:
+                platform_stats[row['platform']] = row['count']
+            
+            # 评论统计
+            comment_query = "SELECT COUNT(*) as total FROM unified_comment"
+            comment_result = await db.get_first(comment_query)
+            total_comments = comment_result['total'] if comment_result else 0
+            
+            # 创作者统计
+            creator_query = "SELECT COUNT(*) as total FROM unified_creator"
+            creator_result = await db.get_first(creator_query)
+            total_creators = creator_result['total'] if creator_result else 0
+            
+            return {
+                'total_videos': total_videos,
+                'total_comments': total_comments,
+                'total_creators': total_creators,
+                'platform_stats': platform_stats
             }
             
-            db = await _get_db_connection()
-            
-            for platform, table_name in platform_tables.items():
-                try:
-                    # 检查表是否存在
-                    check_query = f"SHOW TABLES LIKE '{table_name}'"
-                    table_exists = await db.get_first(check_query)
-                    
-                    if table_exists:
-                        # 获取视频数量
-                        count_query = f"SELECT COUNT(*) FROM {table_name}"
-                        count_result = await db.get_first(count_query)
-                        stats[f'{platform}_videos'] = count_result[0] if count_result else 0
-                        
-                        # 获取今日新增
-                        today_query = f"""
-                            SELECT COUNT(*) FROM {table_name} 
-                            WHERE DATE(create_time) = CURDATE()
-                        """
-                        today_result = await db.get_first(today_query)
-                        stats[f'{platform}_today'] = today_result[0] if today_result else 0
-                    else:
-                        stats[f'{platform}_videos'] = 0
-                        stats[f'{platform}_today'] = 0
-                except Exception as e:
-                    logger.warning(f"统计表 {table_name} 失败: {str(e)}")
-                    stats[f'{platform}_videos'] = 0
-                    stats[f'{platform}_today'] = 0
-            
-            # 总计
-            stats['total_videos'] = sum(v for k, v in stats.items() if k.endswith('_videos'))
-            stats['total_today'] = sum(v for k, v in stats.items() if k.endswith('_today'))
-            
-            return stats
-                
         except Exception as e:
-            logger.error(f"获取数据库统计失败: {str(e)}")
-            return {}
+            logger.error(f"获取数据库统计失败: {e}")
+            return {
+                'total_videos': 0,
+                'total_comments': 0,
+                'total_creators': 0,
+                'platform_stats': {}
+            }
     
     async def delete_task_result(self, task_id: str) -> bool:
         """删除任务结果"""
@@ -392,55 +381,24 @@ class TaskResultService:
             
             platform = task_result.get('platform')
             
-            # 根据平台查询对应的表
-            table_mapping = {
-                'dy': 'douyin_aweme',
-                'xhs': 'xhs_note',
-                'ks': 'kuaishou_video',
-                'bili': 'bilibili_video',
-                'wb': 'weibo_note',
-                'zhihu': 'zhihu_video'
-            }
-            
-            table_name = table_mapping.get(platform)
-            if not table_name:
-                return {
-                    "total_videos": 0,
-                    "total_comments": 0,
-                    "platforms": platform,
-                    "completed_at": ""
-                }
-            
-            # 统计视频数量
-            video_count_query = f"""
-                SELECT COUNT(*) as total FROM {table_name} 
+            # 使用统一表进行统计
+            # 统计内容数量
+            content_count_query = """
+                SELECT COUNT(*) as total FROM unified_content 
                 WHERE task_id = %s
             """
-            video_result = await db.get_first(video_count_query, task_id)
-            total_videos = video_result.get('total', 0) if video_result else 0
+            content_result = await db.get_first(content_count_query, task_id)
+            total_videos = content_result.get('total', 0) if content_result else 0
             
-            # 统计评论数量（如果有评论表）
-            total_comments = 0
-            comment_table_mapping = {
-                'dy': 'douyin_aweme_comment',
-                'xhs': 'xhs_note_comment',
-                'ks': 'kuaishou_video_comment',
-                'bili': 'bilibili_video_comment',
-                'wb': 'weibo_note_comment',
-                'zhihu': 'zhihu_video_comment'
-            }
-            
-            comment_table = comment_table_mapping.get(platform)
-            if comment_table:
-                try:
-                    comment_count_query = f"""
-                        SELECT COUNT(*) as total FROM {comment_table} 
-                        WHERE task_id = %s
-                    """
-                    comment_result = await db.get_first(comment_count_query, task_id)
-                    total_comments = comment_result.get('total', 0) if comment_result else 0
-                except:
-                    pass
+            # 统计评论数量
+            comment_count_query = """
+                SELECT COUNT(*) as total FROM unified_comment 
+                WHERE content_id IN (
+                    SELECT content_id FROM unified_content WHERE task_id = %s
+                )
+            """
+            comment_result = await db.get_first(comment_count_query, task_id)
+            total_comments = comment_result.get('total', 0) if comment_result else 0
             
             return {
                 "total_videos": total_videos,
@@ -481,32 +439,10 @@ class TaskResultService:
             
             platform = task_result.get('platform')
             
-            # 根据平台查询对应的表
-            table_mapping = {
-                'dy': 'douyin_aweme',
-                'xhs': 'xhs_note',
-                'ks': 'kuaishou_video',
-                'bili': 'bilibili_video',
-                'wb': 'weibo_note',
-                'zhihu': 'zhihu_video'
-            }
-            
-            table_name = table_mapping.get(platform)
-            if not table_name:
-                return {
-                    'videos': [],
-                    'total': 0,
-                    'page': page,
-                    'page_size': page_size,
-                    'total_pages': 0
-                }
-            
-            # 计算偏移量
-            offset = (page - 1) * page_size
-            
-            # 查询总数
-            count_query = f"""
-                SELECT COUNT(*) as total FROM {table_name} 
+            # 使用统一内容表
+            # 获取总数
+            count_query = """
+                SELECT COUNT(*) as total FROM unified_content 
                 WHERE task_id = %s
             """
             count_result = await db.get_first(count_query, task_id)
@@ -521,32 +457,33 @@ class TaskResultService:
                     'total_pages': 0
                 }
             
-            # 查询视频列表
-            videos_query = f"""
-                SELECT * FROM {table_name} 
+            # 查询内容列表
+            offset = (page - 1) * page_size
+            content_query = """
+                SELECT * FROM unified_content 
                 WHERE task_id = %s
                 ORDER BY add_ts DESC
                 LIMIT %s OFFSET %s
             """
-            videos_result = await db.query(videos_query, task_id, page_size, offset)
+            content_result = await db.query(content_query, task_id, page_size, offset)
             
-            # 转换视频数据格式
+            # 转换内容数据格式
             videos = []
-            for row in videos_result:
+            for row in content_result:
                 video_data = {
-                    'aweme_id': row.get('aweme_id') or row.get('note_id') or row.get('video_id'),
-                    'title': row.get('title') or row.get('desc', ''),
-                    'desc': row.get('desc') or row.get('title', ''),
-                    'nickname': row.get('nickname') or row.get('user_nickname', ''),
-                    'user_name': row.get('nickname') or row.get('user_nickname', ''),
-                    'create_time': row.get('create_time') or row.get('time'),
-                    'digg_count': row.get('liked_count') or row.get('voteup_count') or 0,
-                    'comment_count': row.get('comment_count') or row.get('comments_count') or 0,
-                    'collect_count': row.get('collected_count') or row.get('video_favorite_count') or 0,
-                    'view_count': row.get('video_play_count') or row.get('viewd_count') or 0,
-                    'video_url': row.get('video_play_url') or row.get('video_download_url') or row.get('video_url'),
-                    'cover_url': row.get('cover_url') or row.get('video_cover_url'),
-                    'aweme_url': row.get('aweme_url') or row.get('note_url') or row.get('content_url'),
+                    'aweme_id': row.get('content_id'),
+                    'title': row.get('title') or row.get('description', ''),
+                    'desc': row.get('description') or row.get('title', ''),
+                    'nickname': row.get('author_nickname') or row.get('author_name', ''),
+                    'user_name': row.get('author_nickname') or row.get('author_name', ''),
+                    'create_time': row.get('create_time'),
+                    'digg_count': row.get('like_count', 0),
+                    'comment_count': row.get('comment_count', 0),
+                    'collect_count': row.get('collect_count', 0),
+                    'view_count': row.get('view_count', 0),
+                    'video_url': row.get('video_url') or row.get('video_play_url'),
+                    'cover_url': row.get('cover_url'),
+                    'aweme_url': row.get('content_id'),  # 使用content_id作为URL标识
                     'platform': platform,
                     'task_id': task_id
                 }
@@ -570,4 +507,52 @@ class TaskResultService:
                 'page': page,
                 'page_size': page_size,
                 'total_pages': 0
-            } 
+            }
+
+    async def _get_platform_content_count(self, platform: str) -> int:
+        """获取指定平台的内容数量"""
+        try:
+            db = await _get_db_connection()
+            if not db:
+                return 0
+            
+            # 使用统一内容表
+            query = "SELECT COUNT(*) as count FROM unified_content WHERE platform = %s"
+            result = await db.get_first(query, (platform,))
+            return result['count'] if result else 0
+            
+        except Exception as e:
+            logger.error(f"获取平台内容数量失败: {platform}, 错误: {e}")
+            return 0
+
+    async def _get_platform_comment_count(self, platform: str) -> int:
+        """获取指定平台的评论数量"""
+        try:
+            db = await _get_db_connection()
+            if not db:
+                return 0
+            
+            # 使用统一评论表
+            query = "SELECT COUNT(*) as count FROM unified_comment WHERE platform = %s"
+            result = await db.get_first(query, (platform,))
+            return result['count'] if result else 0
+            
+        except Exception as e:
+            logger.error(f"获取平台评论数量失败: {platform}, 错误: {e}")
+            return 0
+
+    async def _get_platform_creator_count(self, platform: str) -> int:
+        """获取指定平台的创作者数量"""
+        try:
+            db = await _get_db_connection()
+            if not db:
+                return 0
+            
+            # 使用统一创作者表
+            query = "SELECT COUNT(*) as count FROM unified_creator WHERE platform = %s"
+            result = await db.get_first(query, (platform,))
+            return result['count'] if result else 0
+            
+        except Exception as e:
+            logger.error(f"获取平台创作者数量失败: {platform}, 错误: {e}")
+            return 0 

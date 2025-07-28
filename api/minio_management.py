@@ -45,15 +45,11 @@ async def list_minio_objects(
         if not minio_service.is_available():
             raise HTTPException(status_code=503, detail="MinIO服务不可用")
         
-        objects = minio_service.list_objects(prefix=prefix, max_keys=max_keys)
+        result = await minio_service.list_objects(prefix=prefix, max_keys=max_keys)
         return {
             "code": 200,
             "message": "获取成功",
-            "data": {
-                "objects": objects,
-                "total": len(objects),
-                "prefix": prefix
-            }
+            "data": result
         }
     except HTTPException:
         raise
@@ -68,9 +64,16 @@ async def get_object_info(object_name: str):
         if not minio_service.is_available():
             raise HTTPException(status_code=503, detail="MinIO服务不可用")
         
-        info = minio_service.get_object_info(object_name)
-        if not info:
+        exists = await minio_service.object_exists(object_name)
+        if not exists:
             raise HTTPException(status_code=404, detail="对象未找到")
+        
+        # 获取对象信息
+        info = {
+            "object_name": object_name,
+            "bucket_name": minio_service.bucket_name,
+            "url": f"http://{minio_service.endpoint}/{minio_service.bucket_name}/{object_name}"
+        }
         
         return {
             "code": 200,
@@ -93,14 +96,13 @@ async def get_object_url(
         if not minio_service.is_available():
             raise HTTPException(status_code=503, detail="MinIO服务不可用")
         
-        from datetime import timedelta
-        url = minio_service.get_presigned_url(
+        url = await minio_service.get_presigned_url(
             object_name=object_name,
-            expires=timedelta(hours=expires_hours)
+            expires=expires_hours * 3600
         )
         
         if not url:
-            raise HTTPException(status_code=404, detail="对象未找到或生成URL失败")
+            raise HTTPException(status_code=404, detail="对象未找到或无法生成URL")
         
         return {
             "code": 200,
@@ -182,7 +184,7 @@ async def delete_object(object_name: str):
         if not minio_service.is_available():
             raise HTTPException(status_code=503, detail="MinIO服务不可用")
         
-        success = minio_service.delete_object(object_name)
+        success = await minio_service.delete_object(object_name)
         if not success:
             raise HTTPException(status_code=404, detail="对象未找到或删除失败")
         
@@ -210,7 +212,7 @@ async def batch_delete_objects(request: ObjectDeleteRequest):
         
         for object_name in request.object_names:
             try:
-                if minio_service.delete_object(object_name):
+                if await minio_service.delete_object(object_name):
                     success_count += 1
                 else:
                     failed_count += 1
@@ -245,7 +247,7 @@ async def cleanup_expired_objects(
         if not minio_service.is_available():
             raise HTTPException(status_code=503, detail="MinIO服务不可用")
         
-        deleted_count = minio_service.cleanup_expired_objects(days)
+        deleted_count = await minio_service.cleanup_expired_objects(days)
         return {
             "code": 200,
             "message": "清理完成",

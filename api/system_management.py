@@ -122,7 +122,7 @@ async def init_database():
         # 检查核心表是否存在
         core_tables = [
             "crawler_tasks", "crawler_task_logs",
-            "douyin_aweme", "xhs_note", "kuaishou_video", "bilibili_video"
+            "unified_content", "unified_comment", "unified_creator", "video_files"
         ]
         
         missing_tables = []
@@ -175,7 +175,7 @@ async def get_database_status():
         tables_info = {}
         core_tables = [
             "crawler_tasks", "crawler_task_logs",
-            "douyin_aweme", "xhs_note", "kuaishou_video", "bilibili_video"
+            "unified_content", "unified_comment", "unified_creator", "video_files"
         ]
         
         for table in core_tables:

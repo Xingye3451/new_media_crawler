@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, Float, JSON, func
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, Float, JSON, func, BigInteger, LONGTEXT, TINYINT
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -104,63 +104,115 @@ class CrawlerTask(Base):
         }
 
 
-class DouyinAweme(Base):
-    """抖音视频模型"""
-    __tablename__ = 'douyin_aweme'
+class UnifiedContent(Base):
+    """统一内容模型"""
+    __tablename__ = 'unified_content'
     
-    id = Column(Integer, primary_key=True, autoincrement=True, comment='数据库ID')
-    aweme_id = Column(String(64), unique=True, nullable=False, comment='视频ID')
-    desc = Column(Text, comment='视频描述')
-    author_id = Column(String(64), comment='作者ID')
-    author_name = Column(String(128), comment='作者昵称')
-    author_avatar = Column(String(255), comment='作者头像')
-    cover_url = Column(String(255), comment='封面图')
-    play_url = Column(String(255), comment='播放页链接')
-    download_url = Column(String(255), comment='无水印下载链接')
-    share_url = Column(String(255), comment='分享链接')
-    duration = Column(Integer, comment='时长')
-    create_time = Column(DateTime, comment='发布时间')
-    digg_count = Column(Integer, default=0, comment='点赞数')
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='数据库ID')
+    content_id = Column(String(100), nullable=False, comment='内容ID')
+    platform = Column(String(20), nullable=False, comment='平台名称')
+    content_type = Column(String(50), comment='内容类型')
+    task_id = Column(String(36), comment='任务ID')
+    source_keyword = Column(String(200), comment='来源关键词')
+    title = Column(String(500), comment='标题')
+    description = Column(Text, comment='描述')
+    content = Column(LONGTEXT, comment='内容')
+    create_time = Column(BigInteger, comment='创建时间戳')
+    publish_time = Column(BigInteger, comment='发布时间戳')
+    update_time = Column(BigInteger, comment='更新时间戳')
+    author_id = Column(String(100), comment='作者ID')
+    author_name = Column(String(100), comment='作者名称')
+    author_nickname = Column(String(100), comment='作者昵称')
+    author_avatar = Column(Text, comment='作者头像')
+    author_signature = Column(Text, comment='作者签名')
+    author_unique_id = Column(String(100), comment='作者唯一ID')
+    author_sec_uid = Column(String(100), comment='作者sec_uid')
+    author_short_id = Column(String(100), comment='作者短ID')
+    like_count = Column(Integer, default=0, comment='点赞数')
     comment_count = Column(Integer, default=0, comment='评论数')
     share_count = Column(Integer, default=0, comment='分享数')
     collect_count = Column(Integer, default=0, comment='收藏数')
-    music_id = Column(String(64), comment='配乐ID')
-    music_name = Column(String(128), comment='配乐名')
-    music_url = Column(String(255), comment='配乐链接')
-    tags = Column(JSON, comment='标签')
-    is_collected = Column(Boolean, default=False, comment='是否已收藏到minio')
-    minio_url = Column(String(255), comment='minio存储链接')
-    task_id = Column(String(36), comment='关联任务ID')
-    created_at = Column(DateTime, default=func.now(), comment='创建时间')
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment='更新时间')
+    view_count = Column(Integer, default=0, comment='播放数')
+    cover_url = Column(Text, comment='封面URL')
+    video_url = Column(Text, comment='视频URL')
+    video_download_url = Column(Text, comment='视频下载URL')
+    video_play_url = Column(Text, comment='视频播放URL')
+    video_share_url = Column(Text, comment='视频分享URL')
+    image_urls = Column(Text, comment='图片URL列表')
+    audio_url = Column(Text, comment='音频URL')
+    file_urls = Column(Text, comment='文件URL列表')
+    ip_location = Column(String(100), comment='IP位置')
+    location = Column(String(200), comment='位置信息')
+    tags = Column(Text, comment='标签')
+    categories = Column(Text, comment='分类')
+    topics = Column(Text, comment='话题')
+    is_favorite = Column(TINYINT, default=0, comment='是否收藏')
+    is_deleted = Column(TINYINT, default=0, comment='是否删除')
+    is_private = Column(TINYINT, default=0, comment='是否私密')
+    is_original = Column(TINYINT, default=0, comment='是否原创')
+    minio_url = Column(Text, comment='MinIO URL')
+    local_path = Column(String(500), comment='本地路径')
+    file_size = Column(BigInteger, comment='文件大小')
+    storage_type = Column(String(20), default='url_only', comment='存储类型')
+    metadata = Column(Text, comment='元数据')
+    raw_data = Column(LONGTEXT, comment='原始数据')
+    extra_info = Column(Text, comment='额外信息')
+    add_ts = Column(BigInteger, comment='添加时间戳')
+    last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
     
     def to_dict(self):
         return {
             'id': self.id,
-            'aweme_id': self.aweme_id,
-            'desc': self.desc,
+            'content_id': self.content_id,
+            'platform': self.platform,
+            'content_type': self.content_type,
+            'task_id': self.task_id,
+            'source_keyword': self.source_keyword,
+            'title': self.title,
+            'description': self.description,
+            'content': self.content,
+            'create_time': self.create_time,
+            'publish_time': self.publish_time,
+            'update_time': self.update_time,
             'author_id': self.author_id,
             'author_name': self.author_name,
+            'author_nickname': self.author_nickname,
             'author_avatar': self.author_avatar,
-            'cover_url': self.cover_url,
-            'play_url': self.play_url,
-            'download_url': self.download_url,
-            'share_url': self.share_url,
-            'duration': self.duration,
-            'create_time': self.create_time.isoformat() if self.create_time else None,
-            'digg_count': self.digg_count,
+            'author_signature': self.author_signature,
+            'author_unique_id': self.author_unique_id,
+            'author_sec_uid': self.author_sec_uid,
+            'author_short_id': self.author_short_id,
+            'like_count': self.like_count,
             'comment_count': self.comment_count,
             'share_count': self.share_count,
             'collect_count': self.collect_count,
-            'music_id': self.music_id,
-            'music_name': self.music_name,
-            'music_url': self.music_url,
+            'view_count': self.view_count,
+            'cover_url': self.cover_url,
+            'video_url': self.video_url,
+            'video_download_url': self.video_download_url,
+            'video_play_url': self.video_play_url,
+            'video_share_url': self.video_share_url,
+            'image_urls': self.image_urls,
+            'audio_url': self.audio_url,
+            'file_urls': self.file_urls,
+            'ip_location': self.ip_location,
+            'location': self.location,
             'tags': self.tags,
-            'is_collected': self.is_collected,
+            'categories': self.categories,
+            'topics': self.topics,
+            'is_favorite': self.is_favorite,
+            'is_deleted': self.is_deleted,
+            'is_private': self.is_private,
+            'is_original': self.is_original,
             'minio_url': self.minio_url,
-            'task_id': self.task_id,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'local_path': self.local_path,
+            'file_size': self.file_size,
+            'storage_type': self.storage_type,
+            'metadata': self.metadata,
+            'raw_data': self.raw_data,
+            'extra_info': self.extra_info,
+            'add_ts': self.add_ts,
+            'last_modify_ts': self.last_modify_ts
         }
 
 

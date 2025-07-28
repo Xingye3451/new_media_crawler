@@ -75,6 +75,27 @@ async def download_favorite(request: VideoDownloadRequest):
         logger.error(f"下载收藏视频失败: {str(e)}")
         raise HTTPException(status_code=500, detail="下载失败")
 
+@router.get("/favorites/statistics", response_model=Dict[str, Any])
+async def get_favorites_statistics():
+    """获取收藏统计信息"""
+    try:
+        result = await favorite_service.get_favorites_statistics()
+        
+        if result["success"]:
+            return {
+                "code": 200,
+                "message": "获取成功",
+                "data": result["data"]
+            }
+        else:
+            raise HTTPException(status_code=400, detail=result["message"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取收藏统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取统计失败")
+
 @router.get("/favorites/list", response_model=Dict[str, Any])
 async def get_favorites(
     platform: str = Query(None, description="平台筛选"),

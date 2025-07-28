@@ -8,7 +8,7 @@ from fastapi import APIRouter
 # 导入各个API路由模块
 from api.task_results import router as task_results_router
 from api.video_downloads import router as video_downloads_router
-from api.file_management import router as file_management_router
+# from api.file_management import router as file_management_router  # 已删除，替换为视频收藏管理
 from api.minio_management import router as minio_management_router
 from api.task_management import router as task_management_router
 from api.crawler_core import router as crawler_core_router
@@ -66,12 +66,12 @@ api_router.include_router(
     tags=["video-downloads"]
 )
 
-# 文件管理相关路由
-api_router.include_router(
-    file_management_router,
-    prefix="/v1",
-    tags=["file-management"]
-)
+# 文件管理相关路由 (已替换为视频收藏管理)
+# api_router.include_router(
+#     file_management_router,
+#     prefix="/v1",
+#     tags=["file-management"]
+# )
 
 # MinIO存储管理相关路由
 api_router.include_router(

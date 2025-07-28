@@ -138,276 +138,8 @@ class DatabaseInitializer:
                 return set(actual_column_names) == set(expected_column_names)
     
     def get_additional_platform_tables(self):
-        """获取其他平台的表配置"""
-        additional_tables = [
-            # 快手表
-            {
-                'name': 'kuaishou_video',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'video_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'video_type', 'type': 'VARCHAR(16) NOT NULL COMMENT "视频类型"'},
-                    {'name': 'title', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频标题"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "视频描述"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "视频发布时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频点赞数"'},
-                    {'name': 'viewd_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频浏览数量"'},
-                    {'name': 'video_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频详情URL"'},
-                    {'name': 'video_cover_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频封面图 URL"'},
-                    {'name': 'video_play_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频播放 URL"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_kuaishou_video_video_id', 'columns': '(video_id)'},
-                    {'name': 'idx_kuaishou_video_create_time', 'columns': '(create_time)'}
-                ]
-            },
-            {
-                'name': 'kuaishou_video_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'video_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT COMMENT "评论内容"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "评论时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'sub_comment_count', 'type': 'VARCHAR(16) NOT NULL COMMENT "评论回复数"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_kuaishou_video_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_kuaishou_video_comment_video_id', 'columns': '(video_id)'}
-                ]
-            },
-            # B站表
-            {
-                'name': 'bilibili_video',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'video_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'video_type', 'type': 'VARCHAR(16) NOT NULL COMMENT "视频类型"'},
-                    {'name': 'title', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频标题"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "视频描述"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "视频发布时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'view_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频观看数量"'},
-                    {'name': 'danmaku_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频弹幕数量"'},
-                    {'name': 'comment_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频评论数量"'},
-                    {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频点赞数量"'},
-                    {'name': 'video_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频详情URL"'},
-                    {'name': 'video_cover_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频封面图 URL"'},
-                    {'name': 'video_play_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "视频播放 URL"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_bilibili_video_video_id', 'columns': '(video_id)'},
-                    {'name': 'idx_bilibili_video_create_time', 'columns': '(create_time)'}
-                ]
-            },
-            {
-                'name': 'bilibili_video_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'video_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT COMMENT "评论内容"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "评论时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'sub_comment_count', 'type': 'VARCHAR(16) NOT NULL COMMENT "评论回复数"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "父评论ID"'},
-                    {'name': 'like_count', 'type': 'VARCHAR(255) NOT NULL DEFAULT "0" COMMENT "点赞数"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_bilibili_video_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_bilibili_video_comment_video_id', 'columns': '(video_id)'}
-                ]
-            },
-            # 微博表
-            {
-                'name': 'weibo_note',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'note_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "帖子ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT COMMENT "帖子正文内容"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "帖子发布时间戳"'},
-                    {'name': 'create_date_time', 'type': 'VARCHAR(32) NOT NULL COMMENT "帖子发布日期时间"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'gender', 'type': 'VARCHAR(12) DEFAULT NULL COMMENT "用户性别"'},
-                    {'name': 'profile_url', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户主页地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(32) DEFAULT NULL COMMENT "发布微博的地理信息"'},
-                    {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "帖子点赞数"'},
-                    {'name': 'comments_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "帖子评论数量"'},
-                    {'name': 'shared_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "帖子转发数量"'},
-                    {'name': 'note_url', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "帖子详情URL"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_weibo_note_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_weibo_note_create_time', 'columns': '(create_time)'},
-                    {'name': 'idx_weibo_note_create_date_time', 'columns': '(create_date_time)'}
-                ]
-            },
-            {
-                'name': 'weibo_note_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'note_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "帖子ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT COMMENT "评论内容"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "评论时间戳"'},
-                    {'name': 'create_date_time', 'type': 'VARCHAR(32) NOT NULL COMMENT "评论日期时间"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'gender', 'type': 'VARCHAR(12) DEFAULT NULL COMMENT "用户性别"'},
-                    {'name': 'profile_url', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户主页地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(32) DEFAULT NULL COMMENT "发布微博的地理信息"'},
-                    {'name': 'comment_like_count', 'type': 'VARCHAR(16) NOT NULL COMMENT "评论点赞数量"'},
-                    {'name': 'sub_comment_count', 'type': 'VARCHAR(16) NOT NULL COMMENT "评论回复数"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "父评论ID"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_weibo_note_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_weibo_note_comment_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_weibo_note_comment_create_date_time', 'columns': '(create_date_time)'}
-                ]
-            },
-            # 贴吧表
-            {
-                'name': 'tieba_note',
-                'columns': [
-                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'note_id', 'type': 'VARCHAR(644) NOT NULL COMMENT "帖子ID"'},
-                    {'name': 'title', 'type': 'VARCHAR(255) NOT NULL COMMENT "帖子标题"'},
-                    {'name': '`desc`', 'type': 'TEXT COMMENT "帖子描述"'},
-                    {'name': 'note_url', 'type': 'VARCHAR(255) NOT NULL COMMENT "帖子链接"'},
-                    {'name': 'publish_time', 'type': 'VARCHAR(255) NOT NULL COMMENT "发布时间"'},
-                    {'name': 'user_link', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户主页链接"'},
-                    {'name': 'user_nickname', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户昵称"'},
-                    {'name': 'user_avatar', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户头像地址"'},
-                    {'name': 'tieba_id', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "贴吧ID"'},
-                    {'name': 'tieba_name', 'type': 'VARCHAR(255) NOT NULL COMMENT "贴吧名称"'},
-                    {'name': 'tieba_link', 'type': 'VARCHAR(255) NOT NULL COMMENT "贴吧链接"'},
-                    {'name': 'total_replay_num', 'type': 'INT DEFAULT 0 COMMENT "帖子回复总数"'},
-                    {'name': 'total_replay_page', 'type': 'INT DEFAULT 0 COMMENT "帖子回复总页数"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "IP地理位置"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_tieba_note_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_tieba_note_publish_time', 'columns': '(publish_time)'}
-                ]
-            },
-            {
-                'name': 'tieba_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(255) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "父评论ID"'},
-                    {'name': 'content', 'type': 'TEXT NOT NULL COMMENT "评论内容"'},
-                    {'name': 'user_link', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户主页链接"'},
-                    {'name': 'user_nickname', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户昵称"'},
-                    {'name': 'user_avatar', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "用户头像地址"'},
-                    {'name': 'tieba_id', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "贴吧ID"'},
-                    {'name': 'tieba_name', 'type': 'VARCHAR(255) NOT NULL COMMENT "贴吧名称"'},
-                    {'name': 'tieba_link', 'type': 'VARCHAR(255) NOT NULL COMMENT "贴吧链接"'},
-                    {'name': 'publish_time', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "发布时间"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "IP地理位置"'},
-                    {'name': 'sub_comment_count', 'type': 'INT DEFAULT 0 COMMENT "子评论数"'},
-                    {'name': 'note_id', 'type': 'VARCHAR(255) NOT NULL COMMENT "帖子ID"'},
-                    {'name': 'note_url', 'type': 'VARCHAR(255) NOT NULL COMMENT "帖子链接"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_tieba_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_tieba_comment_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_tieba_comment_publish_time', 'columns': '(publish_time)'}
-                ]
-            },
-            # 知乎表
-            {
-                'name': 'zhihu_content',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'content_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "内容ID"'},
-                    {'name': 'content_type', 'type': 'VARCHAR(16) NOT NULL COMMENT "内容类型(article | answer | zvideo)"'},
-                    {'name': 'content_text', 'type': 'LONGTEXT COMMENT "内容文本, 如果是视频类型这里为空"'},
-                    {'name': 'content_url', 'type': 'VARCHAR(255) NOT NULL COMMENT "内容落地链接"'},
-                    {'name': 'question_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "问题ID, type为answer时有值"'},
-                    {'name': 'title', 'type': 'VARCHAR(255) NOT NULL COMMENT "内容标题"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "内容描述"'},
-                    {'name': 'created_time', 'type': 'VARCHAR(32) NOT NULL COMMENT "创建时间"'},
-                    {'name': 'updated_time', 'type': 'VARCHAR(32) NOT NULL COMMENT "更新时间"'},
-                    {'name': 'voteup_count', 'type': 'INT NOT NULL DEFAULT 0 COMMENT "赞同人数"'},
-                    {'name': 'comment_count', 'type': 'INT NOT NULL DEFAULT 0 COMMENT "评论数量"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "来源关键词"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'user_link', 'type': 'VARCHAR(255) NOT NULL COMMENT "用户主页链接"'},
-                    {'name': 'user_nickname', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户昵称"'},
-                    {'name': 'user_avatar', 'type': 'VARCHAR(255) NOT NULL COMMENT "用户头像地址"'},
-                    {'name': 'user_url_token', 'type': 'VARCHAR(255) NOT NULL COMMENT "用户url_token"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_zhihu_content_content_id', 'columns': '(content_id)'},
-                    {'name': 'idx_zhihu_content_created_time', 'columns': '(created_time)'}
-                ]
-            },
-            {
-                'name': 'zhihu_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "父评论ID"'},
-                    {'name': 'content', 'type': 'TEXT NOT NULL COMMENT "评论内容"'},
-                    {'name': 'publish_time', 'type': 'VARCHAR(32) NOT NULL COMMENT "发布时间"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "IP地理位置"'},
-                    {'name': 'sub_comment_count', 'type': 'INT NOT NULL DEFAULT 0 COMMENT "子评论数"'},
-                    {'name': 'like_count', 'type': 'INT NOT NULL DEFAULT 0 COMMENT "点赞数"'},
-                    {'name': 'dislike_count', 'type': 'INT NOT NULL DEFAULT 0 COMMENT "踩数"'},
-                    {'name': 'content_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "内容ID"'},
-                    {'name': 'content_type', 'type': 'VARCHAR(16) NOT NULL COMMENT "内容类型(article | answer | zvideo)"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'user_link', 'type': 'VARCHAR(255) NOT NULL COMMENT "用户主页链接"'},
-                    {'name': 'user_nickname', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户昵称"'},
-                    {'name': 'user_avatar', 'type': 'VARCHAR(255) NOT NULL COMMENT "用户头像地址"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_zhihu_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_zhihu_comment_content_id', 'columns': '(content_id)'},
-                    {'name': 'idx_zhihu_comment_publish_time', 'columns': '(publish_time)'}
-                ]
-            }
-        ]
-        return additional_tables
+        """获取其他平台的表配置 - 已废弃，统一使用unified_*表"""
+        return []
 
     async def create_tables(self):
         """创建所有必要的表"""
@@ -513,54 +245,201 @@ class DatabaseInitializer:
                     {'name': 'idx_crawler_task_logs_created_at', 'columns': '(created_at)'}
                 ]
             },
+            # 统一内容表 - 替代所有平台特定的内容表
             {
-                'name': 'crawled_data',
+                'name': 'unified_content',
                 'columns': [
                     {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'task_id', 'type': 'VARCHAR(36) NOT NULL'},
-                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL'},
-                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL'},
-                    {'name': 'title', 'type': 'TEXT'},
-                    {'name': 'content', 'type': 'LONGTEXT'},
-                    {'name': 'author', 'type': 'VARCHAR(100)'},
-                    {'name': 'author_id', 'type': 'VARCHAR(100)'},
-                    {'name': 'publish_time', 'type': 'DATETIME'},
-                    {'name': 'likes', 'type': 'INT DEFAULT 0'},
-                    {'name': 'comments', 'type': 'INT DEFAULT 0'},
-                    {'name': 'shares', 'type': 'INT DEFAULT 0'},
-                    {'name': 'views', 'type': 'INT DEFAULT 0'},
-                    {'name': 'url', 'type': 'TEXT'},
-                    {'name': 'tags', 'type': 'TEXT'},
-                    {'name': 'images', 'type': 'TEXT'},
-                    {'name': 'videos', 'type': 'TEXT'},
-                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
+                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "内容ID"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "平台名称"'},
+                    {'name': 'content_type', 'type': 'VARCHAR(50) COMMENT "内容类型"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(36) COMMENT "任务ID"'},
+                    {'name': 'source_keyword', 'type': 'VARCHAR(200) COMMENT "来源关键词"'},
+                    {'name': 'title', 'type': 'VARCHAR(500) COMMENT "标题"'},
+                    {'name': 'description', 'type': 'TEXT COMMENT "描述"'},
+                    {'name': 'content', 'type': 'LONGTEXT COMMENT "内容"'},
+                    {'name': 'create_time', 'type': 'BIGINT COMMENT "创建时间戳"'},
+                    {'name': 'publish_time', 'type': 'BIGINT COMMENT "发布时间戳"'},
+                    {'name': 'update_time', 'type': 'BIGINT COMMENT "更新时间戳"'},
+                    {'name': 'author_id', 'type': 'VARCHAR(100) COMMENT "作者ID"'},
+                    {'name': 'author_name', 'type': 'VARCHAR(100) COMMENT "作者名称"'},
+                    {'name': 'author_nickname', 'type': 'VARCHAR(100) COMMENT "作者昵称"'},
+                    {'name': 'author_avatar', 'type': 'TEXT COMMENT "作者头像"'},
+                    {'name': 'author_signature', 'type': 'TEXT COMMENT "作者签名"'},
+                    {'name': 'author_unique_id', 'type': 'VARCHAR(100) COMMENT "作者唯一ID"'},
+                    {'name': 'author_sec_uid', 'type': 'VARCHAR(100) COMMENT "作者sec_uid"'},
+                    {'name': 'author_short_id', 'type': 'VARCHAR(100) COMMENT "作者短ID"'},
+                    {'name': 'like_count', 'type': 'INT DEFAULT 0 COMMENT "点赞数"'},
+                    {'name': 'comment_count', 'type': 'INT DEFAULT 0 COMMENT "评论数"'},
+                    {'name': 'share_count', 'type': 'INT DEFAULT 0 COMMENT "分享数"'},
+                    {'name': 'collect_count', 'type': 'INT DEFAULT 0 COMMENT "收藏数"'},
+                    {'name': 'view_count', 'type': 'INT DEFAULT 0 COMMENT "播放数"'},
+                    {'name': 'cover_url', 'type': 'TEXT COMMENT "封面URL"'},
+                    {'name': 'video_url', 'type': 'TEXT COMMENT "视频URL"'},
+                    {'name': 'video_download_url', 'type': 'TEXT COMMENT "视频下载URL"'},
+                    {'name': 'video_play_url', 'type': 'TEXT COMMENT "视频播放URL"'},
+                    {'name': 'video_share_url', 'type': 'TEXT COMMENT "视频分享URL"'},
+                    {'name': 'image_urls', 'type': 'TEXT COMMENT "图片URL列表"'},
+                    {'name': 'audio_url', 'type': 'TEXT COMMENT "音频URL"'},
+                    {'name': 'file_urls', 'type': 'TEXT COMMENT "文件URL列表"'},
+                    {'name': 'ip_location', 'type': 'VARCHAR(100) COMMENT "IP位置"'},
+                    {'name': 'location', 'type': 'VARCHAR(200) COMMENT "位置信息"'},
+                    {'name': 'tags', 'type': 'TEXT COMMENT "标签"'},
+                    {'name': 'categories', 'type': 'TEXT COMMENT "分类"'},
+                    {'name': 'topics', 'type': 'TEXT COMMENT "话题"'},
+                    {'name': 'is_favorite', 'type': 'TINYINT DEFAULT 0 COMMENT "是否收藏"'},
+                    {'name': 'is_deleted', 'type': 'TINYINT DEFAULT 0 COMMENT "是否删除"'},
+                    {'name': 'is_private', 'type': 'TINYINT DEFAULT 0 COMMENT "是否私密"'},
+                    {'name': 'is_original', 'type': 'TINYINT DEFAULT 0 COMMENT "是否原创"'},
+                    {'name': 'minio_url', 'type': 'TEXT COMMENT "MinIO URL"'},
+                    {'name': 'local_path', 'type': 'VARCHAR(500) COMMENT "本地路径"'},
+                    {'name': 'file_size', 'type': 'BIGINT COMMENT "文件大小"'},
+                    {'name': 'storage_type', 'type': 'VARCHAR(20) DEFAULT "url_only" COMMENT "存储类型"'},
+                    {'name': 'metadata', 'type': 'TEXT COMMENT "元数据"'},
+                    {'name': 'raw_data', 'type': 'LONGTEXT COMMENT "原始数据"'},
+                    {'name': 'extra_info', 'type': 'TEXT COMMENT "额外信息"'},
+                    {'name': 'add_ts', 'type': 'BIGINT COMMENT "添加时间戳"'},
+                    {'name': 'last_modify_ts', 'type': 'BIGINT COMMENT "最后修改时间戳"'}
                 ],
                 'indexes': [
-                    {'name': 'idx_task_id', 'columns': '(task_id)'},
-                    {'name': 'idx_platform', 'columns': '(platform)'},
-                    {'name': 'idx_content_id', 'columns': '(content_id)'},
-                    {'name': 'idx_publish_time', 'columns': '(publish_time)'}
+                    {'name': 'idx_unified_content_platform_content_id', 'columns': '(platform, content_id)'},
+                    {'name': 'idx_unified_content_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_unified_content_author_id', 'columns': '(author_id)'},
+                    {'name': 'idx_unified_content_create_time', 'columns': '(create_time)'},
+                    {'name': 'idx_unified_content_add_ts', 'columns': '(add_ts)'}
                 ]
             },
+            # 统一评论表 - 替代所有平台特定的评论表
             {
-                'name': 'comments',
+                'name': 'unified_comment',
                 'columns': [
                     {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(100) NOT NULL'},
-                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL'},
-                    {'name': 'content', 'type': 'TEXT'},
-                    {'name': 'author', 'type': 'VARCHAR(100)'},
-                    {'name': 'author_id', 'type': 'VARCHAR(100)'},
-                    {'name': 'publish_time', 'type': 'DATETIME'},
-                    {'name': 'likes', 'type': 'INT DEFAULT 0'},
-                    {'name': 'parent_id', 'type': 'VARCHAR(100)'},
-                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
+                    {'name': 'comment_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "评论ID"'},
+                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "内容ID"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "平台名称"'},
+                    {'name': 'parent_id', 'type': 'VARCHAR(100) COMMENT "父评论ID"'},
+                    {'name': 'reply_to_id', 'type': 'VARCHAR(100) COMMENT "回复评论ID"'},
+                    {'name': 'content', 'type': 'TEXT COMMENT "评论内容"'},
+                    {'name': 'text', 'type': 'TEXT COMMENT "纯文本内容"'},
+                    {'name': 'html_content', 'type': 'TEXT COMMENT "HTML内容"'},
+                    {'name': 'author_id', 'type': 'VARCHAR(100) COMMENT "作者ID"'},
+                    {'name': 'author_name', 'type': 'VARCHAR(100) COMMENT "作者名称"'},
+                    {'name': 'author_nickname', 'type': 'VARCHAR(100) COMMENT "作者昵称"'},
+                    {'name': 'author_avatar', 'type': 'TEXT COMMENT "作者头像"'},
+                    {'name': 'like_count', 'type': 'INT DEFAULT 0 COMMENT "点赞数"'},
+                    {'name': 'reply_count', 'type': 'INT DEFAULT 0 COMMENT "回复数"'},
+                    {'name': 'share_count', 'type': 'INT DEFAULT 0 COMMENT "分享数"'},
+                    {'name': 'create_time', 'type': 'BIGINT COMMENT "创建时间戳"'},
+                    {'name': 'publish_time', 'type': 'BIGINT COMMENT "发布时间戳"'},
+                    {'name': 'is_deleted', 'type': 'TINYINT DEFAULT 0 COMMENT "是否删除"'},
+                    {'name': 'is_hidden', 'type': 'TINYINT DEFAULT 0 COMMENT "是否隐藏"'},
+                    {'name': 'is_top', 'type': 'TINYINT DEFAULT 0 COMMENT "是否置顶"'},
+                    {'name': 'metadata', 'type': 'TEXT COMMENT "元数据"'},
+                    {'name': 'raw_data', 'type': 'LONGTEXT COMMENT "原始数据"'},
+                    {'name': 'add_ts', 'type': 'BIGINT COMMENT "添加时间戳"'},
+                    {'name': 'last_modify_ts', 'type': 'BIGINT COMMENT "最后修改时间戳"'}
                 ],
                 'indexes': [
-                    {'name': 'idx_content_id', 'columns': '(content_id)'},
-                    {'name': 'idx_platform', 'columns': '(platform)'},
-                    {'name': 'idx_comment_id', 'columns': '(comment_id)'}
+                    {'name': 'idx_unified_comment_platform_comment_id', 'columns': '(platform, comment_id)'},
+                    {'name': 'idx_unified_comment_content_id', 'columns': '(content_id)'},
+                    {'name': 'idx_unified_comment_author_id', 'columns': '(author_id)'},
+                    {'name': 'idx_unified_comment_create_time', 'columns': '(create_time)'},
+                    {'name': 'idx_unified_comment_add_ts', 'columns': '(add_ts)'}
+                ]
+            },
+            # 统一创作者表 - 替代所有平台特定的创作者表
+            {
+                'name': 'unified_creator',
+                'columns': [
+                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY'},
+                    {'name': 'creator_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "创作者ID"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "平台名称"'},
+                    {'name': 'creator_type', 'type': 'VARCHAR(50) COMMENT "创作者类型"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(36) COMMENT "任务ID"'},
+                    {'name': 'source_keyword', 'type': 'VARCHAR(200) COMMENT "来源关键词"'},
+                    {'name': 'name', 'type': 'VARCHAR(100) COMMENT "创作者名称"'},
+                    {'name': 'nickname', 'type': 'VARCHAR(100) COMMENT "创作者昵称"'},
+                    {'name': 'avatar', 'type': 'TEXT COMMENT "创作者头像"'},
+                    {'name': 'signature', 'type': 'TEXT COMMENT "创作者签名"'},
+                    {'name': 'description', 'type': 'TEXT COMMENT "创作者描述"'},
+                    {'name': 'unique_id', 'type': 'VARCHAR(100) COMMENT "创作者唯一ID"'},
+                    {'name': 'sec_uid', 'type': 'VARCHAR(100) COMMENT "创作者sec_uid"'},
+                    {'name': 'short_id', 'type': 'VARCHAR(100) COMMENT "创作者短ID"'},
+                    {'name': 'gender', 'type': 'VARCHAR(10) COMMENT "性别"'},
+                    {'name': 'ip_location', 'type': 'VARCHAR(100) COMMENT "IP位置"'},
+                    {'name': 'location', 'type': 'VARCHAR(200) COMMENT "位置信息"'},
+                    {'name': 'follow_count', 'type': 'INT DEFAULT 0 COMMENT "关注数"'},
+                    {'name': 'fans_count', 'type': 'INT DEFAULT 0 COMMENT "粉丝数"'},
+                    {'name': 'like_count', 'type': 'INT DEFAULT 0 COMMENT "获赞数"'},
+                    {'name': 'content_count', 'type': 'INT DEFAULT 0 COMMENT "作品数"'},
+                    {'name': 'interaction_count', 'type': 'INT DEFAULT 0 COMMENT "互动数"'},
+                    {'name': 'verified', 'type': 'TINYINT DEFAULT 0 COMMENT "是否认证"'},
+                    {'name': 'verified_type', 'type': 'VARCHAR(50) COMMENT "认证类型"'},
+                    {'name': 'level', 'type': 'INT DEFAULT 0 COMMENT "等级"'},
+                    {'name': 'tags', 'type': 'TEXT COMMENT "标签"'},
+                    {'name': 'categories', 'type': 'TEXT COMMENT "分类"'},
+                    {'name': 'profile_url', 'type': 'TEXT COMMENT "主页URL"'},
+                    {'name': 'is_deleted', 'type': 'TINYINT DEFAULT 0 COMMENT "是否删除"'},
+                    {'name': 'is_private', 'type': 'TINYINT DEFAULT 0 COMMENT "是否私密"'},
+                    {'name': 'is_blocked', 'type': 'TINYINT DEFAULT 0 COMMENT "是否被屏蔽"'},
+                    {'name': 'metadata', 'type': 'TEXT COMMENT "元数据"'},
+                    {'name': 'raw_data', 'type': 'LONGTEXT COMMENT "原始数据"'},
+                    {'name': 'extra_info', 'type': 'TEXT COMMENT "额外信息"'},
+                    {'name': 'add_ts', 'type': 'BIGINT COMMENT "添加时间戳"'},
+                    {'name': 'last_modify_ts', 'type': 'BIGINT COMMENT "最后修改时间戳"'}
+                ],
+                'indexes': [
+                    {'name': 'idx_unified_creator_platform_creator_id', 'columns': '(platform, creator_id)'},
+                    {'name': 'idx_unified_creator_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_unified_creator_name', 'columns': '(name)'},
+                    {'name': 'idx_unified_creator_fans_count', 'columns': '(fans_count)'},
+                    {'name': 'idx_unified_creator_add_ts', 'columns': '(add_ts)'}
+                ]
+            },
+            # 视频文件表 - 用于视频收藏功能
+            {
+                'name': 'video_files',
+                'columns': [
+                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT "文件ID"'},
+                    {'name': 'file_hash', 'type': 'VARCHAR(64) NOT NULL UNIQUE COMMENT "文件哈希值(MD5)"'},
+                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "来源平台"'},
+                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "内容ID"'},
+                    {'name': 'task_id', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "关联任务ID"'},
+                    {'name': 'original_url', 'type': 'TEXT COMMENT "原始视频URL"'},
+                    {'name': 'title', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频标题"'},
+                    {'name': 'author_name', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "作者名称"'},
+                    {'name': 'duration', 'type': 'INT DEFAULT NULL COMMENT "视频时长(秒)"'},
+                    {'name': 'file_size', 'type': 'BIGINT DEFAULT NULL COMMENT "文件大小(字节)"'},
+                    {'name': 'video_format', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "视频格式(mp4/webm等)"'},
+                    {'name': 'resolution', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "分辨率(1920x1080)"'},
+                    {'name': 'video_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "视频编码(H.264/VP9等)"'},
+                    {'name': 'audio_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "音频编码(AAC/Opus等)"'},
+                    {'name': 'bitrate', 'type': 'INT DEFAULT NULL COMMENT "码率(kbps)"'},
+                    {'name': 'fps', 'type': 'DECIMAL(5,2) DEFAULT NULL COMMENT "帧率"'},
+                    {'name': 'storage_type', 'type': 'ENUM("local","minio","url_only","temp") DEFAULT "url_only" COMMENT "存储类型"'},
+                    {'name': 'local_path', 'type': 'TEXT COMMENT "本地存储路径"'},
+                    {'name': 'minio_bucket', 'type': 'VARCHAR(100) COMMENT "MinIO桶名"'},
+                    {'name': 'minio_object_key', 'type': 'VARCHAR(500) COMMENT "MinIO对象键"'},
+                    {'name': 'cdn_url', 'type': 'TEXT COMMENT "CDN访问地址"'},
+                    {'name': 'download_status', 'type': 'ENUM("pending","downloading","completed","failed","expired") DEFAULT "pending" COMMENT "下载状态"'},
+                    {'name': 'download_progress', 'type': 'DECIMAL(5,2) DEFAULT 0 COMMENT "下载进度(%)"'},
+                    {'name': 'download_error', 'type': 'TEXT COMMENT "下载错误信息"'},
+                    {'name': 'download_attempts', 'type': 'INT DEFAULT 0 COMMENT "下载尝试次数"'},
+                    {'name': 'download_count', 'type': 'INT DEFAULT 0 COMMENT "下载次数"'},
+                    {'name': 'last_accessed_at', 'type': 'TIMESTAMP NULL COMMENT "最后访问时间"'},
+                    {'name': 'expiry_date', 'type': 'TIMESTAMP NULL COMMENT "过期时间"'},
+                    {'name': 'metadata', 'type': 'JSON COMMENT "扩展元数据"'},
+                    {'name': 'thumbnail_url', 'type': 'TEXT COMMENT "缩略图URL"'},
+                    {'name': 'thumbnail_path', 'type': 'TEXT COMMENT "缩略图本地路径"'},
+                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT "创建时间"'},
+                    {'name': 'updated_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT "更新时间"'}
+                ],
+                'indexes': [
+                    {'name': 'idx_video_files_platform_content', 'columns': '(platform, content_id)'},
+                    {'name': 'idx_video_files_task_id', 'columns': '(task_id)'},
+                    {'name': 'idx_video_files_storage_type', 'columns': '(storage_type)'},
+                    {'name': 'idx_video_files_download_status', 'columns': '(download_status)'},
+                    {'name': 'idx_video_files_created_at', 'columns': '(created_at)'}
                 ]
             },
             {
@@ -603,168 +482,6 @@ class DatabaseInitializer:
                     {'name': 'idx_is_active', 'columns': '(is_active)'}
                 ]
             },
-            # 小红书表
-            {
-                'name': 'xhs_note',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'note_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "笔记ID"'},
-                    {'name': 'type', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "笔记类型(normal | video)"'},
-                    {'name': 'title', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "笔记标题"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "笔记描述"'},
-                    {'name': 'video_url', 'type': 'LONGTEXT COMMENT "视频地址"'},
-                    {'name': 'time', 'type': 'BIGINT NOT NULL COMMENT "笔记发布时间戳"'},
-                    {'name': 'last_update_time', 'type': 'BIGINT NOT NULL COMMENT "笔记最后更新时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "笔记点赞数"'},
-                    {'name': 'collected_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "笔记收藏数"'},
-                    {'name': 'comment_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "笔记评论数"'},
-                    {'name': 'share_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "笔记分享数"'},
-                    {'name': 'image_list', 'type': 'LONGTEXT COMMENT "笔记封面图片列表"'},
-                    {'name': 'tag_list', 'type': 'LONGTEXT COMMENT "标签列表"'},
-                    {'name': 'note_url', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "笔记详情页的URL"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'xsec_token', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "签名算法"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_xhs_note_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_xhs_note_time', 'columns': '(time)'}
-                ]
-            },
-            {
-                'name': 'xhs_note_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "评论时间戳"'},
-                    {'name': 'note_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "笔记ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT NOT NULL COMMENT "评论内容"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': 'sub_comment_count', 'type': 'INT NOT NULL COMMENT "子评论数量"'},
-                    {'name': 'pictures', 'type': 'VARCHAR(512) DEFAULT NULL COMMENT "评论图片"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "父评论ID"'},
-                    {'name': 'like_count', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "评论点赞数量"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_xhs_note_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_xhs_note_comment_note_id', 'columns': '(note_id)'},
-                    {'name': 'idx_xhs_note_comment_create_time', 'columns': '(create_time)'}
-                ]
-            },
-            {
-                'name': 'xhs_creator',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "用户描述"'},
-                    {'name': 'gender', 'type': 'VARCHAR(1) DEFAULT NULL COMMENT "性别"'},
-                    {'name': 'follows', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "关注数"'},
-                    {'name': 'fans', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "粉丝数"'},
-                    {'name': 'interaction', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "获赞和收藏数"'},
-                    {'name': 'tag_list', 'type': 'LONGTEXT COMMENT "标签列表"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ]
-            },
-            # 抖音表
-            {
-                'name': 'douyin_aweme',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'aweme_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'aweme_type', 'type': 'VARCHAR(16) NOT NULL COMMENT "视频类型"'},
-                    {'name': 'title', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频标题"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "视频描述"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "视频发布时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'sec_uid', 'type': 'VARCHAR(128) DEFAULT NULL COMMENT "用户sec_uid"'},
-                    {'name': 'short_user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户短ID"'},
-                    {'name': 'user_unique_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户唯一ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'author', 'type': 'TEXT DEFAULT NULL COMMENT "作者信息"'},
-                    {'name': 'user_signature', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "用户签名"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': 'liked_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频点赞数"'},
-                    {'name': 'comment_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频评论数"'},
-                    {'name': 'share_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频分享数"'},
-                    {'name': 'collected_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "视频收藏数"'},
-                    {'name': 'aweme_url', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "视频详情页URL"'},
-                    {'name': 'cover_url', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频封面图URL"'},
-                    {'name': 'video_download_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频下载地址"'},
-                    {'name': 'video_play_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频播放地址"'},
-                    {'name': 'video_share_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "视频分享地址"'},
-                    {'name': 'is_favorite', 'type': 'BOOLEAN DEFAULT FALSE COMMENT "是否收藏"'},
-                    {'name': 'minio_url', 'type': 'VARCHAR(1024) DEFAULT NULL COMMENT "MinIO存储地址"'},
-                    {'name': 'task_id', 'type': 'VARCHAR(36) DEFAULT NULL COMMENT "关联任务ID"'},
-                    {'name': 'source_keyword', 'type': 'VARCHAR(255) DEFAULT "" COMMENT "搜索来源关键字"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_douyin_aweme_aweme_id', 'columns': '(aweme_id)'},
-                    {'name': 'idx_douyin_aweme_create_time', 'columns': '(create_time)'},
-                    {'name': 'idx_douyin_aweme_task_id', 'columns': '(task_id)'},
-                    {'name': 'idx_douyin_aweme_is_favorite', 'columns': '(is_favorite)'}
-                ]
-            },
-            {
-                'name': 'douyin_aweme_comment',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'comment_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "评论ID"'},
-                    {'name': 'aweme_id', 'type': 'VARCHAR(64) NOT NULL COMMENT "视频ID"'},
-                    {'name': 'content', 'type': 'LONGTEXT COMMENT "评论内容"'},
-                    {'name': 'create_time', 'type': 'BIGINT NOT NULL COMMENT "评论时间戳"'},
-                    {'name': 'user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户ID"'},
-                    {'name': 'sec_uid', 'type': 'VARCHAR(128) DEFAULT NULL COMMENT "用户sec_uid"'},
-                    {'name': 'short_user_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户短ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': 'sub_comment_count', 'type': 'VARCHAR(16) NOT NULL COMMENT "评论回复数"'},
-                    {'name': 'parent_comment_id', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "父评论ID"'},
-                    {'name': 'like_count', 'type': 'VARCHAR(255) NOT NULL DEFAULT "0" COMMENT "点赞数"'},
-                    {'name': 'pictures', 'type': 'VARCHAR(500) NOT NULL DEFAULT "" COMMENT "评论图片列表"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_douyin_aweme_comment_comment_id', 'columns': '(comment_id)'},
-                    {'name': 'idx_douyin_aweme_comment_aweme_id', 'columns': '(aweme_id)'}
-                ]
-            },
-            {
-                'name': 'douyin_creator',
-                'columns': [
-                    {'name': 'id', 'type': 'INT AUTO_INCREMENT PRIMARY KEY'},
-                    {'name': 'user_id', 'type': 'VARCHAR(128) NOT NULL COMMENT "用户ID"'},
-                    {'name': 'nickname', 'type': 'VARCHAR(64) DEFAULT NULL COMMENT "用户昵称"'},
-                    {'name': 'avatar', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "用户头像地址"'},
-                    {'name': 'ip_location', 'type': 'VARCHAR(255) DEFAULT NULL COMMENT "IP地址"'},
-                    {'name': '`desc`', 'type': 'LONGTEXT COMMENT "用户描述"'},
-                    {'name': 'gender', 'type': 'VARCHAR(1) DEFAULT NULL COMMENT "性别"'},
-                    {'name': 'follows', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "关注数"'},
-                    {'name': 'fans', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "粉丝数"'},
-                    {'name': 'interaction', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "获赞数"'},
-                    {'name': 'videos_count', 'type': 'VARCHAR(16) DEFAULT NULL COMMENT "作品数"'},
-                    {'name': 'add_ts', 'type': 'BIGINT NOT NULL COMMENT "记录添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT NOT NULL COMMENT "记录最后修改时间戳"'}
-                ]
-            },
             # 视频下载任务表
             {
                 'name': 'video_download_tasks',
@@ -786,54 +503,6 @@ class DatabaseInitializer:
                     {'name': 'idx_video_download_tasks_platform', 'columns': '(platform)'},
                     {'name': 'idx_video_download_tasks_status', 'columns': '(status)'},
                     {'name': 'idx_video_download_tasks_created_at', 'columns': '(created_at)'}
-                ]
-            },
-            # 视频文件元数据表
-            {
-                'name': 'video_files',
-                'columns': [
-                    {'name': 'id', 'type': 'BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT "文件ID"'},
-                    {'name': 'file_hash', 'type': 'VARCHAR(64) NOT NULL COMMENT "文件哈希值(MD5)"'},
-                    {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL COMMENT "来源平台"'},
-                    {'name': 'content_id', 'type': 'VARCHAR(100) NOT NULL COMMENT "内容ID"'},
-                    {'name': 'task_id', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "关联任务ID"'},
-                    {'name': 'original_url', 'type': 'TEXT COMMENT "原始视频URL"'},
-                    {'name': 'title', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "视频标题"'},
-                    {'name': 'author_name', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "作者名称"'},
-                    {'name': 'duration', 'type': 'INT DEFAULT NULL COMMENT "视频时长(秒)"'},
-                    {'name': 'file_size', 'type': 'BIGINT DEFAULT NULL COMMENT "文件大小(字节)"'},
-                    {'name': 'video_format', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "视频格式(mp4/webm等)"'},
-                    {'name': 'resolution', 'type': 'VARCHAR(20) DEFAULT NULL COMMENT "分辨率(1920x1080)"'},
-                    {'name': 'video_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "视频编码(H.264/VP9等)"'},
-                    {'name': 'audio_codec', 'type': 'VARCHAR(50) DEFAULT NULL COMMENT "音频编码(AAC/Opus等)"'},
-                    {'name': 'bitrate', 'type': 'INT DEFAULT NULL COMMENT "码率(kbps)"'},
-                    {'name': 'fps', 'type': 'DECIMAL(5,2) DEFAULT NULL COMMENT "帧率"'},
-                    {'name': 'storage_type', 'type': 'ENUM("local","minio","url_only","temp") DEFAULT "url_only" COMMENT "存储类型"'},
-                    {'name': 'local_path', 'type': 'TEXT COMMENT "本地存储路径"'},
-                    {'name': 'minio_bucket', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "MinIO桶名"'},
-                    {'name': 'minio_object_key', 'type': 'VARCHAR(500) DEFAULT NULL COMMENT "MinIO对象键"'},
-                    {'name': 'minio_url', 'type': 'TEXT COMMENT "MinIO访问URL"'},
-                    {'name': 'cdn_url', 'type': 'TEXT COMMENT "CDN访问地址"'},
-                    {'name': 'download_status', 'type': 'ENUM("pending","downloading","completed","failed","expired") DEFAULT "pending" COMMENT "下载状态"'},
-                    {'name': 'download_progress', 'type': 'DECIMAL(5,2) DEFAULT "0.00" COMMENT "下载进度(%)"'},
-                    {'name': 'download_error', 'type': 'TEXT COMMENT "下载错误信息"'},
-                    {'name': 'download_attempts', 'type': 'INT DEFAULT "0" COMMENT "下载尝试次数"'},
-                    {'name': 'download_count', 'type': 'INT DEFAULT "0" COMMENT "下载次数"'},
-                    {'name': 'last_accessed_at', 'type': 'TIMESTAMP NULL DEFAULT NULL COMMENT "最后访问时间"'},
-                    {'name': 'expiry_date', 'type': 'TIMESTAMP NULL DEFAULT NULL COMMENT "过期时间"'},
-                    {'name': 'metadata', 'type': 'JSON DEFAULT NULL COMMENT "扩展元数据"'},
-                    {'name': 'thumbnail_url', 'type': 'TEXT COMMENT "缩略图URL"'},
-                    {'name': 'thumbnail_path', 'type': 'TEXT COMMENT "缩略图本地路径"'},
-                    {'name': 'created_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT "创建时间"'},
-                    {'name': 'updated_at', 'type': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT "更新时间"'}
-                ],
-                'indexes': [
-                    {'name': 'idx_video_files_file_hash', 'columns': '(file_hash)'},
-                    {'name': 'idx_video_files_platform_content', 'columns': '(platform, content_id)'},
-                    {'name': 'idx_video_files_task_id', 'columns': '(task_id)'},
-                    {'name': 'idx_video_files_storage_type', 'columns': '(storage_type)'},
-                    {'name': 'idx_video_files_download_status', 'columns': '(download_status)'},
-                    {'name': 'idx_video_files_created_at', 'columns': '(created_at)'}
                 ]
             }
         ]

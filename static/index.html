@@ -277,7 +277,7 @@
                 </div>
                 <div class="stat-item">
                     <div class="stat-number" id="totalFiles">-</div>
-                    <div class="stat-label">存储文件</div>
+                    <div class="stat-label">收藏视频</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-number" id="storageUsed">-</div>
@@ -288,12 +288,12 @@
 
         <!-- 核心功能 -->
         <div class="feature-grid">
-            <!-- 爬虫管理 -->
+            <!-- 任务管理 -->
             <div class="feature-card" onclick="window.location.href='/static/api_test.html'">
                 <span class="feature-icon">🚀</span>
-                <div class="feature-title">爬虫任务管理</div>
+                <div class="feature-title">任务管理</div>
                 <div class="feature-desc">
-                    启动和管理多平台爬虫任务，支持关键词搜索、用户主页爬取等多种模式
+                    启动和管理多平台爬虫任务，查看执行结果，支持关键词搜索、用户主页爬取等多种模式
                 </div>
                 <div class="feature-actions">
                     <a href="/static/api_test.html" class="btn btn-primary">开始爬取</a>
@@ -301,44 +301,20 @@
                 </div>
             </div>
 
-            <!-- 任务结果管理 -->
-            <div class="feature-card" onclick="window.location.href='/static/task_results.html'">
-                <span class="feature-icon">📋</span>
-                <div class="feature-title">任务结果管理</div>
+            <!-- 视频收藏管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/video_favorites.html'">
+                <span class="feature-icon">❤️</span>
+                <div class="feature-title">视频收藏管理</div>
                 <div class="feature-desc">
-                    查看和管理爬取任务的执行结果，包括视频列表、统计数据和下载管理
+                    管理收藏的视频内容，支持预览、下载、删除等操作，查看视频详情
                 </div>
                 <div class="feature-actions">
-                    <a href="/static/task_results.html" class="btn btn-primary">查看结果</a>
-                    <a href="/static/task_detail.html" class="btn btn-secondary">任务详情</a>
-                </div>
-            </div>
-
-            <!-- 文件管理 -->
-            <div class="feature-card" onclick="window.location.href='/static/file_management.html'">
-                <span class="feature-icon">📁</span>
-                <div class="feature-title">文件存储管理</div>
-                <div class="feature-desc">
-                    管理本地和云端存储的视频文件，支持批量操作、存储统计和清理功能
-                </div>
-                <div class="feature-actions">
-                    <a href="/static/file_management.html" class="btn btn-primary">文件管理</a>
+                    <a href="/static/video_favorites.html" class="btn btn-primary">我的收藏</a>
                     <a href="#" onclick="checkMinIO()" class="btn btn-secondary">云端存储</a>
                 </div>
             </div>
 
-            <!-- 视频预览 -->
-            <div class="feature-card">
-                <span class="feature-icon">🎬</span>
-                <div class="feature-title">视频预览播放</div>
-                <div class="feature-desc">
-                    在线预览视频内容，查看详细元数据信息，支持多种画质和全屏播放
-                </div>
-                <div class="feature-actions">
-                    <a href="#" onclick="openVideoPreview()" class="btn btn-primary">视频预览</a>
-                    <a href="#" onclick="showVideoList()" class="btn btn-secondary">视频列表</a>
-                </div>
-            </div>
+
 
             <!-- 数据分析 -->
             <div class="feature-card">
@@ -400,11 +376,11 @@
                     </div>
                 </a>
                 
-                <a href="/static/file_management.html" class="action-btn">
-                    <span class="action-icon">💾</span>
+                <a href="/static/video_favorites.html" class="action-btn">
+                    <span class="action-icon">❤️</span>
                     <div class="action-text">
-                        <div class="action-title">管理文件</div>
-                        <div class="action-desc">管理已下载的视频文件</div>
+                        <div class="action-title">我的收藏</div>
+                        <div class="action-desc">查看收藏的视频内容</div>
                     </div>
                 </a>
                 
@@ -466,22 +442,51 @@
         async function loadSystemStats() {
             try {
                 // 加载任务统计
-                const taskResponse = await fetch('/api/v1/task-results/statistics');
+                const taskResponse = await fetch('/api/v1/tasks/statistics');
                 if (taskResponse.ok) {
                     const taskData = await taskResponse.json();
                     if (taskData.code === 200) {
-                        document.getElementById('totalTasks').textContent = taskData.data.redis_stats.total_tasks || 0;
-                        document.getElementById('totalVideos').textContent = taskData.data.database_stats.total_videos || 0;
+                        document.getElementById('totalTasks').textContent = taskData.data.total_tasks || 0;
                     }
+                } else {
+                    console.warn('任务统计加载失败:', taskResponse.status);
                 }
 
-                // 加载文件统计
-                const fileResponse = await fetch('/api/v1/files/statistics');
-                if (fileResponse.ok) {
-                    const fileData = await fileResponse.json();
-                    if (fileData.code === 200) {
-                        document.getElementById('totalFiles').textContent = fileData.data.total_files || 0;
-                        document.getElementById('storageUsed').textContent = formatBytes(fileData.data.total_size || 0);
+                // 加载任务结果统计
+                const taskResultsResponse = await fetch('/api/v1/task-results/statistics');
+                if (taskResultsResponse.ok) {
+                    const taskResultsData = await taskResultsResponse.json();
+                    if (taskResultsData.code === 200) {
+                        const totalVideos = taskResultsData.data.database_stats?.total_videos || 0;
+                        document.getElementById('totalVideos').textContent = totalVideos;
+                    }
+                } else {
+                    console.warn('任务结果统计加载失败:', taskResultsResponse.status);
+                }
+
+                // 加载收藏统计
+                const favoritesResponse = await fetch('/api/v1/favorites/statistics');
+                if (favoritesResponse.ok) {
+                    const favoritesData = await favoritesResponse.json();
+                    if (favoritesData.code === 200) {
+                        document.getElementById('totalFiles').textContent = favoritesData.data.total_favorites || 0;
+                        document.getElementById('storageUsed').textContent = favoritesData.data.total_size_formatted || '0 B';
+                    }
+                } else {
+                    console.warn('收藏统计加载失败:', favoritesResponse.status);
+                    // 如果收藏统计失败，尝试加载MinIO统计
+                    const minioResponse = await fetch('/api/v1/minio/statistics');
+                    if (minioResponse.ok) {
+                        const minioData = await minioResponse.json();
+                        if (minioData.code === 200) {
+                            document.getElementById('totalFiles').textContent = minioData.data.total_objects || 0;
+                            document.getElementById('storageUsed').textContent = formatBytes(minioData.data.total_size || 0);
+                        }
+                    } else {
+                        console.warn('MinIO统计加载失败:', minioResponse.status);
+                        // 设置默认值
+                        document.getElementById('totalFiles').textContent = 0;
+                        document.getElementById('storageUsed').textContent = '0 B';
                     }
                 }
             } catch (error) {

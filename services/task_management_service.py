@@ -276,16 +276,16 @@ class TaskManagementService:
         db = await self._get_db()
         try:
             # 查询总数
-            count_sql = "SELECT COUNT(*) as total FROM douyin_aweme WHERE task_id = %s"
+            count_sql = "SELECT COUNT(*) as total FROM unified_content WHERE task_id = %s"
             count_result = await db.get_first(count_sql, task_id)
             total = count_result['total'] if count_result else 0
             
             # 查询数据
             offset = (page - 1) * page_size
             query_sql = """
-            SELECT * FROM douyin_aweme 
+            SELECT * FROM unified_content 
             WHERE task_id = %s
-            ORDER BY created_at DESC
+            ORDER BY add_ts DESC
             LIMIT %s OFFSET %s
             """
             
@@ -307,7 +307,7 @@ class TaskManagementService:
         """获取视频详情"""
         db = await self._get_db()
         try:
-            query_sql = "SELECT * FROM douyin_aweme WHERE id = %s"
+            query_sql = "SELECT * FROM unified_content WHERE id = %s"
             result = await db.get_first(query_sql, video_id)
             return result
             
@@ -319,13 +319,9 @@ class TaskManagementService:
         """更新视频收藏状态"""
         db = await self._get_db()
         try:
-            # 暂时注释掉is_collected字段更新，因为该字段可能不存在
-            # update_sql = "UPDATE douyin_aweme SET is_collected = %s"
-            # params = [is_collected]
-            
-            # 只更新minio_url字段
+            # 更新minio_url字段
             if minio_url:
-                update_sql = "UPDATE douyin_aweme SET minio_url = %s WHERE id = %s"
+                update_sql = "UPDATE unified_content SET minio_url = %s WHERE id = %s"
                 params = [minio_url, video_id]
             else:
                 # 如果没有minio_url，暂时返回成功
@@ -355,11 +351,11 @@ class TaskManagementService:
             
             task_stats = await db.get_first(task_stats_sql)
             
-            # 视频统计 - 移除is_collected字段查询
+            # 视频统计 - 使用统一内容表
             video_stats_sql = """
             SELECT 
                 COUNT(*) as total_videos
-            FROM douyin_aweme
+            FROM unified_content
             """
             
             video_stats = await db.get_first(video_stats_sql)
@@ -367,34 +363,16 @@ class TaskManagementService:
             # 平台统计
             platform_stats_sql = """
             SELECT platform, COUNT(*) as count
-            FROM crawler_tasks 
-            WHERE deleted = 0
+            FROM unified_content
             GROUP BY platform
             """
             
-            platform_results = await db.query(platform_stats_sql)
-            platform_stats = {row['platform']: row['count'] for row in platform_results}
-            
-            # 最近任务
-            recent_tasks_sql = """
-            SELECT * FROM crawler_tasks 
-            WHERE deleted = 0 AND created_at >= %s
-            ORDER BY created_at DESC 
-            LIMIT 10
-            """
-            
-            week_ago = datetime.now() - timedelta(days=7)
-            recent_tasks = await db.query(recent_tasks_sql, week_ago)
+            platform_stats = await db.query(platform_stats_sql)
             
             return {
-                'total_tasks': task_stats['total_tasks'] or 0,
-                'completed_tasks': task_stats['completed_tasks'] or 0,
-                'running_tasks': task_stats['running_tasks'] or 0,
-                'failed_tasks': task_stats['failed_tasks'] or 0,
-                'total_videos': video_stats['total_videos'] or 0,
-                'collected_videos': 0,  # 暂时设为0，因为is_collected字段不存在
-                'platform_stats': platform_stats,
-                'recent_tasks': recent_tasks
+                'task_stats': task_stats,
+                'video_stats': video_stats,
+                'platform_stats': platform_stats
             }
             
         except Exception as e:
@@ -413,7 +391,8 @@ class TaskManagementService:
             # 查询数据
             offset = (page - 1) * page_size
             query_sql = """
-            SELECT * FROM crawler_task_logs 
+            SELECT id, task_id, platform, account_id, log_level, message, step, progress, extra_data, created_at
+            FROM crawler_task_logs 
             WHERE task_id = %s
             ORDER BY created_at DESC
             LIMIT %s OFFSET %s
@@ -421,12 +400,42 @@ class TaskManagementService:
             
             results = await db.query(query_sql, task_id, page_size, offset)
             
+            # 转换数据格式以保持API兼容性
+            formatted_results = []
+            for row in results:
+                # 尝试从extra_data中提取operator信息
+                operator = 'system'
+                try:
+                    if row.get('extra_data'):
+                        import json
+                        extra_data = json.loads(row['extra_data'])
+                        operator = extra_data.get('operator', 'system')
+                except:
+                    pass
+                
+                # 构建兼容的响应格式
+                formatted_row = {
+                    'id': row['id'],
+                    'task_id': row['task_id'],
+                    'action_type': row.get('step', 'unknown'),  # 使用step字段作为action_type
+                    'content': row.get('message', ''),  # 使用message字段作为content
+                    'operator': operator,
+                    'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+                    # 添加原始字段以便调试
+                    'platform': row.get('platform'),
+                    'log_level': row.get('log_level'),
+                    'step': row.get('step'),
+                    'progress': row.get('progress'),
+                    'extra_data': row.get('extra_data')
+                }
+                formatted_results.append(formatted_row)
+            
             return {
                 'total': total,
                 'page': page,
                 'page_size': page_size,
                 'total_pages': (total + page_size - 1) // page_size,
-                'items': results
+                'items': formatted_results
             }
             
         except Exception as e:
@@ -437,12 +446,24 @@ class TaskManagementService:
         """添加任务日志"""
         db = await self._get_db()
         try:
+            # 使用实际的数据库表结构字段
             insert_sql = """
-            INSERT INTO crawler_task_logs (task_id, action_type, content, operator, created_at)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO crawler_task_logs (task_id, platform, account_id, log_level, message, step, progress, extra_data, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             
-            await db.execute(insert_sql, task_id, action_type, content, operator, datetime.now())
+            # 将action_type映射到step字段，content映射到message字段，operator存储到extra_data
+            await db.execute(insert_sql, 
+                task_id, 
+                'system',  # platform
+                None,      # account_id
+                'INFO',    # log_level
+                content,   # message (直接使用content)
+                action_type,  # step (使用action_type作为step)
+                0,         # progress
+                f'{{"operator": "{operator}"}}',  # extra_data (JSON格式)
+                datetime.now()
+            )
             
         except Exception as e:
             logger.error(f"添加任务日志失败: {str(e)}")
