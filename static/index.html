@@ -342,15 +342,15 @@
                 </div>
             </div>
 
-            <!-- 系统设置 -->
-            <div class="feature-card">
-                <span class="feature-icon">⚙️</span>
-                <div class="feature-title">系统配置管理</div>
+            <!-- 爬虫控制管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/crawler_control.html'">
+                <span class="feature-icon">🕷️</span>
+                <div class="feature-title">爬虫控制管理</div>
                 <div class="feature-desc">
-                    配置爬虫参数、存储设置、API接口等系统配置项
+                    通过API控制爬虫行为，支持实时配置、任务监控、资源管理等功能
                 </div>
                 <div class="feature-actions">
-                    <a href="#" onclick="showSettings()" class="btn btn-primary">系统设置</a>
+                    <a href="/static/crawler_control.html" class="btn btn-primary">爬虫控制</a>
                     <a href="/docs" class="btn btn-secondary">API文档</a>
                 </div>
             </div>
@@ -384,11 +384,11 @@
                     </div>
                 </a>
                 
-                <a href="#" onclick="cleanupSystem()" class="action-btn">
-                    <span class="action-icon">🧹</span>
+                <a href="/static/crawler_control.html" class="action-btn">
+                    <span class="action-icon">🕷️</span>
                     <div class="action-text">
-                        <div class="action-title">系统清理</div>
-                        <div class="action-desc">清理过期文件和缓存数据</div>
+                        <div class="action-title">爬虫控制</div>
+                        <div class="action-desc">API驱动的爬虫管理</div>
                     </div>
                 </a>
                 
@@ -546,17 +546,7 @@
             alert('系统设置功能开发中，敬请期待！');
         }
 
-        // 系统清理
-        async function cleanupSystem() {
-            if (confirm('确定要进行系统清理吗？这将清理过期文件和缓存数据。')) {
-                try {
-                    // 这里可以调用清理API
-                    alert('系统清理完成！');
-                } catch (error) {
-                    alert('清理失败，请稍后重试。');
-                }
-            }
-        }
+
 
         // 开始远程登录
         function startRemoteLogin() {

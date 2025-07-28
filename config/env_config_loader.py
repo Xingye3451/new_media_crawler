@@ -43,47 +43,10 @@ class EnvConfigLoader:
             print(f"错误: 加载配置文件 {config_path} 失败: {e}")
             return self._get_default_config()
         
-        # 加载存储配置（所有环境都需要）
-        storage_config = self._load_storage_config()
-        
-        # 合并配置
-        merged_config = self._merge_configs(env_config, storage_config)
-        
         # 缓存配置
-        self._config_cache = merged_config
+        self._config_cache = env_config
         
-        return merged_config
-    
-    def _load_storage_config(self) -> Dict[str, Any]:
-        """加载存储配置"""
-        storage_config_path = self.config_dir / "config_storage.yaml"
-        
-        if not storage_config_path.exists():
-            print(f"警告: 存储配置文件 {storage_config_path} 不存在，使用默认存储配置")
-            return self._get_default_storage_config()
-        
-        try:
-            with open(storage_config_path, 'r', encoding='utf-8') as f:
-                storage_config = yaml.safe_load(f)
-                self._storage_config = storage_config
-                return storage_config
-        except Exception as e:
-            print(f"错误: 加载存储配置文件失败: {e}")
-            return self._get_default_storage_config()
-    
-    def _merge_configs(self, env_config: Dict[str, Any], storage_config: Dict[str, Any]) -> Dict[str, Any]:
-        """合并环境配置和存储配置"""
-        merged = {}
-        
-        # 合并环境配置
-        if env_config:
-            merged.update(env_config)
-        
-        # 合并存储配置
-        if storage_config:
-            merged.update(storage_config)
-        
-        return merged
+        return env_config
     
     def _get_default_config(self) -> Dict[str, Any]:
         """获取默认配置"""
@@ -114,55 +77,171 @@ class EnvConfigLoader:
                 "database": "mediacrawler",
                 "charset": "utf8mb4"
             },
+            "redis": {
+                "host": "localhost",
+                "port": 6379,
+                "db": 0,
+                "password": "",
+                "connection_pool_size": 5,
+                "max_connections": 20,
+                "socket_timeout": 5,
+                "socket_connect_timeout": 5,
+                "socket_keepalive": True,
+                "socket_keepalive_options": {},
+                "health_check_interval": 30,
+                "retry_on_timeout": True,
+                "task_result_ttl": 604800,
+                "task_result_key_prefix": "mediacrawler:task:",
+                "session_ttl": 3600,
+                "session_key_prefix": "mediacrawler:session:"
+            },
             "app": {
                 "debug": True,
                 "log_level": "DEBUG",
                 "data_dir": "./data",
                 "user_data_dir": "./data/user_data"
-            }
-        }
-    
-    def _get_default_storage_config(self) -> Dict[str, Any]:
-        """获取默认存储配置"""
-        return {
-            "storage": {
-                "local_base_path": "./data",
-                "small_file_threshold": 10485760,
-                "enable_minio": False,
-                "minio_endpoint": "localhost:9000",
-                "minio_access_key": "minioadmin",
-                "minio_secret_key": "minioadmin",
-                "minio_secure": False,
-                "minio_bucket": "mediacrawler-videos",
-                "database": {
-                    "url": "mysql+pymysql://root:password@localhost:3306/mediacrawler",
-                    "pool_size": 10,
-                    "max_overflow": 20,
-                    "pool_timeout": 30,
-                    "pool_recycle": 3600
-                },
-                "file_management": {
-                    "naming_pattern": "{platform}/{date}/{content_id}/{filename}",
-                    "date_format": "%Y/%m/%d",
-                    "supported_formats": ["mp4", "avi", "mov", "mkv", "flv", "webm", "m4v", "3gp"],
-                    "max_file_size": 1073741824,
-                    "min_file_size": 1024,
-                    "duplicate_check": True,
-                    "duplicate_strategy": "skip"
-                },
-                "performance": {
-                    "max_concurrent_downloads": 5,
-                    "chunk_size": 8192,
-                    "download_timeout": 300,
-                    "max_retries": 3,
-                    "retry_delay": 5
-                },
-                "monitoring": {
-                    "storage_usage_threshold": 0.8,
-                    "file_count_threshold": 10000,
-                    "monitor_interval": 3600
+            },
+            "remote_desktop": {
+                "enabled": False,
+                "vnc_url": "http://localhost:6080/vnc.html",
+                "vnc_host": "localhost",
+                "vnc_port": 6080,
+                "vnc_password": "",
+                "display_number": 1,
+                "connection_timeout": 5,
+                "max_wait_time": 1800,
+                "check_interval": 3
+            },
+            "server": {
+                "port": 8000,
+                "host": "0.0.0.0",
+                "debug": False,
+                "enable_cors": True,
+                "static_path": "static",
+                "max_upload_size": 100
+            },
+            "security": {
+                "enable_https": False,
+                "ssl_cert": "",
+                "ssl_key": "",
+                "session_secret": "default-secret-key",
+                "session_expire": 86400,
+                "enable_api_auth": False,
+                "api_key": "default-api-key"
+            },
+            "crawler_service": {
+                "max_processes": 5,
+                "task_timeout": 1800,
+                "result_cache_time": 3600,
+                "enable_monitoring": True,
+                "monitor_interval": 30,
+                "cpu_warning_threshold": 80,
+                "memory_warning_threshold": 85,
+                "disk_warning_threshold": 90
+            },
+            "task_management": {
+                "max_queue_size": 100,
+                "max_retry_count": 3,
+                "retry_interval": 60,
+                "status_check_interval": 10,
+                "result_retention_days": 30
+            },
+            "performance": {
+                "enable_cache": True,
+                "cache_size_limit": 100,
+                "enable_compression": True,
+                "enable_async": True,
+                "async_queue_size": 50,
+                "async_timeout": 300
+            },
+            "monitoring": {
+                "enable_system_monitor": True,
+                "data_retention_days": 7,
+                "collection_interval": 60,
+                "enable_alerts": True,
+                "alerts": {
+                    "cpu_threshold": 80,
+                    "memory_threshold": 85,
+                    "disk_threshold": 90,
+                    "response_time_threshold": 5000
                 }
-            }
+            },
+            "development": {
+                "enable_hot_reload": False,
+                "enable_debug_toolbar": False,
+                "enable_detailed_errors": False,
+                "test_mode": False
+            },
+            "xhs": {
+                "search_note_type": "video",
+                "xhs_specified_id_list": [],
+                "xhs_creator_id_list": []
+            },
+            "douyin": {
+                "publish_time_type": 0,
+                "dy_specified_id_list": [],
+                "dy_creator_id_list": []
+            },
+            "kuaishou": {
+                "ks_specified_id_list": [],
+                "ks_creator_id_list": []
+            },
+            "bilibili": {
+                "all_day": False,
+                "start_day": "2024-01-01",
+                "end_day": "2024-01-31",
+                "bili_specified_id_list": [],
+                "bili_creator_id_list": [],
+                "creator_mode": False
+            },
+            "weibo": {
+                "weibo_specified_id_list": [],
+                "weibo_creator_id_list": []
+            },
+            "tieba": {
+                "tieba_specified_id_list": [],
+                "tieba_name_list": [],
+                "tieba_creator_url_list": []
+            },
+            "zhihu": {
+                "zhihu_specified_id_list": [],
+                "zhihu_creator_url_list": []
+            },
+            "comments": {
+                "max_comments_count_single_notes": 100,
+                "max_sub_comments_count_single_notes": 50
+            },
+            "contacts": {
+                "max_contacts_count_single_notes": 100
+            },
+            "dynamics": {
+                "max_dynamics_count_single_notes": 100
+            },
+            "wordcloud": {
+                "enable_get_wordcloud": False,
+                "custom_words": {
+                    "零几": "年份",
+                    "高频词": "专业术语"
+                },
+                "stop_words_file": "./docs/hit_stopwords.txt",
+                "font_path": "./docs/STZHONGS.TTF"
+            },
+            "ua": 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+            "save_login_state": True,
+            "cookies": "",
+            "account_id": None,
+            "start_page": 1,
+            "crawler_max_comments_count_singlenotes": 10,
+            "sort_type": "popularity_descending",
+            "publish_time_type": 0,
+            "xhs_specified_note_url_list": [],
+            "start_day": '2024-01-01',
+            "end_day": '2024-01-01',
+            "all_day": False,
+            "creator_mode": True,
+            "start_contacs_page": 1,
+            "crawler_max_contacs_count_singlenotes": 100,
+            "crawler_max_dynamics_count_singlenotes": 50
         }
     
     def get_database_config(self) -> Dict[str, Any]:
@@ -189,6 +268,56 @@ class EnvConfigLoader:
         """获取应用配置"""
         config = self._config_cache or self.load_config()
         return config.get("app", {})
+    
+    def get_redis_config(self) -> Dict[str, Any]:
+        """获取Redis配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("redis", {})
+    
+    def get_remote_desktop_config(self) -> Dict[str, Any]:
+        """获取远程桌面配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("remote_desktop", {})
+    
+    def get_server_config(self) -> Dict[str, Any]:
+        """获取服务器配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("server", {})
+    
+    def get_security_config(self) -> Dict[str, Any]:
+        """获取安全配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("security", {})
+    
+    def get_crawler_service_config(self) -> Dict[str, Any]:
+        """获取爬虫服务配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("crawler_service", {})
+    
+    def get_task_management_config(self) -> Dict[str, Any]:
+        """获取任务管理配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("task_management", {})
+    
+    def get_performance_config(self) -> Dict[str, Any]:
+        """获取性能配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("performance", {})
+    
+    def get_monitoring_config(self) -> Dict[str, Any]:
+        """获取监控配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("monitoring", {})
+    
+    def get_development_config(self) -> Dict[str, Any]:
+        """获取开发环境配置"""
+        config = self._config_cache or self.load_config()
+        return config.get("development", {})
+    
+    def get_platform_config(self, platform: str) -> Dict[str, Any]:
+        """获取平台特定配置"""
+        config = self._config_cache or self.load_config()
+        return config.get(platform, {})
     
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值"""

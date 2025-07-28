@@ -171,6 +171,84 @@ class RedisConfig:
     session_key_prefix: str = "mediacrawler:session:"
 
 
+@dataclass
+class ServerConfig:
+    """服务器配置模型"""
+    port: int = 8000
+    host: str = "0.0.0.0"
+    debug: bool = False
+    enable_cors: bool = True
+    static_path: str = "static"
+    max_upload_size: int = 100  # MB
+
+@dataclass
+class SecurityConfig:
+    """安全配置模型"""
+    enable_https: bool = False
+    ssl_cert: str = ""
+    ssl_key: str = ""
+    session_secret: str = "your-secret-key-here"
+    session_expire: int = 86400
+    enable_api_auth: bool = False
+    api_key: str = "your-api-key-here"
+
+@dataclass
+class CrawlerServiceConfig:
+    """爬虫服务配置模型"""
+    max_processes: int = 5
+    task_timeout: int = 1800
+    result_cache_time: int = 3600
+    enable_monitoring: bool = True
+    monitor_interval: int = 30
+    cpu_warning_threshold: int = 80
+    memory_warning_threshold: int = 85
+    disk_warning_threshold: int = 90
+
+@dataclass
+class TaskManagementConfig:
+    """任务管理配置模型"""
+    max_queue_size: int = 100
+    max_retry_count: int = 3
+    retry_interval: int = 60
+    status_check_interval: int = 10
+    result_retention_days: int = 30
+
+@dataclass
+class PerformanceConfig:
+    """性能优化配置模型"""
+    enable_cache: bool = True
+    cache_size_limit: int = 100
+    enable_compression: bool = True
+    enable_async: bool = True
+    async_queue_size: int = 50
+    async_timeout: int = 300
+
+@dataclass
+class MonitoringConfig:
+    """监控配置模型"""
+    enable_system_monitor: bool = True
+    data_retention_days: int = 7
+    collection_interval: int = 60
+    enable_alerts: bool = True
+    
+    @dataclass
+    class AlertsConfig:
+        cpu_threshold: int = 80
+        memory_threshold: int = 85
+        disk_threshold: int = 90
+        response_time_threshold: int = 5000
+    
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
+
+@dataclass
+class DevelopmentConfig:
+    """开发环境配置模型"""
+    enable_hot_reload: bool = False
+    enable_debug_toolbar: bool = False
+    enable_detailed_errors: bool = False
+    test_mode: bool = False
+
+
 class ConfigManager:
     """配置管理器"""
     
@@ -208,13 +286,10 @@ class ConfigManager:
         # 2. 加载YAML配置文件
         self._load_yaml_config()
         
-        # 3. 加载存储配置
-        self._load_storage_config()
-        
-        # 4. 加载JSON配置文件
+        # 3. 加载JSON配置文件
         self._load_json_config()
         
-        # 5. 初始化配置对象
+        # 4. 初始化配置对象
         self._init_config_objects()
     
     def _load_env_config(self):
@@ -340,19 +415,6 @@ class ConfigManager:
             except Exception as e:
                 utils.logger.error(f"Failed to load YAML config: {e}")
     
-    def _load_storage_config(self):
-        """从存储配置文件加载配置"""
-        storage_file = self.config_dir / "config_storage.yaml"
-        
-        if storage_file.exists():
-            try:
-                with open(storage_file, 'r', encoding='utf-8') as f:
-                    storage_config = yaml.safe_load(f)
-                    self._flatten_dict(storage_config, self._config_cache)
-                    utils.logger.info(f"Loaded storage config from {storage_file}")
-            except Exception as e:
-                utils.logger.error(f"Failed to load storage config: {e}")
-    
     def _load_json_config(self):
         """从JSON配置文件加载配置"""
         # 获取当前环境
@@ -475,6 +537,82 @@ class ConfigManager:
             max_wait_time=self.get("remote_desktop.max_wait_time", 1800),
             check_interval=self.get("remote_desktop.check_interval", 3),
         )
+        
+        # 服务器配置
+        self._server_config = ServerConfig(
+            port=self.get("server.port", 8000),
+            host=self.get("server.host", "0.0.0.0"),
+            debug=self.get("server.debug", False),
+            enable_cors=self.get("server.enable_cors", True),
+            static_path=self.get("server.static_path", "static"),
+            max_upload_size=self.get("server.max_upload_size", 100),
+        )
+        
+        # 安全配置
+        self._security_config = SecurityConfig(
+            enable_https=self.get("security.enable_https", False),
+            ssl_cert=self.get("security.ssl_cert", ""),
+            ssl_key=self.get("security.ssl_key", ""),
+            session_secret=self.get("security.session_secret", "your-secret-key-here"),
+            session_expire=self.get("security.session_expire", 86400),
+            enable_api_auth=self.get("security.enable_api_auth", False),
+            api_key=self.get("security.api_key", "your-api-key-here"),
+        )
+        
+        # 爬虫服务配置
+        self._crawler_service_config = CrawlerServiceConfig(
+            max_processes=self.get("crawler_service.max_processes", 5),
+            task_timeout=self.get("crawler_service.task_timeout", 1800),
+            result_cache_time=self.get("crawler_service.result_cache_time", 3600),
+            enable_monitoring=self.get("crawler_service.enable_monitoring", True),
+            monitor_interval=self.get("crawler_service.monitor_interval", 30),
+            cpu_warning_threshold=self.get("crawler_service.cpu_warning_threshold", 80),
+            memory_warning_threshold=self.get("crawler_service.memory_warning_threshold", 85),
+            disk_warning_threshold=self.get("crawler_service.disk_warning_threshold", 90),
+        )
+        
+        # 任务管理配置
+        self._task_management_config = TaskManagementConfig(
+            max_queue_size=self.get("task_management.max_queue_size", 100),
+            max_retry_count=self.get("task_management.max_retry_count", 3),
+            retry_interval=self.get("task_management.retry_interval", 60),
+            status_check_interval=self.get("task_management.status_check_interval", 10),
+            result_retention_days=self.get("task_management.result_retention_days", 30),
+        )
+        
+        # 性能优化配置
+        self._performance_config = PerformanceConfig(
+            enable_cache=self.get("performance.enable_cache", True),
+            cache_size_limit=self.get("performance.cache_size_limit", 100),
+            enable_compression=self.get("performance.enable_compression", True),
+            enable_async=self.get("performance.enable_async", True),
+            async_queue_size=self.get("performance.async_queue_size", 50),
+            async_timeout=self.get("performance.async_timeout", 300),
+        )
+        
+        # 监控配置
+        alerts_config = MonitoringConfig.AlertsConfig(
+            cpu_threshold=self.get("monitoring.alerts.cpu_threshold", 80),
+            memory_threshold=self.get("monitoring.alerts.memory_threshold", 85),
+            disk_threshold=self.get("monitoring.alerts.disk_threshold", 90),
+            response_time_threshold=self.get("monitoring.alerts.response_time_threshold", 5000),
+        )
+        
+        self._monitoring_config = MonitoringConfig(
+            enable_system_monitor=self.get("monitoring.enable_system_monitor", True),
+            data_retention_days=self.get("monitoring.data_retention_days", 7),
+            collection_interval=self.get("monitoring.collection_interval", 60),
+            enable_alerts=self.get("monitoring.enable_alerts", True),
+            alerts=alerts_config,
+        )
+        
+        # 开发环境配置
+        self._development_config = DevelopmentConfig(
+            enable_hot_reload=self.get("development.enable_hot_reload", False),
+            enable_debug_toolbar=self.get("development.enable_debug_toolbar", False),
+            enable_detailed_errors=self.get("development.enable_detailed_errors", False),
+            test_mode=self.get("development.test_mode", False),
+        )
     
     def get_proxy_config(self) -> ProxyConfig:
         """获取代理配置"""
@@ -503,6 +641,34 @@ class ConfigManager:
     def get_remote_desktop_config(self) -> RemoteDesktopConfig:
         """获取远程桌面配置"""
         return self._remote_desktop_config
+    
+    def get_server_config(self) -> ServerConfig:
+        """获取服务器配置"""
+        return self._server_config
+    
+    def get_security_config(self) -> SecurityConfig:
+        """获取安全配置"""
+        return self._security_config
+    
+    def get_crawler_service_config(self) -> CrawlerServiceConfig:
+        """获取爬虫服务配置"""
+        return self._crawler_service_config
+    
+    def get_task_management_config(self) -> TaskManagementConfig:
+        """获取任务管理配置"""
+        return self._task_management_config
+    
+    def get_performance_config(self) -> PerformanceConfig:
+        """获取性能优化配置"""
+        return self._performance_config
+    
+    def get_monitoring_config(self) -> MonitoringConfig:
+        """获取监控配置"""
+        return self._monitoring_config
+    
+    def get_development_config(self) -> DevelopmentConfig:
+        """获取开发环境配置"""
+        return self._development_config
     
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值"""
@@ -605,6 +771,66 @@ class ConfigManager:
                 "max_wait_time": self._remote_desktop_config.max_wait_time,
                 "check_interval": self._remote_desktop_config.check_interval,
             },
+            "server": {
+                "port": self._server_config.port,
+                "host": self._server_config.host,
+                "debug": self._server_config.debug,
+                "enable_cors": self._server_config.enable_cors,
+                "static_path": self._server_config.static_path,
+                "max_upload_size": self._server_config.max_upload_size,
+            },
+            "security": {
+                "enable_https": self._security_config.enable_https,
+                "ssl_cert": self._security_config.ssl_cert,
+                "ssl_key": self._security_config.ssl_key,
+                "session_secret": self._security_config.session_secret,
+                "session_expire": self._security_config.session_expire,
+                "enable_api_auth": self._security_config.enable_api_auth,
+                "api_key": self._security_config.api_key,
+            },
+            "crawler_service": {
+                "max_processes": self._crawler_service_config.max_processes,
+                "task_timeout": self._crawler_service_config.task_timeout,
+                "result_cache_time": self._crawler_service_config.result_cache_time,
+                "enable_monitoring": self._crawler_service_config.enable_monitoring,
+                "monitor_interval": self._crawler_service_config.monitor_interval,
+                "cpu_warning_threshold": self._crawler_service_config.cpu_warning_threshold,
+                "memory_warning_threshold": self._crawler_service_config.memory_warning_threshold,
+                "disk_warning_threshold": self._crawler_service_config.disk_warning_threshold,
+            },
+            "task_management": {
+                "max_queue_size": self._task_management_config.max_queue_size,
+                "max_retry_count": self._task_management_config.max_retry_count,
+                "retry_interval": self._task_management_config.retry_interval,
+                "status_check_interval": self._task_management_config.status_check_interval,
+                "result_retention_days": self._task_management_config.result_retention_days,
+            },
+            "performance": {
+                "enable_cache": self._performance_config.enable_cache,
+                "cache_size_limit": self._performance_config.cache_size_limit,
+                "enable_compression": self._performance_config.enable_compression,
+                "enable_async": self._performance_config.enable_async,
+                "async_queue_size": self._performance_config.async_queue_size,
+                "async_timeout": self._performance_config.async_timeout,
+            },
+            "monitoring": {
+                "enable_system_monitor": self._monitoring_config.enable_system_monitor,
+                "data_retention_days": self._monitoring_config.data_retention_days,
+                "collection_interval": self._monitoring_config.collection_interval,
+                "enable_alerts": self._monitoring_config.enable_alerts,
+                "alerts": {
+                    "cpu_threshold": self._monitoring_config.alerts.cpu_threshold,
+                    "memory_threshold": self._monitoring_config.alerts.memory_threshold,
+                    "disk_threshold": self._monitoring_config.alerts.disk_threshold,
+                    "response_time_threshold": self._monitoring_config.alerts.response_time_threshold,
+                },
+            },
+            "development": {
+                "enable_hot_reload": self._development_config.enable_hot_reload,
+                "enable_debug_toolbar": self._development_config.enable_debug_toolbar,
+                "enable_detailed_errors": self._development_config.enable_detailed_errors,
+                "test_mode": self._development_config.test_mode,
+            },
         }
         
         try:
@@ -701,6 +927,66 @@ class ConfigManager:
                 "connection_timeout": self._remote_desktop_config.connection_timeout,
                 "max_wait_time": self._remote_desktop_config.max_wait_time,
                 "check_interval": self._remote_desktop_config.check_interval,
+            },
+            "server": {
+                "port": self._server_config.port,
+                "host": self._server_config.host,
+                "debug": self._server_config.debug,
+                "enable_cors": self._server_config.enable_cors,
+                "static_path": self._server_config.static_path,
+                "max_upload_size": self._server_config.max_upload_size,
+            },
+            "security": {
+                "enable_https": self._security_config.enable_https,
+                "ssl_cert": self._security_config.ssl_cert,
+                "ssl_key": self._security_config.ssl_key,
+                "session_secret": self._security_config.session_secret,
+                "session_expire": self._security_config.session_expire,
+                "enable_api_auth": self._security_config.enable_api_auth,
+                "api_key": self._security_config.api_key,
+            },
+            "crawler_service": {
+                "max_processes": self._crawler_service_config.max_processes,
+                "task_timeout": self._crawler_service_config.task_timeout,
+                "result_cache_time": self._crawler_service_config.result_cache_time,
+                "enable_monitoring": self._crawler_service_config.enable_monitoring,
+                "monitor_interval": self._crawler_service_config.monitor_interval,
+                "cpu_warning_threshold": self._crawler_service_config.cpu_warning_threshold,
+                "memory_warning_threshold": self._crawler_service_config.memory_warning_threshold,
+                "disk_warning_threshold": self._crawler_service_config.disk_warning_threshold,
+            },
+            "task_management": {
+                "max_queue_size": self._task_management_config.max_queue_size,
+                "max_retry_count": self._task_management_config.max_retry_count,
+                "retry_interval": self._task_management_config.retry_interval,
+                "status_check_interval": self._task_management_config.status_check_interval,
+                "result_retention_days": self._task_management_config.result_retention_days,
+            },
+            "performance": {
+                "enable_cache": self._performance_config.enable_cache,
+                "cache_size_limit": self._performance_config.cache_size_limit,
+                "enable_compression": self._performance_config.enable_compression,
+                "enable_async": self._performance_config.enable_async,
+                "async_queue_size": self._performance_config.async_queue_size,
+                "async_timeout": self._performance_config.async_timeout,
+            },
+            "monitoring": {
+                "enable_system_monitor": self._monitoring_config.enable_system_monitor,
+                "data_retention_days": self._monitoring_config.data_retention_days,
+                "collection_interval": self._monitoring_config.collection_interval,
+                "enable_alerts": self._monitoring_config.enable_alerts,
+                "alerts": {
+                    "cpu_threshold": self._monitoring_config.alerts.cpu_threshold,
+                    "memory_threshold": self._monitoring_config.alerts.memory_threshold,
+                    "disk_threshold": self._monitoring_config.alerts.disk_threshold,
+                    "response_time_threshold": self._monitoring_config.alerts.response_time_threshold,
+                },
+            },
+            "development": {
+                "enable_hot_reload": self._development_config.enable_hot_reload,
+                "enable_debug_toolbar": self._development_config.enable_debug_toolbar,
+                "enable_detailed_errors": self._development_config.enable_detailed_errors,
+                "test_mode": self._development_config.test_mode,
             },
         }
         

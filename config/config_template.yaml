@@ -1,11 +1,12 @@
-# 开发环境配置文件
-# 使用方式: ENV=development python main.py
+# MediaCrawler 配置文件模板
+# 基于现有配置结构优化，保持向后兼容
+# 复制此文件为 config_local.yaml 并根据需要修改
 
 # ==================== 代理配置 ====================
 proxy:
   # 代理提供商配置
   provider_name: "qingguo"  # 可选: qingguo, kuaidaili, jisuhttp
-  enabled: true
+  enabled: false  # 建议关闭，避免资源消耗
   pool_count: 5
   validate_ip: true
   
@@ -29,22 +30,22 @@ crawler:
   keywords: "编程副业,编程兼职"
   login_type: "qrcode"  # 可选: qrcode, phone, cookie
   crawler_type: "search"  # 可选: search, detail, creator
-  max_notes_count: 50  # 开发环境设置较小的数量
-  enable_comments: true
+  max_notes_count: 20  # 建议20-30，避免资源占用过多
+  enable_comments: false  # 建议关闭，减少资源消耗
   enable_sub_comments: false
-  enable_images: false
+  enable_images: false  # 建议关闭，减少资源消耗
   save_data_option: "db"  # 可选: json, csv, db
-  headless: false  # 开发环境显示浏览器
-  max_sleep_sec: 3  # 开发环境增加间隔
-  max_concurrency: 1  # 开发环境单线程
+  headless: true  # 服务器环境建议无头模式
+  max_sleep_sec: 5  # 建议5秒，避免反爬
+  max_concurrency: 2  # 建议2-3，避免资源耗尽
 
 # ==================== 数据库配置 ====================
 database:
   host: "192.168.31.231"
   port: 3306
-  username: "aiuser"
-  password: "edcghj98578"
-  database: "mediacrawler"
+  username: "root"
+  password: "123456"
+  database: "media_crawler"
   charset: "utf8mb4"
 
 # ==================== Redis配置 ====================
@@ -52,9 +53,9 @@ redis:
   host: "localhost"
   port: 6379
   db: 0
-  password: ""  # 本地Redis无密码
-  connection_pool_size: 10
-  max_connections: 100
+  password: ""  # 本地Redis通常无密码
+  connection_pool_size: 5  # 建议5-10，减少资源消耗
+  max_connections: 20  # 建议20-50，减少资源消耗
   socket_timeout: 5
   socket_connect_timeout: 5
   socket_keepalive: true
@@ -72,15 +73,15 @@ redis:
 
 # ==================== 应用配置 ====================
 app:
-  debug: true
-  log_level: "DEBUG"
-  data_dir: "/app/data"
+  debug: false  # 生产环境建议关闭
+  log_level: "INFO"  # 建议INFO级别，减少I/O开销
+  data_dir: "./data"
   user_data_dir: "%s_user_data_dir"
 
 # ==================== 远程桌面配置 ====================
 remote_desktop:
-  enabled: true
-  vnc_url: "http://192.168.31.231:6080/vnc.html"  # 开发环境VNC地址
+  enabled: false  # 建议关闭，减少资源消耗
+  vnc_url: "http://192.168.31.231:6080/vnc.html"
   vnc_host: "192.168.31.231"
   vnc_port: 6080
   vnc_password: ""
@@ -92,19 +93,19 @@ remote_desktop:
 # ==================== 存储配置 ====================
 storage:
   # 本地存储配置
-  local_base_path: "/app/data"
-  small_file_threshold: 10485760  # 10MB
+  local_base_path: "./data"  # 当部署到服务器时，需要修改为 /app/files
+  small_file_threshold: 10485760  # 10MB，小于此大小的文件存储到本地
   
   # MinIO配置
-  enable_minio: false  # 开发环境默认关闭
+  enable_minio: false  # 建议关闭，减少资源消耗
   minio_endpoint: "192.168.31.231:9000"
   minio_access_key: "minioadmin"
   minio_secret_key: "minioadmin"
-  minio_secure: false
+  minio_secure: false  # 是否使用HTTPS
   minio_bucket: "mediacrawler-videos"
   
   # 数据库配置
-  database_url: "mysql+pymysql://aiuser:edcghj98578@192.168.31.231:3306/mediacrawler"
+  database_url: "mysql+pymysql://root:123456@192.168.31.231:3306/media_crawler"
   pool_size: 10
   max_overflow: 20
   pool_timeout: 30
@@ -129,7 +130,7 @@ storage:
   
   # 重复文件处理
   duplicate_check: true
-  duplicate_strategy: "skip"
+  duplicate_strategy: "skip"  # skip/overwrite/rename
   
   # 文件清理策略
   cleanup:
@@ -138,70 +139,122 @@ storage:
     cleanup_interval_hours: 24
   
   # 性能优化配置
-  max_concurrent_downloads: 3  # 开发环境减少并发
+  max_concurrent_downloads: 5
   chunk_size: 8192
   download_timeout: 300
   max_retries: 3
   retry_delay: 5
   
   # 监控配置
-  storage_usage_threshold: 0.8
+  storage_usage_threshold: 0.8  # 80%
   file_count_threshold: 10000
   monitor_interval: 3600
 
 # ==================== 服务配置 ====================
 server:
+  # 服务基础配置
   port: 8000
   host: "0.0.0.0"
-  debug: true  # 开发环境启用调试
+  debug: false
   enable_cors: true
   static_path: "static"
-  max_upload_size: 100
+  max_upload_size: 100  # MB
 
 # ==================== 安全配置 ====================
 security:
+  # 是否启用HTTPS
   enable_https: false
+  
+  # SSL证书路径
   ssl_cert: ""
   ssl_key: ""
-  session_secret: "dev-secret-key"
+  
+  # 会话密钥
+  session_secret: "your-secret-key-here"
+  
+  # 会话过期时间 (秒)
   session_expire: 86400
+  
+  # 是否启用API认证
   enable_api_auth: false
-  api_key: "dev-api-key"
+  
+  # API密钥
+  api_key: "your-api-key-here"
 
 # ==================== 爬虫服务配置 ====================
 crawler_service:
-  max_processes: 3  # 开发环境减少进程数
+  # 爬虫进程池大小
+  max_processes: 5
+  
+  # 爬虫任务超时时间 (秒)
   task_timeout: 1800
+  
+  # 爬虫结果缓存时间 (秒)
   result_cache_time: 3600
+  
+  # 是否启用爬虫监控
   enable_monitoring: true
+  
+  # 监控间隔 (秒)
   monitor_interval: 30
+  
+  # 资源警告阈值
   cpu_warning_threshold: 80
   memory_warning_threshold: 85
   disk_warning_threshold: 90
 
 # ==================== 任务管理配置 ====================
 task_management:
-  max_queue_size: 50  # 开发环境减少队列大小
+  # 任务队列大小
+  max_queue_size: 100
+  
+  # 任务重试次数
   max_retry_count: 3
+  
+  # 任务重试间隔 (秒)
   retry_interval: 60
+  
+  # 任务状态检查间隔 (秒)
   status_check_interval: 10
-  result_retention_days: 7  # 开发环境减少保留时间
+  
+  # 任务结果保留时间 (天)
+  result_retention_days: 30
 
 # ==================== 性能优化配置 ====================
 performance:
+  # 是否启用缓存
   enable_cache: true
-  cache_size_limit: 50  # 开发环境减少缓存
+  
+  # 缓存大小限制 (MB)
+  cache_size_limit: 100
+  
+  # 是否启用压缩
   enable_compression: true
+  
+  # 是否启用异步处理
   enable_async: true
-  async_queue_size: 20  # 开发环境减少队列
+  
+  # 异步任务队列大小
+  async_queue_size: 50
+  
+  # 异步任务超时时间 (秒)
   async_timeout: 300
 
 # ==================== 监控配置 ====================
 monitoring:
+  # 是否启用系统监控
   enable_system_monitor: true
-  data_retention_days: 3  # 开发环境减少保留时间
+  
+  # 监控数据保留时间 (天)
+  data_retention_days: 7
+  
+  # 监控指标收集间隔 (秒)
   collection_interval: 60
+  
+  # 是否启用告警
   enable_alerts: true
+  
+  # 告警阈值
   alerts:
     cpu_threshold: 80
     memory_threshold: 85
@@ -210,26 +263,37 @@ monitoring:
 
 # ==================== 开发环境配置 ====================
 development:
-  enable_hot_reload: true  # 开发环境启用热重载
-  enable_debug_toolbar: true  # 开发环境启用调试工具栏
-  enable_detailed_errors: true  # 开发环境显示详细错误
-  test_mode: true  # 开发环境启用测试模式
+  # 是否启用热重载
+  enable_hot_reload: false
+  
+  # 是否启用调试工具栏
+  enable_debug_toolbar: false
+  
+  # 是否启用详细错误信息
+  enable_detailed_errors: false
+  
+  # 测试模式
+  test_mode: false
 
 # ==================== 平台特定配置 ====================
+# 小红书配置
 xhs:
-  search_note_type: "video"
+  search_note_type: "video"  # ALL, VIDEO, IMAGE
   xhs_specified_id_list: []
   xhs_creator_id_list: []
 
+# 抖音配置
 douyin:
   publish_time_type: 0
   dy_specified_id_list: []
   dy_creator_id_list: []
 
+# 快手配置
 kuaishou:
   ks_specified_id_list: []
   ks_creator_id_list: []
 
+# B站配置
 bilibili:
   all_day: false
   start_day: "2024-01-01"
@@ -238,55 +302,107 @@ bilibili:
   bili_creator_id_list: []
   creator_mode: false
 
+# 微博配置
 weibo:
   weibo_specified_id_list: []
   weibo_creator_id_list: []
 
+# 贴吧配置
 tieba:
   tieba_specified_id_list: []
   tieba_name_list: []
   tieba_creator_url_list: []
 
+# 知乎配置
 zhihu:
   zhihu_specified_id_list: []
   zhihu_creator_url_list: []
 
 # ==================== 评论配置 ====================
 comments:
-  max_comments_count_single_notes: 50  # 开发环境减少评论数
-  max_sub_comments_count_single_notes: 25
+  # 单个笔记最大评论数
+  max_comments_count_single_notes: 100
+  
+  # 单个笔记最大子评论数
+  max_sub_comments_count_single_notes: 50
 
 # ==================== 联系人配置 ====================
 contacts:
-  max_contacts_count_single_notes: 50  # 开发环境减少联系人数
+  # 单个笔记最大联系人数量
+  max_contacts_count_single_notes: 100
 
 # ==================== 动态配置 ====================
 dynamics:
-  max_dynamics_count_single_notes: 50  # 开发环境减少动态数
+  # 单个创作者最大动态数量
+  max_dynamics_count_single_notes: 100
 
 # ==================== 词云配置 ====================
 wordcloud:
+  # 是否开启生成评论词云图
   enable_get_wordcloud: false
+  
+  # 自定义词语及其分组
   custom_words:
     "零几": "年份"
     "高频词": "专业术语"
+  
+  # 停用词文件路径
   stop_words_file: "./docs/hit_stopwords.txt"
+  
+  # 中文字体文件路径
   font_path: "./docs/STZHONGS.TTF"
 
 # ==================== 兼容性配置 ====================
+# 为了保持向后兼容，保留原有的配置项
+# 这些配置项会从新的配置管理器中获取值
+
+# 自定义User Agent
 ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+
+# 是否保存登录状态
 save_login_state: true
+
+# 登录cookies（仅用于命令行参数兼容，爬虫实际从数据库读取）
 cookies: ""
+
+# 指定使用的账号ID（可选，如果不指定则使用最新登录的账号）
 account_id: null
+
+# 爬取开始页数 默认从第一页开始
 start_page: 1
+
+# 爬取一级评论的数量控制(单视频/帖子)
 crawler_max_comments_count_singlenotes: 10
+
+# 具体值参见media_platform.xxx.field下的枚举值，暂时只支持小红书
 sort_type: "popularity_descending"
+
+# 具体值参见media_platform.xxx.field下的枚举值，暂时只支持抖音
 publish_time_type: 0
-xhs_specified_note_url_list: []
+
+# 指定小红书需要爬虫的笔记URL列表
+xhs_specified_note_url_list: [
+  "https://www.xiaohongshu.com/explore/66fad51c000000001b0224b8?xsec_token=AB3rO-QopW5sgrJ41GwN01WCXh6yWPxjSoFI9D5JIMgKw=&xsec_source=pc_search"
+]
+
+# 爬取开始的天数，仅支持 bilibili 关键字搜索
 start_day: '2024-01-01'
+
+# 爬取结束的天数，仅支持 bilibili 关键字搜索
 end_day: '2024-01-01'
+
+# 是否开启按每一天进行爬取的选项，仅支持 bilibili 关键字搜索
 all_day: false
+
+# 下面仅支持 bilibili creator搜索
+# 爬取评论creator主页还是爬取creator动态和关系列表(True为前者)
 creator_mode: true
+
+# 爬取creator粉丝列表时起始爬取页数
 start_contacs_page: 1
-crawler_max_contacs_count_singlenotes: 50  # 开发环境减少数量
-crawler_max_dynamics_count_singlenotes: 25  # 开发环境减少数量 
+
+# 爬取作者粉丝和关注列表数量控制(单作者)
+crawler_max_contacs_count_singlenotes: 100
+
+# 爬取作者动态数量控制(单作者)
+crawler_max_dynamics_count_singlenotes: 50 

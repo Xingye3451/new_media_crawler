@@ -22,10 +22,17 @@ mkdir -p data
 mkdir -p logs
 mkdir -p config
 
-# 检查配置文件是否存在
-if [ ! -f "config/config_storage.yaml" ]; then
-    echo "⚠️  配置文件不存在，使用默认配置..."
-    # 这里可以复制默认配置文件
+# 检查环境配置文件是否存在
+if [ ! -f "config/config_local.yaml" ] && [ ! -f "config/config_dev.yaml" ] && [ ! -f "config/config_docker.yaml" ] && [ ! -f "config/config_prod.yaml" ]; then
+    echo "⚠️  环境配置文件不存在，请先配置相应的环境配置文件..."
+    echo "   可用的配置文件："
+    echo "   - config/config_local.yaml (本地环境)"
+    echo "   - config/config_dev.yaml (开发环境)"
+    echo "   - config/config_docker.yaml (Docker环境)"
+    echo "   - config/config_prod.yaml (生产环境)"
+    echo ""
+    echo "   请根据你的环境选择合适的配置文件进行配置"
+    exit 1
 fi
 
 # 启动存储服务
@@ -58,7 +65,7 @@ echo "   - MySQL 密码: password"
 echo ""
 echo "📝 使用说明："
 echo "   1. 访问 MinIO 控制台创建 bucket: mediacrawler-videos"
-echo "   2. 配置 config/config_storage.yaml 文件"
+echo "   2. 配置相应环境的配置文件 (如 config/config_local.yaml)"
 echo "   3. 运行 Python 脚本测试存储功能"
 echo ""
 echo "🛑 停止服务："

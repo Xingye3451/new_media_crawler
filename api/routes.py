@@ -12,6 +12,7 @@ from api.video_downloads import router as video_downloads_router
 from api.minio_management import router as minio_management_router
 from api.task_management import router as task_management_router
 from api.crawler_core import router as crawler_core_router
+from api.crawler_control import router as crawler_control_router
 from api.content_management import router as content_management_router
 from api.platform_management import router as platform_management_router
 from api.system_management import router as system_management_router
@@ -29,6 +30,13 @@ api_router.include_router(
     crawler_core_router,
     prefix="/v1",
     tags=["crawler-core"]
+)
+
+# 爬虫控制路由 - 新增
+api_router.include_router(
+    crawler_control_router,
+    prefix="/v1",
+    tags=["crawler-control"]
 )
 
 # 内容管理路由

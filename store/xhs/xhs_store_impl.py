@@ -111,6 +111,42 @@ class XhsDbStoreImplement(AbstractStore):
         """设置Redis回调函数"""
         self.unified_store.set_redis_callback(callback)
     
+    def _convert_to_timestamp(self, time_value) -> int:
+        """
+        将时间值转换为时间戳整数
+        Args:
+            time_value: 时间值，可能是字符串、整数或其他类型
+        Returns:
+            int: 时间戳整数
+        """
+        try:
+            if time_value is None:
+                return 0
+            
+            # 如果是字符串，尝试解析
+            if isinstance(time_value, str):
+                # 如果是"time"字符串，返回0
+                if time_value == "time":
+                    return 0
+                # 如果是数字字符串，直接转换
+                if time_value.isdigit():
+                    return int(time_value)
+                # 如果是空字符串，返回0
+                if time_value.strip() == "":
+                    return 0
+                # 其他字符串情况返回0
+                return 0
+            
+            # 如果是数字，直接转换
+            if isinstance(time_value, (int, float)):
+                return int(time_value)
+            
+            # 其他情况返回0
+            return 0
+        except Exception as e:
+            utils.logger.warning(f"[XhsDbStoreImplement._convert_to_timestamp] 时间转换失败: {e}, 原始值: {time_value}")
+            return 0
+
     async def store_content(self, content_item: Dict):
         """
         小红书内容数据库存储实现
@@ -120,7 +156,13 @@ class XhsDbStoreImplement(AbstractStore):
         Returns:
 
         """
-        await self.unified_store.store_content(content_item)
+        try:
+            # 使用UnifiedStoreImplement的store_content方法
+            await self.unified_store.store_content(content_item)
+                
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement] 存储内容失败: {content_item.get('note_id', '')}, 错误: {e}")
+            raise
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -131,7 +173,13 @@ class XhsDbStoreImplement(AbstractStore):
         Returns:
 
         """
-        await self.unified_store.store_comment(comment_item)
+        try:
+            # 使用UnifiedStoreImplement的store_comment方法
+            await self.unified_store.store_comment(comment_item)
+                
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement] 存储评论失败: {comment_item.get('id', '')}, 错误: {e}")
+            raise
 
     async def store_creator(self, creator_item: Dict):
         """
@@ -142,7 +190,13 @@ class XhsDbStoreImplement(AbstractStore):
         Returns:
 
         """
-        await self.unified_store.store_creator(creator_item)
+        try:
+            # 暂时跳过创作者存储，因为统一存储模块没有实现
+            utils.logger.info(f"[XhsDbStoreImplement] 跳过创作者存储: {creator_item.get('author_id', '')}")
+            # TODO: 实现创作者存储逻辑
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement] 存储创作者失败: {creator_item.get('author_id', '')}, 错误: {e}")
+            # 不抛出异常，避免影响主要内容存储
 
     async def get_all_content(self) -> List[Dict]:
         """
@@ -150,7 +204,211 @@ class XhsDbStoreImplement(AbstractStore):
         Returns:
             List[Dict]: 内容列表
         """
-        return await self.unified_store.get_all_content()
+        try:
+            # 使用UnifiedStoreImplement的get_all_content方法
+            return await self.unified_store.get_all_content()
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement] 获取内容失败: {e}")
+            return []
+    
+    # 添加兼容性方法，保持与原有代码的兼容性
+    async def update_xhs_note(self, note_item: Dict, task_id: str = None):
+        """
+        更新小红书笔记 - 兼容性方法
+        Args:
+            note_item: 笔记数据
+            task_id: 任务ID
+        """
+        try:
+            # 转换数据格式以适配统一存储的字段映射
+            note_id = note_item.get("note_id")
+            user_info = note_item.get("user", {})
+            interact_info = note_item.get("interact_info", {})
+            image_list: List[Dict] = note_item.get("image_list", [])
+            tag_list: List[Dict] = note_item.get("tag_list", [])
+            
+            # 处理图片URL
+            for img in image_list:
+                if img.get('url_default') != '':
+                    img.update({'url': img.get('url_default')})
+            
+            # 获取视频URL
+            video_url = ','.join(self._get_video_url_arr(note_item))
+            
+            # 构建符合统一存储字段映射的数据结构
+            unified_content = {
+                "note_id": note_id,  # content_id 映射
+                "type": note_item.get("type", "note"),  # content_type 映射
+                "title": note_item.get("title") or note_item.get("desc", "")[:255],
+                "desc": note_item.get("desc", ""),  # description 和 content 映射
+                "user": user_info,  # 嵌套结构，用于 author_id, author_name 等映射
+                "interact_info": interact_info,  # 嵌套结构，用于 like_count 等映射
+                "image_list": image_list,  # 嵌套结构，用于 cover_url 映射
+                "video_url": video_url,  # video_download_url 映射
+                "note_url": f"https://www.xiaohongshu.com/explore/{note_id}",  # video_url 映射
+                "ip_location": note_item.get("ip_location", ""),
+                "time": self._convert_to_timestamp(note_item.get("time", 0)),  # create_time 和 publish_time 映射
+                "last_update_time": self._convert_to_timestamp(note_item.get("last_update_time", 0)),  # update_time 映射
+                "tag_list": tag_list,  # tags 和 topics 映射
+                "source_keyword": note_item.get("source_keyword", ""),
+                "raw_data": note_item,  # 原始数据
+                "task_id": task_id
+            }
+            
+            await self.store_content(unified_content)
+            
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement.update_xhs_note] 更新笔记失败: {note_id}, 错误: {e}")
+            raise
+    
+    def _get_video_url_arr(self, note_item: Dict) -> List[str]:
+        """
+        获取视频url数组
+        Args:
+            note_item: 笔记数据
+
+        Returns:
+            List[str]: 视频URL列表
+        """
+        if note_item.get('type') != 'video':
+            return []
+
+        videoArr = []
+        video_data = note_item.get('video', {})
+        consumer = video_data.get('consumer', {})
+        originVideoKey = consumer.get('origin_video_key', '')
+        if originVideoKey == '':
+            originVideoKey = consumer.get('originVideoKey', '')
+        
+        # 降级有水印
+        if originVideoKey == '':
+            media = video_data.get('media', {})
+            stream = media.get('stream', {})
+            videos = stream.get('h264', [])
+            if isinstance(videos, list):
+                videoArr = [v.get('master_url', '') for v in videos if v.get('master_url')]
+        else:
+            videoArr = [f"http://sns-video-bd.xhscdn.com/{originVideoKey}"]
+
+        return videoArr
+    
+    def get_video_url_arr(self, note_item: Dict) -> List[str]:
+        """
+        获取视频url数组 - 公共接口
+        Args:
+            note_item: 笔记数据
+
+        Returns:
+            List[str]: 视频URL列表
+        """
+        return self._get_video_url_arr(note_item)
+    
+    async def batch_update_xhs_note_comments(self, note_id: str, comments: List[Dict]):
+        """
+        批量更新小红书笔记评论 - 兼容性方法
+        Args:
+            note_id: 笔记ID
+            comments: 评论列表
+        """
+        if not comments:
+            return
+        for comment_item in comments:
+            await self.update_xhs_note_comment(note_id, comment_item)
+    
+    async def update_xhs_note_comment(self, note_id: str, comment_item: Dict):
+        """
+        更新小红书笔记评论 - 兼容性方法
+        Args:
+            note_id: 笔记ID
+            comment_item: 评论数据
+        """
+        try:
+            user_info = comment_item.get("user_info", {})
+            comment_id = comment_item.get("id")
+            
+            # 构建符合统一存储字段映射的评论数据结构
+            unified_comment = {
+                "id": comment_id,  # comment_id 映射
+                "note_id": note_id,  # content_id 映射
+                "content": comment_item.get("content", ""),  # content 映射
+                "user_info": user_info,  # 嵌套结构，用于 author_id, author_name 等映射
+                "like_count": comment_item.get("like_count", 0),
+                "sub_comment_count": comment_item.get("sub_comment_count", 0),
+                "create_time": self._convert_to_timestamp(comment_item.get("create_time", 0)),
+                "raw_data": comment_item  # 原始数据
+            }
+            
+            await self.store_comment(unified_comment)
+            
+        except Exception as e:
+            utils.logger.error(f"[XhsDbStoreImplement.update_xhs_note_comment] 更新评论失败: {comment_id}, 错误: {e}")
+            raise
+    
+    async def update_xhs_note_image(self, note_id: str, pic_content: bytes, extension_file_name: str):
+        """
+        更新小红书笔记图片 - 兼容性方法
+        Args:
+            note_id: 笔记ID
+            pic_content: 图片内容
+            extension_file_name: 文件扩展名
+        """
+        # 这里可以调用图片存储服务
+        from .xhs_store_image import XiaoHongShuImage
+        await XiaoHongShuImage().store_image({
+            "notice_id": note_id, 
+            "pic_content": pic_content, 
+            "extension_file_name": extension_file_name
+        })
+    
+    async def save_creator(self, user_id: str, creator: Dict):
+        """
+        保存小红书创作者 - 兼容性方法
+        Args:
+            user_id: 用户ID
+            creator: 创作者数据
+        """
+        user_info = creator.get('basicInfo', {})
+
+        follows = 0
+        fans = 0
+        interaction = 0
+        for i in creator.get('interactions', []):
+            if i.get('type') == 'follows':
+                follows = i.get('count', 0)
+            elif i.get('type') == 'fans':
+                fans = i.get('count', 0)
+            elif i.get('type') == 'interaction':
+                interaction = i.get('count', 0)
+
+        def get_gender(gender):
+            if gender == 1:
+                return '女'
+            elif gender == 0:
+                return '男'
+            else:
+                return None
+
+        # 构建统一格式的创作者数据
+        unified_creator = {
+            "creator_id": user_id,
+            "platform": "xhs",
+            "author_id": user_id,
+            "author_name": user_info.get('nickname', ''),
+            "author_nickname": user_info.get('nickname', ''),
+            "author_avatar": user_info.get('images', ''),
+            "author_signature": user_info.get('desc', ''),
+            "gender": get_gender(user_info.get('gender')),
+            "ip_location": user_info.get('ipLocation', ''),
+            "follows": follows,
+            "fans": fans,
+            "interaction": interaction,
+            "tags": json.dumps({tag.get('tagType'): tag.get('name') for tag in creator.get('tags', [])}, ensure_ascii=False),
+            "raw_data": json.dumps(creator, ensure_ascii=False),
+            "add_ts": utils.get_current_timestamp(),
+            "last_modify_ts": utils.get_current_timestamp()
+        }
+        
+        await self.store_creator(unified_creator)
 
 
 class XhsJsonStoreImplement(AbstractStore):

@@ -34,6 +34,7 @@ from .field import SearchSortType
 from .help import parse_note_info_from_note_url, get_search_id
 from .login import XiaoHongShuLogin
 from utils.db_utils import get_cookies_from_database
+from .field import SearchNoteType
 
 
 class XiaoHongShuCrawler(AbstractCrawler):
@@ -115,6 +116,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 try:
                     # 直接设置cookies到浏览器上下文
                     cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
+                    utils.logger.info(f"[XiaoHongShuCrawler] 转换后的cookies数量: {len(cookie_dict)}")
+                    
                     for key, value in cookie_dict.items():
                         await self.browser_context.add_cookies([{
                             'name': key,
@@ -125,6 +128,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     
                     # 更新客户端cookies
                     await self.xhs_client.update_cookies(browser_context=self.browser_context)
+                    utils.logger.info("[XiaoHongShuCrawler] 已更新客户端cookies")
                     
                     # 再次测试ping
                     try:
@@ -132,28 +136,43 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         utils.logger.info(f"[XiaoHongShuCrawler] 使用数据库cookies后的ping结果: {ping_success}")
                     except Exception as ping_e:
                         utils.logger.warning(f"[XiaoHongShuCrawler] 使用数据库cookies后ping仍失败: {ping_e}")
-                        # 即使ping失败，也继续尝试爬取
-                        utils.logger.info("[XiaoHongShuCrawler] Ping失败但继续使用现有cookies尝试爬取")
-                        ping_success = True  # 强制设为true，跳过重新登录
+                        ping_success = False
                     
                 except Exception as cookie_e:
                     utils.logger.error(f"[XiaoHongShuCrawler] 设置数据库cookies失败: {cookie_e}")
                     ping_success = False
             
-            # 如果ping仍然失败且没有可用的cookies，才进行登录
+            # 如果ping仍然失败，强制重新登录
             if not ping_success:
                 utils.logger.info("[XiaoHongShuCrawler] 需要重新登录")
-                login_obj = XiaoHongShuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # input your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str,
-                )
-                await login_obj.begin()
-                await self.xhs_client.update_cookies(
-                    browser_context=self.browser_context
-                )
+                try:
+                    login_obj = XiaoHongShuLogin(
+                        login_type=config.LOGIN_TYPE,
+                        login_phone="",  # input your phone number
+                        browser_context=self.browser_context,
+                        context_page=self.context_page,
+                        cookie_str=cookie_str,
+                    )
+                    await login_obj.begin()
+                    # 登录成功后更新客户端cookies
+                    await self.xhs_client.update_cookies(browser_context=self.browser_context)
+                    utils.logger.info("[XiaoHongShuCrawler] 登录成功，已更新cookies")
+                    
+                    # 登录后再次测试ping
+                    try:
+                        final_ping_success = await self.xhs_client.pong()
+                        utils.logger.info(f"[XiaoHongShuCrawler] 登录后的ping结果: {final_ping_success}")
+                        if not final_ping_success:
+                            utils.logger.warning("[XiaoHongShuCrawler] 登录后ping仍失败，但继续尝试爬取")
+                    except Exception as final_ping_e:
+                        utils.logger.warning(f"[XiaoHongShuCrawler] 登录后ping测试失败: {final_ping_e}")
+                        
+                except Exception as login_e:
+                    utils.logger.error(f"[XiaoHongShuCrawler] 登录失败: {login_e}")
+                    # 即使登录失败，也尝试继续爬取
+                    utils.logger.info("[XiaoHongShuCrawler] 登录失败但继续尝试爬取")
+            else:
+                utils.logger.info("[XiaoHongShuCrawler] 登录状态正常，无需重新登录")
 
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
@@ -179,6 +198,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
         if config.CRAWLER_MAX_NOTES_COUNT < xhs_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = xhs_limit_count
         start_page = config.START_PAGE
+        
+        # 获取搜索类型配置，默认为全部内容
+        search_note_type = getattr(config, 'SEARCH_NOTE_TYPE', SearchNoteType.ALL)
+        utils.logger.info(f"[XiaoHongShuCrawler.search] 搜索内容类型: {search_note_type.name}")
+        
         for keyword in config.KEYWORDS.split(","):
             source_keyword_var.set(keyword)
             utils.logger.info(
@@ -186,6 +210,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
             )
             page = 1
             search_id = get_search_id()
+            
+            # 添加资源监控
+            start_time = time.time()
+            processed_count = 0
+            
             while (
                 page - start_page + 1
             ) * xhs_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
@@ -196,7 +225,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
                 try:
                     utils.logger.info(
-                        f"[XiaoHongShuCrawler.search] search xhs keyword: {keyword}, page: {page}"
+                        f"[XiaoHongShuCrawler.search] search xhs keyword: {keyword}, page: {page}, note_type: {search_note_type.name}"
                     )
                     note_ids: List[str] = []
                     xsec_tokens: List[str] = []
@@ -209,6 +238,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             if config.SORT_TYPE != ""
                             else SearchSortType.GENERAL
                         ),
+                        note_type=search_note_type,  # 添加笔记类型筛选
                     )
                     utils.logger.info(
                         f"[XiaoHongShuCrawler.search] Search notes res:{notes_res}"
@@ -216,34 +246,111 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     if not notes_res or not notes_res.get("has_more", False):
                         utils.logger.info("No more content!")
                         break
-                    semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-                    task_list = [
-                        self.get_note_detail_async_task(
-                            note_id=post_item.get("id"),
-                            xsec_source=post_item.get("xsec_source"),
-                            xsec_token=post_item.get("xsec_token"),
-                            semaphore=semaphore,
-                        )
-                        for post_item in notes_res.get("items", {})
-                        if post_item.get("model_type") not in ("rec_query", "hot_query")
-                    ]
-                    note_details = await asyncio.gather(*task_list)
+                    
+                    # 添加详细的调试日志
+                    items = notes_res.get("items", [])
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] Found {len(items)} items in search results")
+                    
+                    # 过滤掉推荐查询和热门查询
+                    filtered_items = [item for item in items if item.get("model_type") not in ("rec_query", "hot_query")]
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] After filtering, {len(filtered_items)} valid items remain")
+                    
+                    # 如果指定了视频类型，进一步过滤确保只获取视频内容
+                    if search_note_type == SearchNoteType.VIDEO:
+                        video_items = []
+                        for item in filtered_items:
+                            # 检查是否为视频类型
+                            if item.get("model_type") == "note" and item.get("note_card", {}).get("type") == "video":
+                                video_items.append(item)
+                        filtered_items = video_items
+                        utils.logger.info(f"[XiaoHongShuCrawler.search] After video filtering, {len(filtered_items)} video items remain")
+                    
+                    # 限制并发数量，避免资源耗尽
+                    max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(filtered_items))
+                    semaphore = asyncio.Semaphore(max_concurrent)
+                    
+                    # 分批处理，避免一次性创建太多任务
+                    batch_size = 5  # 每批处理5个任务
+                    note_details = []
+                    
+                    for i in range(0, len(filtered_items), batch_size):
+                        batch_items = filtered_items[i:i + batch_size]
+                        utils.logger.info(f"[XiaoHongShuCrawler.search] Processing batch {i//batch_size + 1}, items: {len(batch_items)}")
+                        
+                        task_list = [
+                            self.get_note_detail_async_task(
+                                note_id=post_item.get("id"),
+                                xsec_source=post_item.get("xsec_source"),
+                                xsec_token=post_item.get("xsec_token"),
+                                semaphore=semaphore,
+                            )
+                            for post_item in batch_items
+                        ]
+                        
+                        # 添加超时控制
+                        try:
+                            batch_results = await asyncio.wait_for(
+                                asyncio.gather(*task_list, return_exceptions=True),
+                                timeout=60  # 60秒超时
+                            )
+                            note_details.extend([r for r in batch_results if not isinstance(r, Exception)])
+                        except asyncio.TimeoutError:
+                            utils.logger.warning(f"[XiaoHongShuCrawler.search] Batch timeout, skipping remaining items")
+                            break
+                        except Exception as e:
+                            utils.logger.error(f"[XiaoHongShuCrawler.search] Batch processing error: {e}")
+                            continue
+                        
+                        # 添加间隔，避免请求过于频繁
+                        await asyncio.sleep(1)
+                    
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] Retrieved {len(note_details)} note details")
+                    
+                    successful_details = 0
                     for note_detail in note_details:
                         if note_detail:
-                            await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
-                            await self.get_notice_media(note_detail)
-                            note_ids.append(note_detail.get("note_id"))
-                            xsec_tokens.append(note_detail.get("xsec_token"))
+                            try:
+                                await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
+                                await self.get_notice_media(note_detail)
+                                note_ids.append(note_detail.get("note_id"))
+                                xsec_tokens.append(note_detail.get("xsec_token"))
+                                successful_details += 1
+                                processed_count += 1
+                            except Exception as e:
+                                utils.logger.error(f"[XiaoHongShuCrawler.search] Failed to process note: {e}")
+                                continue
+                    
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] Successfully processed {successful_details} note details")
+                    
+                    # 检查处理时间，避免长时间运行
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 300:  # 5分钟超时
+                        utils.logger.warning(f"[XiaoHongShuCrawler.search] Processing time exceeded 5 minutes, stopping")
+                        break
+                    
+                    # 获取评论（如果启用）
+                    if config.ENABLE_GET_COMMENTS and note_ids:
+                        try:
+                            await self.batch_get_note_comments(note_ids, xsec_tokens)
+                        except Exception as e:
+                            utils.logger.error(f"[XiaoHongShuCrawler.search] Failed to get comments: {e}")
+                    
                     page += 1
-                    utils.logger.info(
-                        f"[XiaoHongShuCrawler.search] Note details: {note_details}"
-                    )
-                    await self.batch_get_note_comments(note_ids, xsec_tokens)
+                    
                 except DataFetchError:
                     utils.logger.error(
                         "[XiaoHongShuCrawler.search] Get note detail error"
                     )
                     break
+                except Exception as e:
+                    utils.logger.error(
+                        f"[XiaoHongShuCrawler.search] Unexpected error during search: {e}"
+                    )
+                    # 不要立即break，尝试继续
+                    page += 1
+                    continue
+            
+            utils.logger.info(f"[XiaoHongShuCrawler.search] Search completed. Total processed: {processed_count}")
 
     async def get_creators_and_notes(self) -> None:
         """Get creator's notes and retrieve their comment information."""
@@ -408,17 +515,50 @@ class XiaoHongShuCrawler(AbstractCrawler):
         utils.logger.info(
             f"[XiaoHongShuCrawler.batch_get_note_comments] Begin batch get note comments, note list: {note_list}"
         )
-        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-        task_list: List[Task] = []
-        for index, note_id in enumerate(note_list):
-            task = asyncio.create_task(
-                self.get_comments(
-                    note_id=note_id, xsec_token=xsec_tokens[index], semaphore=semaphore
-                ),
-                name=note_id,
-            )
-            task_list.append(task)
-        await asyncio.gather(*task_list)
+        
+        # 限制并发数量
+        max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(note_list))
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # 分批处理评论
+        batch_size = 3  # 每批处理3个评论任务
+        total_processed = 0
+        
+        for i in range(0, len(note_list), batch_size):
+            batch_notes = note_list[i:i + batch_size]
+            batch_tokens = xsec_tokens[i:i + batch_size]
+            
+            utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Processing comment batch {i//batch_size + 1}, notes: {len(batch_notes)}")
+            
+            task_list: List[Task] = []
+            for index, note_id in enumerate(batch_notes):
+                task = asyncio.create_task(
+                    self.get_comments(
+                        note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore
+                    ),
+                    name=note_id,
+                )
+                task_list.append(task)
+            
+            try:
+                # 添加超时控制
+                await asyncio.wait_for(
+                    asyncio.gather(*task_list, return_exceptions=True),
+                    timeout=120  # 2分钟超时
+                )
+                total_processed += len(batch_notes)
+                utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Completed batch {i//batch_size + 1}")
+            except asyncio.TimeoutError:
+                utils.logger.warning(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch timeout")
+                break
+            except Exception as e:
+                utils.logger.error(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch error: {e}")
+                continue
+            
+            # 添加间隔，避免请求过于频繁
+            await asyncio.sleep(2)
+        
+        utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment processing completed. Total processed: {total_processed}")
 
     async def get_comments(
         self, note_id: str, xsec_token: str, semaphore: asyncio.Semaphore
@@ -581,7 +721,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled") -> List[Dict]:
+                                proxy_strategy: str = "disabled", video_only: bool = False) -> List[Dict]:
         """
         根据关键词搜索小红书笔记
         :param keywords: 搜索关键词
@@ -593,10 +733,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
         :param proxy_strategy: 代理策略
+        :param video_only: 是否只搜索视频内容
         :return: 搜索结果列表
         """
         try:
             utils.logger.info(f"[XiaoHongShuCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            if video_only:
+                utils.logger.info("[XiaoHongShuCrawler.search_by_keywords] 启用视频筛选模式")
             
             # 设置配置
             import config
@@ -605,6 +748,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option
             config.ENABLE_IP_PROXY = use_proxy
+            config.CRAWLER_TYPE = "search"  # 设置爬取类型为搜索
+            
+            # 设置视频筛选
+            if video_only:
+                config.SEARCH_NOTE_TYPE = SearchNoteType.VIDEO
+            else:
+                config.SEARCH_NOTE_TYPE = SearchNoteType.ALL
             
             # 启动爬虫
             await self.start()
@@ -632,7 +782,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             account_id: str = None, session_id: str = None,
                             login_type: str = "qrcode", get_comments: bool = False,
                             save_data_option: str = "db", use_proxy: bool = False,
-                            proxy_strategy: str = "disabled") -> List[Dict]:
+                            proxy_strategy: str = "disabled", video_only: bool = False) -> List[Dict]:
         """
         获取用户发布的笔记
         :param user_id: 用户ID
@@ -644,10 +794,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
         :param proxy_strategy: 代理策略
+        :param video_only: 是否只获取视频内容
         :return: 笔记列表
         """
         try:
             utils.logger.info(f"[XiaoHongShuCrawler.get_user_notes] 开始获取用户笔记: {user_id}")
+            if video_only:
+                utils.logger.info("[XiaoHongShuCrawler.get_user_notes] 启用视频筛选模式")
             
             # 设置配置
             import config
@@ -656,6 +809,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option
             config.ENABLE_IP_PROXY = use_proxy
+            config.CRAWLER_TYPE = "creator"  # 设置爬取类型为创作者
             
             # 启动爬虫
             await self.start()
@@ -664,6 +818,17 @@ class XiaoHongShuCrawler(AbstractCrawler):
             results = []
             if hasattr(self, 'xhs_store') and hasattr(self.xhs_store, 'get_all_content'):
                 results = await self.xhs_store.get_all_content()
+            
+            # 如果指定了视频筛选，在结果中进一步过滤
+            if video_only and results:
+                video_results = []
+                for result in results:
+                    # 检查内容类型是否为视频
+                    content_type = result.get('content_type', '')
+                    if content_type == 'video':
+                        video_results.append(result)
+                results = video_results
+                utils.logger.info(f"[XiaoHongShuCrawler.get_user_notes] 视频筛选后，剩余 {len(results)} 条视频数据")
             
             utils.logger.info(f"[XiaoHongShuCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
             return results

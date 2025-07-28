@@ -21,6 +21,15 @@ proxy_config = config_manager.get_proxy_config()
 crawler_config = config_manager.get_crawler_config()
 database_config = config_manager.get_database_config()
 app_config = config_manager.get_app_config()
+redis_config = config_manager.get_redis_config()
+remote_desktop_config = config_manager.get_remote_desktop_config()
+server_config = config_manager.get_server_config()
+security_config = config_manager.get_security_config()
+crawler_service_config = config_manager.get_crawler_service_config()
+task_management_config = config_manager.get_task_management_config()
+performance_config = config_manager.get_performance_config()
+monitoring_config = config_manager.get_monitoring_config()
+development_config = config_manager.get_development_config()
 
 # ==================== 代理配置 ====================
 # 是否开启 IP 代理
@@ -71,6 +80,106 @@ DB_USERNAME = database_config.username
 DB_PASSWORD = database_config.password
 DB_DATABASE = database_config.database
 DB_CHARSET = database_config.charset
+
+# ==================== Redis配置 ====================
+# Redis连接配置
+REDIS_HOST = redis_config.host
+REDIS_PORT = redis_config.port
+REDIS_DB = redis_config.db
+REDIS_PASSWORD = redis_config.password
+REDIS_CONNECTION_POOL_SIZE = redis_config.connection_pool_size
+REDIS_MAX_CONNECTIONS = redis_config.max_connections
+REDIS_SOCKET_TIMEOUT = redis_config.socket_timeout
+REDIS_SOCKET_CONNECT_TIMEOUT = redis_config.socket_connect_timeout
+REDIS_SOCKET_KEEPALIVE = redis_config.socket_keepalive
+REDIS_SOCKET_KEEPALIVE_OPTIONS = redis_config.socket_keepalive_options
+REDIS_HEALTH_CHECK_INTERVAL = redis_config.health_check_interval
+REDIS_RETRY_ON_TIMEOUT = redis_config.retry_on_timeout
+
+# 任务结果缓存配置
+TASK_RESULT_TTL = redis_config.task_result_ttl
+TASK_RESULT_KEY_PREFIX = redis_config.task_result_key_prefix
+
+# 会话缓存配置
+SESSION_TTL = redis_config.session_ttl
+SESSION_KEY_PREFIX = redis_config.session_key_prefix
+
+# ==================== 远程桌面配置 ====================
+# 远程桌面连接配置
+REMOTE_DESKTOP_ENABLED = remote_desktop_config.enabled
+VNC_URL = remote_desktop_config.vnc_url
+VNC_HOST = remote_desktop_config.vnc_host
+VNC_PORT = remote_desktop_config.vnc_port
+VNC_PASSWORD = remote_desktop_config.vnc_password
+DISPLAY_NUMBER = remote_desktop_config.display_number
+CONNECTION_TIMEOUT = remote_desktop_config.connection_timeout
+MAX_WAIT_TIME = remote_desktop_config.max_wait_time
+CHECK_INTERVAL = remote_desktop_config.check_interval
+
+# ==================== 服务器配置 ====================
+# 服务器基础配置
+SERVER_PORT = server_config.port
+SERVER_HOST = server_config.host
+SERVER_DEBUG = server_config.debug
+SERVER_ENABLE_CORS = server_config.enable_cors
+SERVER_STATIC_PATH = server_config.static_path
+SERVER_MAX_UPLOAD_SIZE = server_config.max_upload_size
+
+# ==================== 安全配置 ====================
+# 安全相关配置
+SECURITY_ENABLE_HTTPS = security_config.enable_https
+SECURITY_SSL_CERT = security_config.ssl_cert
+SECURITY_SSL_KEY = security_config.ssl_key
+SECURITY_SESSION_SECRET = security_config.session_secret
+SECURITY_SESSION_EXPIRE = security_config.session_expire
+SECURITY_ENABLE_API_AUTH = security_config.enable_api_auth
+SECURITY_API_KEY = security_config.api_key
+
+# ==================== 爬虫服务配置 ====================
+# 爬虫服务相关配置
+CRAWLER_SERVICE_MAX_PROCESSES = crawler_service_config.max_processes
+CRAWLER_SERVICE_TASK_TIMEOUT = crawler_service_config.task_timeout
+CRAWLER_SERVICE_RESULT_CACHE_TIME = crawler_service_config.result_cache_time
+CRAWLER_SERVICE_ENABLE_MONITORING = crawler_service_config.enable_monitoring
+CRAWLER_SERVICE_MONITOR_INTERVAL = crawler_service_config.monitor_interval
+CRAWLER_SERVICE_CPU_WARNING_THRESHOLD = crawler_service_config.cpu_warning_threshold
+CRAWLER_SERVICE_MEMORY_WARNING_THRESHOLD = crawler_service_config.memory_warning_threshold
+CRAWLER_SERVICE_DISK_WARNING_THRESHOLD = crawler_service_config.disk_warning_threshold
+
+# ==================== 任务管理配置 ====================
+# 任务管理相关配置
+TASK_MANAGEMENT_MAX_QUEUE_SIZE = task_management_config.max_queue_size
+TASK_MANAGEMENT_MAX_RETRY_COUNT = task_management_config.max_retry_count
+TASK_MANAGEMENT_RETRY_INTERVAL = task_management_config.retry_interval
+TASK_MANAGEMENT_STATUS_CHECK_INTERVAL = task_management_config.status_check_interval
+TASK_MANAGEMENT_RESULT_RETENTION_DAYS = task_management_config.result_retention_days
+
+# ==================== 性能优化配置 ====================
+# 性能优化相关配置
+PERFORMANCE_ENABLE_CACHE = performance_config.enable_cache
+PERFORMANCE_CACHE_SIZE_LIMIT = performance_config.cache_size_limit
+PERFORMANCE_ENABLE_COMPRESSION = performance_config.enable_compression
+PERFORMANCE_ENABLE_ASYNC = performance_config.enable_async
+PERFORMANCE_ASYNC_QUEUE_SIZE = performance_config.async_queue_size
+PERFORMANCE_ASYNC_TIMEOUT = performance_config.async_timeout
+
+# ==================== 监控配置 ====================
+# 监控相关配置
+MONITORING_ENABLE_SYSTEM_MONITOR = monitoring_config.enable_system_monitor
+MONITORING_DATA_RETENTION_DAYS = monitoring_config.data_retention_days
+MONITORING_COLLECTION_INTERVAL = monitoring_config.collection_interval
+MONITORING_ENABLE_ALERTS = monitoring_config.enable_alerts
+MONITORING_ALERTS_CPU_THRESHOLD = monitoring_config.alerts.cpu_threshold
+MONITORING_ALERTS_MEMORY_THRESHOLD = monitoring_config.alerts.memory_threshold
+MONITORING_ALERTS_DISK_THRESHOLD = monitoring_config.alerts.disk_threshold
+MONITORING_ALERTS_RESPONSE_TIME_THRESHOLD = monitoring_config.alerts.response_time_threshold
+
+# ==================== 开发环境配置 ====================
+# 开发环境相关配置
+DEVELOPMENT_ENABLE_HOT_RELOAD = development_config.enable_hot_reload
+DEVELOPMENT_ENABLE_DEBUG_TOOLBAR = development_config.enable_debug_toolbar
+DEVELOPMENT_ENABLE_DETAILED_ERRORS = development_config.enable_detailed_errors
+DEVELOPMENT_TEST_MODE = development_config.test_mode
 
 # ==================== 兼容性配置 ====================
 # 为了保持向后兼容，保留原有的配置项
@@ -239,11 +348,23 @@ def reload_config():
     """重新加载配置"""
     config_manager.reload()
     # 重新获取配置对象
-    global proxy_config, crawler_config, database_config, app_config
+    global proxy_config, crawler_config, database_config, app_config, redis_config
+    global remote_desktop_config, server_config, security_config, crawler_service_config
+    global task_management_config, performance_config, monitoring_config, development_config
+    
     proxy_config = config_manager.get_proxy_config()
     crawler_config = config_manager.get_crawler_config()
     database_config = config_manager.get_database_config()
     app_config = config_manager.get_app_config()
+    redis_config = config_manager.get_redis_config()
+    remote_desktop_config = config_manager.get_remote_desktop_config()
+    server_config = config_manager.get_server_config()
+    security_config = config_manager.get_security_config()
+    crawler_service_config = config_manager.get_crawler_service_config()
+    task_management_config = config_manager.get_task_management_config()
+    performance_config = config_manager.get_performance_config()
+    monitoring_config = config_manager.get_monitoring_config()
+    development_config = config_manager.get_development_config()
 
 def export_config(env: str = "development", format: str = "yaml"):
     """导出配置"""

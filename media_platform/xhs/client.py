@@ -179,11 +179,32 @@ class XiaoHongShuClient(AbstractApiClient):
             note_card: Dict = await self.get_note_by_keyword(keyword="小红书")
             if note_card.get("items"):
                 ping_flag = True
-        except Exception as e:
+                utils.logger.info("[XiaoHongShuClient.pong] Ping xhs success")
+            else:
+                utils.logger.warning("[XiaoHongShuClient.pong] Ping xhs failed: no items returned")
+        except DataFetchError as e:
             utils.logger.error(
-                f"[XiaoHongShuClient.pong] Ping xhs failed: {e}, and try to login again..."
+                f"[XiaoHongShuClient.pong] Ping xhs failed with DataFetchError: {e}, and try to login again..."
             )
             ping_flag = False
+        except IPBlockError as e:
+            utils.logger.error(
+                f"[XiaoHongShuClient.pong] Ping xhs failed with IPBlockError: {e}, IP may be blocked..."
+            )
+            ping_flag = False
+        except Exception as e:
+            utils.logger.error(
+                f"[XiaoHongShuClient.pong] Ping xhs failed with unexpected error: {e}, and try to login again..."
+            )
+            ping_flag = False
+        
+        # 如果ping失败，记录当前cookies状态
+        if not ping_flag:
+            cookie_count = len(self.cookie_dict) if self.cookie_dict else 0
+            utils.logger.info(f"[XiaoHongShuClient.pong] Current cookies count: {cookie_count}")
+            if cookie_count > 0:
+                utils.logger.info(f"[XiaoHongShuClient.pong] Cookie keys: {list(self.cookie_dict.keys())}")
+        
         return ping_flag
 
     async def update_cookies(self, browser_context: BrowserContext):

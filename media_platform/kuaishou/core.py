@@ -111,6 +111,11 @@ class KuaishouCrawler(AbstractCrawler):
         if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
         start_page = config.START_PAGE
+        
+        # 添加资源监控
+        start_time = time.time()
+        processed_count = 0
+        
         for keyword in config.KEYWORDS.split(","):
             search_session_id = ""
             source_keyword_var.set(keyword)
@@ -125,35 +130,74 @@ class KuaishouCrawler(AbstractCrawler):
                     utils.logger.info(f"[KuaishouCrawler.search] Skip page: {page}")
                     page += 1
                     continue
-                utils.logger.info(
-                    f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
-                )
-                video_id_list: List[str] = []
-                videos_res = await self.ks_client.search_info_by_keyword(
-                    keyword=keyword,
-                    pcursor=str(page),
-                    search_session_id=search_session_id,
-                )
-                if not videos_res:
-                    utils.logger.error(
-                        f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
+                
+                try:
+                    utils.logger.info(
+                        f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
                     )
-                    continue
-
-                vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
-                if vision_search_photo.get("result") != 1:
-                    utils.logger.error(
-                        f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
+                    video_id_list: List[str] = []
+                    videos_res = await self.ks_client.search_info_by_keyword(
+                        keyword=keyword,
+                        pcursor=str(page),
+                        search_session_id=search_session_id,
                     )
-                    continue
-                search_session_id = vision_search_photo.get("searchSessionId", "")
-                for video_detail in vision_search_photo.get("feeds"):
-                    video_id_list.append(video_detail.get("photo", {}).get("id"))
-                    await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
+                    if not videos_res:
+                        utils.logger.error(
+                            f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
+                        )
+                        continue
 
-                # batch fetch video comments
-                page += 1
-                await self.batch_get_video_comments(video_id_list)
+                    vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
+                    if vision_search_photo.get("result") != 1:
+                        utils.logger.error(
+                            f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
+                        )
+                        continue
+                    search_session_id = vision_search_photo.get("searchSessionId", "")
+                    
+                    # 分批处理视频详情
+                    feeds = vision_search_photo.get("feeds", [])
+                    batch_size = 5  # 每批处理5个视频
+                    
+                    for i in range(0, len(feeds), batch_size):
+                        batch_feeds = feeds[i:i + batch_size]
+                        utils.logger.info(f"[KuaishouCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_feeds)}")
+                        
+                        for video_detail in batch_feeds:
+                            try:
+                                video_id_list.append(video_detail.get("photo", {}).get("id"))
+                                await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
+                                processed_count += 1
+                            except Exception as e:
+                                utils.logger.error(f"[KuaishouCrawler.search] Failed to process video: {e}")
+                                continue
+                        
+                        # 添加间隔，避免请求过于频繁
+                        await asyncio.sleep(1)
+                    
+                    # 检查处理时间，避免长时间运行
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 300:  # 5分钟超时
+                        utils.logger.warning(f"[KuaishouCrawler.search] Processing time exceeded 5 minutes, stopping")
+                        break
+                    
+                    # 获取评论（如果启用）
+                    if config.ENABLE_GET_COMMENTS and video_id_list:
+                        try:
+                            await self.batch_get_video_comments(video_id_list)
+                        except Exception as e:
+                            utils.logger.error(f"[KuaishouCrawler.search] Failed to get comments: {e}")
+                    
+                    page += 1
+                    
+                except Exception as e:
+                    utils.logger.error(
+                        f"[KuaishouCrawler.search] Unexpected error during search: {e}"
+                    )
+                    page += 1
+                    continue
+            
+            utils.logger.info(f"[KuaishouCrawler.search] Search completed. Total processed: {processed_count}")
 
     async def get_specified_videos(self):
         """Get the information and comments of the specified post"""
@@ -205,16 +249,46 @@ class KuaishouCrawler(AbstractCrawler):
         utils.logger.info(
             f"[KuaishouCrawler.batch_get_video_comments] video ids:{video_id_list}"
         )
-        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-        task_list: List[Task] = []
-        for video_id in video_id_list:
-            task = asyncio.create_task(
-                self.get_comments(video_id, semaphore), name=video_id
-            )
-            task_list.append(task)
+        
+        # 限制并发数量
+        max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(video_id_list))
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # 分批处理评论
+        batch_size = 3  # 每批处理3个评论任务
+        total_processed = 0
+        
+        for i in range(0, len(video_id_list), batch_size):
+            batch_videos = video_id_list[i:i + batch_size]
+            
+            utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_videos)}")
+            
+            task_list: List[Task] = []
+            for video_id in batch_videos:
+                task = asyncio.create_task(
+                    self.get_comments(video_id, semaphore), name=video_id
+                )
+                task_list.append(task)
 
-        comment_tasks_var.set(task_list)
-        await asyncio.gather(*task_list)
+            try:
+                # 添加超时控制
+                await asyncio.wait_for(
+                    asyncio.gather(*task_list, return_exceptions=True),
+                    timeout=120  # 2分钟超时
+                )
+                total_processed += len(batch_videos)
+                utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Completed batch {i//batch_size + 1}")
+            except asyncio.TimeoutError:
+                utils.logger.warning(f"[KuaishouCrawler.batch_get_video_comments] Comment batch timeout")
+                break
+            except Exception as e:
+                utils.logger.error(f"[KuaishouCrawler.batch_get_video_comments] Comment batch error: {e}")
+                continue
+            
+            # 添加间隔，避免请求过于频繁
+            await asyncio.sleep(2)
+        
+        utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Comment processing completed. Total processed: {total_processed}")
 
     async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore):
         """

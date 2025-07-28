@@ -22,27 +22,20 @@ class MinioClient:
     def _init_client(self):
         """初始化MinIO客户端"""
         try:
-            # 从配置文件读取MinIO配置
-            config_path = "config/config_storage.yaml"
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-                
-                storage_config = config.get('storage', {})
-                endpoint = storage_config.get('minio_endpoint', '192.168.31.231:9000')
-                access_key = storage_config.get('minio_access_key', 'minioadmin')
-                secret_key = storage_config.get('minio_secret_key', 'minioadmin')
-                secure = storage_config.get('minio_secure', False)
-                bucket = storage_config.get('minio_bucket', 'mediacrawler-videos')
-                
-                self.bucket_name = bucket
-            else:
-                # 使用默认配置
-                endpoint = '192.168.31.231:9000'
-                access_key = 'minioadmin'
-                secret_key = 'minioadmin'
-                secure = False
-                self.bucket_name = 'mediacrawler-videos'
+            # 从环境配置文件读取MinIO配置
+            from config.env_config_loader import config_loader
+            
+            config = config_loader.load_config()
+            storage_config = config.get('storage', {})
+            
+            # 获取MinIO配置
+            endpoint = storage_config.get('minio_endpoint', '192.168.31.231:9000')
+            access_key = storage_config.get('minio_access_key', 'minioadmin')
+            secret_key = storage_config.get('minio_secret_key', 'minioadmin')
+            secure = storage_config.get('minio_secure', False)
+            bucket = storage_config.get('minio_bucket', 'mediacrawler-videos')
+            
+            self.bucket_name = bucket
             
             self.client = Minio(
                 endpoint=endpoint,
@@ -55,7 +48,19 @@ class MinioClient:
             
         except Exception as e:
             logger.error(f"MinIO客户端初始化失败: {str(e)}")
-            self.client = None
+            # 使用默认配置作为后备
+            try:
+                self.client = Minio(
+                    endpoint='192.168.31.231:9000',
+                    access_key='minioadmin',
+                    secret_key='minioadmin',
+                    secure=False
+                )
+                self.bucket_name = 'mediacrawler-videos'
+                logger.info("使用默认MinIO配置")
+            except Exception as fallback_e:
+                logger.error(f"默认MinIO配置也失败: {str(fallback_e)}")
+                self.client = None
     
     async def upload_file(self, bucket_name: str, object_name: str, file_path: str) -> Dict[str, Any]:
         """

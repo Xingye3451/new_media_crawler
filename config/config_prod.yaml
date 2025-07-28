@@ -1,6 +1,7 @@
 # 生产环境配置文件
 # 使用方式: ENV=production python main.py
 
+# ==================== 代理配置 ====================
 proxy:
   # 代理提供商配置
   provider_name: "qingguo"  # 生产环境推荐使用青果代理
@@ -21,8 +22,8 @@ proxy:
   # 极速HTTP代理配置
   jisu_http_key: "${JISU_HTTP_KEY}"
 
+# ==================== 爬虫配置 ====================
 crawler:
-  # 爬虫基础配置
   platform: "xhs"
   keywords: "编程副业,编程兼职"
   login_type: "qrcode"
@@ -36,8 +37,8 @@ crawler:
   max_sleep_sec: 1  # 生产环境减少间隔提高效率
   max_concurrency: 3  # 生产环境多线程
 
+# ==================== 数据库配置 ====================
 database:
-  # 数据库配置
   host: "192.168.31.231"
   port: 3306
   username: "aiuser"
@@ -45,8 +46,8 @@ database:
   database: "mediacrawler"
   charset: "utf8mb4"
 
+# ==================== Redis配置 ====================
 redis:
-  # Redis缓存配置
   host: "localhost"
   port: 6379
   db: 0
@@ -68,15 +69,15 @@ redis:
   session_ttl: 3600  # 1小时过期时间
   session_key_prefix: "mediacrawler:session:"
 
+# ==================== 应用配置 ====================
 app:
-  # 应用配置
   debug: false
   log_level: "INFO"
   data_dir: "./data/prod"
   user_data_dir: "%s_user_data_dir_prod"
 
+# ==================== 远程桌面配置 ====================
 remote_desktop:
-  # 远程桌面配置
   enabled: true
   vnc_url: "${VNC_URL:-http://localhost:6080/vnc.html}"  # 生产环境从环境变量读取
   vnc_host: "${VNC_HOST:-localhost}"
@@ -85,4 +86,206 @@ remote_desktop:
   display_number: ${DISPLAY_NUMBER:-1}
   connection_timeout: 5
   max_wait_time: 1800  # 30分钟
-  check_interval: 3    # 3秒检查一次 
+  check_interval: 3    # 3秒检查一次
+
+# ==================== 存储配置 ====================
+storage:
+  # 本地存储配置
+  local_base_path: "./data/prod"
+  small_file_threshold: 10485760  # 10MB
+  
+  # MinIO配置
+  enable_minio: true  # 生产环境启用MinIO
+  minio_endpoint: "${MINIO_ENDPOINT:-192.168.31.231:9000}"
+  minio_access_key: "${MINIO_ACCESS_KEY:-minioadmin}"
+  minio_secret_key: "${MINIO_SECRET_KEY:-minioadmin}"
+  minio_secure: false
+  minio_bucket: "mediacrawler-videos"
+  
+  # 数据库配置
+  database_url: "mysql+pymysql://aiuser:edcghj98578@192.168.31.231:3306/mediacrawler"
+  pool_size: 20  # 生产环境增加连接池
+  max_overflow: 40
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+  # 文件管理配置
+  naming_pattern: "{platform}/{date}/{content_id}/{filename}"
+  date_format: "%Y/%m/%d"
+  supported_formats:
+    - "mp4"
+    - "avi"
+    - "mov"
+    - "mkv"
+    - "flv" 
+    - "webm"
+    - "m4v"
+    - "3gp"
+  
+  # 文件大小限制
+  max_file_size: 1073741824  # 1GB
+  min_file_size: 1024  # 1KB
+  
+  # 重复文件处理
+  duplicate_check: true
+  duplicate_strategy: "skip"
+  
+  # 文件清理策略
+  cleanup:
+    enabled: true  # 生产环境启用清理
+    retention_days: 30
+    cleanup_interval_hours: 24
+  
+  # 性能优化配置
+  max_concurrent_downloads: 10  # 生产环境增加并发
+  chunk_size: 8192
+  download_timeout: 300
+  max_retries: 3
+  retry_delay: 5
+  
+  # 监控配置
+  storage_usage_threshold: 0.8
+  file_count_threshold: 10000
+  monitor_interval: 3600
+
+# ==================== 服务配置 ====================
+server:
+  port: 8000
+  host: "0.0.0.0"
+  debug: false
+  enable_cors: true
+  static_path: "static"
+  max_upload_size: 100
+
+# ==================== 安全配置 ====================
+security:
+  enable_https: false  # 生产环境建议启用HTTPS
+  ssl_cert: "${SSL_CERT:-}"
+  ssl_key: "${SSL_KEY:-}"
+  session_secret: "${SESSION_SECRET:-prod-secret-key}"
+  session_expire: 86400
+  enable_api_auth: true  # 生产环境启用API认证
+  api_key: "${API_KEY:-prod-api-key}"
+
+# ==================== 爬虫服务配置 ====================
+crawler_service:
+  max_processes: 10  # 生产环境增加进程数
+  task_timeout: 1800
+  result_cache_time: 3600
+  enable_monitoring: true
+  monitor_interval: 30
+  cpu_warning_threshold: 80
+  memory_warning_threshold: 85
+  disk_warning_threshold: 90
+
+# ==================== 任务管理配置 ====================
+task_management:
+  max_queue_size: 200  # 生产环境增加队列大小
+  max_retry_count: 3
+  retry_interval: 60
+  status_check_interval: 10
+  result_retention_days: 30
+
+# ==================== 性能优化配置 ====================
+performance:
+  enable_cache: true
+  cache_size_limit: 200  # 生产环境增加缓存
+  enable_compression: true
+  enable_async: true
+  async_queue_size: 100  # 生产环境增加队列
+  async_timeout: 300
+
+# ==================== 监控配置 ====================
+monitoring:
+  enable_system_monitor: true
+  data_retention_days: 30  # 生产环境增加保留时间
+  collection_interval: 60
+  enable_alerts: true
+  alerts:
+    cpu_threshold: 80
+    memory_threshold: 85
+    disk_threshold: 90
+    response_time_threshold: 5000
+
+# ==================== 开发环境配置 ====================
+development:
+  enable_hot_reload: false
+  enable_debug_toolbar: false
+  enable_detailed_errors: false
+  test_mode: false
+
+# ==================== 平台特定配置 ====================
+xhs:
+  search_note_type: "video"
+  xhs_specified_id_list: []
+  xhs_creator_id_list: []
+
+douyin:
+  publish_time_type: 0
+  dy_specified_id_list: []
+  dy_creator_id_list: []
+
+kuaishou:
+  ks_specified_id_list: []
+  ks_creator_id_list: []
+
+bilibili:
+  all_day: false
+  start_day: "2024-01-01"
+  end_day: "2024-01-31"
+  bili_specified_id_list: []
+  bili_creator_id_list: []
+  creator_mode: false
+
+weibo:
+  weibo_specified_id_list: []
+  weibo_creator_id_list: []
+
+tieba:
+  tieba_specified_id_list: []
+  tieba_name_list: []
+  tieba_creator_url_list: []
+
+zhihu:
+  zhihu_specified_id_list: []
+  zhihu_creator_url_list: []
+
+# ==================== 评论配置 ====================
+comments:
+  max_comments_count_single_notes: 200  # 生产环境增加评论数
+  max_sub_comments_count_single_notes: 100
+
+# ==================== 联系人配置 ====================
+contacts:
+  max_contacts_count_single_notes: 200  # 生产环境增加联系人数
+
+# ==================== 动态配置 ====================
+dynamics:
+  max_dynamics_count_single_notes: 200  # 生产环境增加动态数
+
+# ==================== 词云配置 ====================
+wordcloud:
+  enable_get_wordcloud: false
+  custom_words:
+    "零几": "年份"
+    "高频词": "专业术语"
+  stop_words_file: "./docs/hit_stopwords.txt"
+  font_path: "./docs/STZHONGS.TTF"
+
+# ==================== 兼容性配置 ====================
+ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+save_login_state: true
+cookies: ""
+account_id: null
+start_page: 1
+crawler_max_comments_count_singlenotes: 10
+sort_type: "popularity_descending"
+publish_time_type: 0
+xhs_specified_note_url_list: []
+start_day: '2024-01-01'
+end_day: '2024-01-01'
+all_day: false
+creator_mode: true
+start_contacs_page: 1
+crawler_max_contacs_count_singlenotes: 200  # 生产环境增加数量
+crawler_max_dynamics_count_singlenotes: 100  # 生产环境增加数量 

@@ -123,25 +123,31 @@ PLATFORM_FIELD_MAPPINGS = {
     },
     "xhs": {
         "content_id": "note_id",
-        "content_type": "note_type",
+        "content_type": "type",
         "title": "title",
         "description": "desc",
-        "content": "content",
-        "author_id": "user_id",
-        "author_name": "nickname",
-        "author_nickname": "nickname",
-        "author_avatar": "avatar",
-        "author_signature": "signature",
-        "author_unique_id": "unique_id",
-        "like_count": "liked_count",
-        "comment_count": "comment_count",
-        "share_count": "share_count",
-        "collect_count": "collected_count",
-        "cover_url": "cover_url",
+        "content": "desc",
+        "author_id": "user.user_id",
+        "author_name": "user.nickname",
+        "author_nickname": "user.nickname",
+        "author_avatar": "user.avatar",
+        "like_count": "interact_info.liked_count",
+        "comment_count": "interact_info.comment_count",
+        "share_count": "interact_info.share_count",
+        "collect_count": "interact_info.collected_count",
+        "cover_url": "image_list.0.url",
         "image_urls": "image_list",
+        "video_url": "note_url",
+        "video_download_url": "video_url",
+        "video_play_url": "note_url",
+        "video_share_url": "note_url",
         "ip_location": "ip_location",
-        "create_time": "create_time",
-        "publish_time": "publish_time"
+        "create_time": "time",
+        "publish_time": "time",
+        "update_time": "last_update_time",
+        "tags": "tag_list",
+        "topics": "tag_list",
+        "raw_data": "raw_data"
     },
     "kuaishou": {
         "content_id": "photo_id",
@@ -300,6 +306,13 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
     # 添加平台标识
     mapped_data["platform"] = platform
     
+    # 数值字段列表，需要转换为整数
+    numeric_fields = {
+        "like_count", "comment_count", "share_count", "collect_count", 
+        "view_count", "create_time", "publish_time", "update_time",
+        "add_ts", "last_modify_ts"
+    }
+    
     # 映射字段
     for unified_field, platform_field in mapping.items():
         if platform_field == "raw_data":
@@ -324,15 +337,33 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
             mapped_data[unified_field] = platform_field
         else:
             # 处理嵌套字段路径或直接字段
+            value = None
             if "." in platform_field:
                 # 嵌套字段路径
                 value = get_nested_value(data, platform_field)
-                if value is not None:
-                    mapped_data[unified_field] = value
             else:
                 # 直接字段
                 if platform_field in data:
-                    mapped_data[unified_field] = data[platform_field]
+                    value = data[platform_field]
+            
+            if value is not None:
+                # 对数值字段进行类型转换
+                if unified_field in numeric_fields:
+                    try:
+                        if isinstance(value, str):
+                            # 如果是字符串，尝试转换为整数
+                            if value.isdigit():
+                                mapped_data[unified_field] = int(value)
+                            else:
+                                mapped_data[unified_field] = 0
+                        elif isinstance(value, (int, float)):
+                            mapped_data[unified_field] = int(value)
+                        else:
+                            mapped_data[unified_field] = 0
+                    except (ValueError, TypeError):
+                        mapped_data[unified_field] = 0
+                else:
+                    mapped_data[unified_field] = value
     
     return mapped_data
 
@@ -416,13 +447,20 @@ async def update_content_by_content_id(platform: str, content_id: str, content_i
         # 过滤字段
         safe_item = filter_fields_for_table(safe_item, UNIFIED_CONTENT_FIELDS)
         
-        # 更新数据库
-        where_conditions = {
-            "platform": platform,
-            "content_id": content_id
-        }
+        # 更新数据库 - 使用复合条件
+        where_condition = f"platform = '{platform}' AND content_id = '{content_id}'"
         
-        result = await async_db_conn.update_table("unified_content", safe_item, where_conditions)
+        # 构建SET子句
+        set_clauses = []
+        values = []
+        for key, value in safe_item.items():
+            set_clauses.append(f"`{key}` = %s")
+            values.append(value)
+        
+        set_clause = ", ".join(set_clauses)
+        sql = f"UPDATE unified_content SET {set_clause} WHERE {where_condition}"
+        
+        result = await async_db_conn.execute(sql, *values)
         return result
         
     except Exception as e:
@@ -491,13 +529,20 @@ async def update_comment_by_comment_id(platform: str, comment_id: str, comment_i
         # 过滤字段
         safe_item = filter_fields_for_table(safe_item, UNIFIED_COMMENT_FIELDS)
         
-        # 更新数据库
-        where_conditions = {
-            "platform": platform,
-            "comment_id": comment_id
-        }
+        # 更新数据库 - 使用复合条件
+        where_condition = f"platform = '{platform}' AND comment_id = '{comment_id}'"
         
-        result = await async_db_conn.update_table("unified_comment", safe_item, where_conditions)
+        # 构建SET子句
+        set_clauses = []
+        values = []
+        for key, value in safe_item.items():
+            set_clauses.append(f"`{key}` = %s")
+            values.append(value)
+        
+        set_clause = ", ".join(set_clauses)
+        sql = f"UPDATE unified_comment SET {set_clause} WHERE {where_condition}"
+        
+        result = await async_db_conn.execute(sql, *values)
         return result
         
     except Exception as e:
