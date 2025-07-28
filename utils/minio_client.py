@@ -1,5 +1,5 @@
 """
-MinIO客户端工具类
+MinIO Client
 """
 
 import asyncio
@@ -13,22 +13,22 @@ from minio.error import S3Error
 logger = logging.getLogger(__name__)
 
 class MinioClient:
-    """MinIO客户端"""
+    """MinIO Client"""
     
     def __init__(self):
         self.client = None
         self._init_client()
     
     def _init_client(self):
-        """初始化MinIO客户端"""
+        """Initialize MinIO client"""
         try:
-            # 从环境配置文件读取MinIO配置
+            # Load MinIO config from environment config file
             from config.env_config_loader import config_loader
             
             config = config_loader.load_config()
             storage_config = config.get('storage', {})
             
-            # 获取MinIO配置
+            # Get MinIO configuration
             endpoint = storage_config.get('minio_endpoint', '192.168.31.231:9000')
             access_key = storage_config.get('minio_access_key', 'minioadmin')
             secret_key = storage_config.get('minio_secret_key', 'minioadmin')
@@ -44,11 +44,11 @@ class MinioClient:
                 secure=secure
             )
             
-            logger.info(f"MinIO客户端初始化成功: {endpoint}, 桶: {self.bucket_name}")
+            logger.info(f"MinIO client initialized successfully: {endpoint}, bucket: {self.bucket_name}")
             
         except Exception as e:
-            logger.error(f"MinIO客户端初始化失败: {str(e)}")
-            # 使用默认配置作为后备
+            logger.error(f"MinIO client initialization failed: {str(e)}")
+            # Use default configuration as fallback
             try:
                 self.client = Minio(
                     endpoint='192.168.31.231:9000',
@@ -57,36 +57,36 @@ class MinioClient:
                     secure=False
                 )
                 self.bucket_name = 'mediacrawler-videos'
-                logger.info("使用默认MinIO配置")
+                logger.info("Using default MinIO configuration")
             except Exception as fallback_e:
-                logger.error(f"默认MinIO配置也失败: {str(fallback_e)}")
-                self.client = None
+                logger.error(f"Default MinIO configuration also failed: {str(fallback_e)}")
+            self.client = None
     
     async def upload_file(self, bucket_name: str, object_name: str, file_path: str) -> Dict[str, Any]:
         """
-        上传文件到MinIO
+        Upload file to MinIO
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
-            file_path: 本地文件路径
+            bucket_name: Bucket name
+            object_name: Object name
+            file_path: Local file path
         
         Returns:
-            Dict: 上传结果
+            Dict: Upload result
         """
         try:
             if not self.client:
-                return {"success": False, "error": "MinIO客户端未初始化"}
+                return {"success": False, "error": "MinIO client not initialized"}
             
-            # 确保桶存在
+            # Ensure bucket exists
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
-                logger.info(f"创建桶: {bucket_name}")
+                logger.info(f"Created bucket: {bucket_name}")
             
-            # 上传文件
+            # Upload file
             self.client.fput_object(bucket_name, object_name, file_path)
             
-            logger.info(f"文件上传成功: {bucket_name}/{object_name}")
+            logger.info(f"File uploaded successfully: {bucket_name}/{object_name}")
             
             return {
                 "success": True,
@@ -96,195 +96,208 @@ class MinioClient:
             }
             
         except S3Error as e:
-            logger.error(f"MinIO上传失败: {str(e)}")
-            return {"success": False, "error": f"MinIO错误: {str(e)}"}
+            logger.error(f"MinIO upload failed: {str(e)}")
+            return {"success": False, "error": f"MinIO error: {str(e)}"}
         except Exception as e:
-            logger.error(f"上传文件失败: {str(e)}")
+            logger.error(f"Upload file failed: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def upload_data(self, bucket_name: str, object_name: str, data: bytes, content_type: str = "video/mp4") -> Dict[str, Any]:
         """
-        上传数据流到MinIO
+        Upload data stream to MinIO
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
-            data: 数据内容
-            content_type: 内容类型
+            bucket_name: Bucket name
+            object_name: Object name
+            data: Data content
+            content_type: Content type
         
         Returns:
-            Dict: 上传结果
+            Dict: Upload result
         """
         try:
             if not self.client:
-                return {"success": False, "error": "MinIO客户端未初始化"}
+                return {"success": False, "error": "MinIO client not initialized"}
             
-            # 确保桶存在
+            # Ensure bucket exists
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
-                logger.info(f"创建桶: {bucket_name}")
+                logger.info(f"Created bucket: {bucket_name}")
             
-            # 上传数据
+            # Upload data
             from io import BytesIO
             data_stream = BytesIO(data)
-            self.client.put_object(bucket_name, object_name, data_stream, length=len(data), content_type=content_type)
             
-            logger.info(f"数据上传成功: {bucket_name}/{object_name}, 大小: {len(data)} bytes")
+            self.client.put_object(
+                bucket_name,
+                object_name,
+                data_stream,
+                length=len(data),
+                content_type=content_type
+            )
+            
+            logger.info(f"Data uploaded successfully: {bucket_name}/{object_name}")
             
             return {
                 "success": True,
                 "bucket": bucket_name,
                 "object": object_name,
-                "size": len(data),
                 "url": f"http://{self.client._base_url.host}/{bucket_name}/{object_name}"
             }
             
         except S3Error as e:
-            logger.error(f"MinIO上传失败: {str(e)}")
-            return {"success": False, "error": f"MinIO错误: {str(e)}"}
+            logger.error(f"MinIO upload failed: {str(e)}")
+            return {"success": False, "error": f"MinIO error: {str(e)}"}
         except Exception as e:
-            logger.error(f"上传数据失败: {str(e)}")
+            logger.error(f"Upload data failed: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def download_file(self, bucket_name: str, object_name: str, file_path: str) -> Dict[str, Any]:
         """
-        从MinIO下载文件
+        Download file from MinIO
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
-            file_path: 本地文件路径
+            bucket_name: Bucket name
+            object_name: Object name
+            file_path: Local file path
         
         Returns:
-            Dict: 下载结果
+            Dict: Download result
         """
         try:
             if not self.client:
-                return {"success": False, "error": "MinIO客户端未初始化"}
+                return {"success": False, "error": "MinIO client not initialized"}
             
-            # 下载文件
+            # Download file
             self.client.fget_object(bucket_name, object_name, file_path)
             
-            logger.info(f"文件下载成功: {bucket_name}/{object_name}")
+            logger.info(f"File downloaded successfully: {bucket_name}/{object_name}")
             
             return {
                 "success": True,
-                "file_path": file_path,
-                "size": os.path.getsize(file_path)
+                "bucket": bucket_name,
+                "object": object_name,
+                "local_path": file_path
             }
             
         except S3Error as e:
-            logger.error(f"MinIO下载失败: {str(e)}")
-            return {"success": False, "error": f"MinIO错误: {str(e)}"}
+            logger.error(f"MinIO download failed: {str(e)}")
+            return {"success": False, "error": f"MinIO error: {str(e)}"}
         except Exception as e:
-            logger.error(f"下载文件失败: {str(e)}")
+            logger.error(f"Download file failed: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def delete_object(self, bucket_name: str, object_name: str) -> Dict[str, Any]:
         """
-        删除MinIO对象
+        Delete object from MinIO
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
+            bucket_name: Bucket name
+            object_name: Object name
         
         Returns:
-            Dict: 删除结果
+            Dict: Delete result
         """
         try:
             if not self.client:
-                return {"success": False, "error": "MinIO客户端未初始化"}
+                return {"success": False, "error": "MinIO client not initialized"}
             
-            # 删除对象
+            # Delete object
             self.client.remove_object(bucket_name, object_name)
             
-            logger.info(f"对象删除成功: {bucket_name}/{object_name}")
+            logger.info(f"Object deleted successfully: {bucket_name}/{object_name}")
             
-            return {"success": True}
+            return {
+                "success": True,
+                "bucket": bucket_name,
+                "object": object_name
+            }
             
         except S3Error as e:
-            logger.error(f"MinIO删除失败: {str(e)}")
-            return {"success": False, "error": f"MinIO错误: {str(e)}"}
+            logger.error(f"MinIO delete failed: {str(e)}")
+            return {"success": False, "error": f"MinIO error: {str(e)}"}
         except Exception as e:
-            logger.error(f"删除对象失败: {str(e)}")
+            logger.error(f"Delete object failed: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def get_presigned_url(self, bucket_name: str, object_name: str, expires: int = 3600) -> str:
         """
-        获取预签名URL
+        Get presigned URL for object
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
-            expires: 过期时间（秒）
+            bucket_name: Bucket name
+            object_name: Object name
+            expires: Expiration time in seconds
         
         Returns:
-            str: 预签名URL
+            str: Presigned URL
         """
         try:
             if not self.client:
                 return ""
             
-            # 生成预签名URL - 使用timedelta对象
+            # Generate presigned URL
             from datetime import timedelta
-            expires_timedelta = timedelta(seconds=expires)
-            url = self.client.presigned_get_object(bucket_name, object_name, expires=expires_timedelta)
+            url = self.client.presigned_get_object(bucket_name, object_name, expires=timedelta(seconds=expires))
             
-            logger.info(f"生成预签名URL: {bucket_name}/{object_name}")
+            logger.info(f"Generated presigned URL: {bucket_name}/{object_name}")
             
             return url
             
-        except S3Error as e:
-            logger.error(f"生成预签名URL失败: {str(e)}")
-            return ""
         except Exception as e:
-            logger.error(f"生成预签名URL失败: {str(e)}")
+            logger.error(f"Generate presigned URL failed: {str(e)}")
             return ""
     
     async def object_exists(self, bucket_name: str, object_name: str) -> bool:
         """
-        检查对象是否存在
+        Check if object exists
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
+            bucket_name: Bucket name
+            object_name: Object name
         
         Returns:
-            bool: 是否存在
+            bool: True if object exists
         """
         try:
             if not self.client:
                 return False
             
-            # 检查对象是否存在
+            # Check if object exists
             self.client.stat_object(bucket_name, object_name)
             return True
             
-        except S3Error:
-            return False
+        except S3Error as e:
+            if e.code == 'NoSuchKey':
+                return False
+            else:
+                logger.error(f"Check object existence failed: {str(e)}")
+                return False
         except Exception as e:
-            logger.error(f"检查对象存在失败: {str(e)}")
+            logger.error(f"Check object existence failed: {str(e)}")
             return False
     
     async def get_object_info(self, bucket_name: str, object_name: str) -> Optional[Dict[str, Any]]:
         """
-        获取对象信息
+        Get object information
         
         Args:
-            bucket_name: 桶名
-            object_name: 对象名
+            bucket_name: Bucket name
+            object_name: Object name
         
         Returns:
-            Dict: 对象信息
+            Optional[Dict]: Object information
         """
         try:
             if not self.client:
                 return None
             
-            # 获取对象信息
+            # Get object info
             stat = self.client.stat_object(bucket_name, object_name)
             
             return {
+                "bucket": bucket_name,
+                "object": object_name,
                 "size": stat.size,
                 "etag": stat.etag,
                 "last_modified": stat.last_modified,
@@ -292,8 +305,8 @@ class MinioClient:
             }
             
         except S3Error as e:
-            logger.error(f"获取对象信息失败: {str(e)}")
+            logger.error(f"Get object info failed: {str(e)}")
             return None
         except Exception as e:
-            logger.error(f"获取对象信息失败: {str(e)}")
+            logger.error(f"Get object info failed: {str(e)}")
             return None 

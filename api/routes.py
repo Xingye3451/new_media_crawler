@@ -13,6 +13,7 @@ from api.minio_management import router as minio_management_router
 from api.task_management import router as task_management_router
 from api.crawler_core import router as crawler_core_router
 from api.crawler_control import router as crawler_control_router
+from api.config_management import router as config_management_router
 from api.content_management import router as content_management_router
 from api.platform_management import router as platform_management_router
 from api.system_management import router as system_management_router
@@ -21,6 +22,7 @@ from api.login_management import login_router
 from api.curl_video_proxy import router as curl_video_proxy_router
 from api.video_favorites import router as video_favorites_router
 from api.video_stream import router as video_stream_router
+from api.thumbnail_proxy import router as thumbnail_proxy_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -37,6 +39,13 @@ api_router.include_router(
     crawler_control_router,
     prefix="/v1",
     tags=["crawler-control"]
+)
+
+# 配置管理路由 - 新增
+api_router.include_router(
+    config_management_router,
+    prefix="/v1",
+    tags=["config-management"]
 )
 
 # 内容管理路由
@@ -128,4 +137,11 @@ api_router.include_router(
     video_stream_router,
     prefix="/v1",
     tags=["video-stream"]
+)
+
+# 缩略图代理相关路由
+api_router.include_router(
+    thumbnail_proxy_router,
+    prefix="/v1",
+    tags=["thumbnail-proxy"]
 ) 

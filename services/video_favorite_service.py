@@ -345,18 +345,75 @@ class VideoFavoriteService:
             # 设置请求头，模拟浏览器访问
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': 'https://www.douyin.com/',
                 'Accept': '*/*',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive'
             }
             
+            # 根据平台设置不同的Referer
+            platform = file_record.get("platform", "unknown")
+            original_url = file_record["original_url"]
+            
+            # 平台识别和Referer设置
+            if (platform == "xhs" or 
+                'xiaohongshu' in original_url or 
+                'xhscdn' in original_url or 
+                'xhs' in original_url):
+                headers['Referer'] = 'https://www.xiaohongshu.com/'
+                headers['Origin'] = 'https://www.xiaohongshu.com'
+                logger.info(f"识别为小红书平台: {platform}")
+                
+            elif (platform == "dy" or 
+                  'douyin' in original_url or 
+                  'aweme' in original_url or
+                  'amemv' in original_url):
+                headers['Referer'] = 'https://www.douyin.com/'
+                headers['Origin'] = 'https://www.douyin.com'
+                logger.info(f"识别为抖音平台: {platform}")
+                
+            elif (platform == "ks" or 
+                  'kuaishou' in original_url or 
+                  'gifshow' in original_url or
+                  'ks' in original_url):
+                headers['Referer'] = 'https://www.kuaishou.com/'
+                headers['Origin'] = 'https://www.kuaishou.com'
+                logger.info(f"识别为快手平台: {platform}")
+                
+            elif (platform == "bili" or 
+                  'bilibili' in original_url or 
+                  'b23.tv' in original_url or
+                  'bilivideo' in original_url):
+                headers['Referer'] = 'https://www.bilibili.com/'
+                headers['Origin'] = 'https://www.bilibili.com'
+                logger.info(f"识别为B站平台: {platform}")
+                
+            elif (platform == "wb" or 
+                  'weibo' in original_url or 
+                  'sina' in original_url):
+                headers['Referer'] = 'https://weibo.com/'
+                headers['Origin'] = 'https://weibo.com'
+                logger.info(f"识别为微博平台: {platform}")
+                
+            elif (platform == "zhihu" or 
+                  'zhihu' in original_url):
+                headers['Referer'] = 'https://www.zhihu.com/'
+                headers['Origin'] = 'https://www.zhihu.com'
+                logger.info(f"识别为知乎平台: {platform}")
+                
+            else:
+                # 默认使用Google作为Referer
+                headers['Referer'] = 'https://www.google.com/'
+                headers['Origin'] = 'https://www.google.com'
+                logger.info(f"使用默认Referer，平台: {platform}")
+            
             # 下载视频数据
+            logger.info(f"开始下载视频到MinIO: {file_record['original_url']}, 平台: {platform}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(file_record["original_url"], headers=headers) as response:
                     if response.status == 200:
                         video_data = await response.read()
+                        logger.info(f"视频下载成功，大小: {len(video_data)} 字节")
                         
                         # 生成MinIO对象名
                         platform = file_record.get("platform", "unknown")
@@ -364,6 +421,7 @@ class VideoFavoriteService:
                         object_name = f"{platform}/{content_id}/{file_record['file_hash']}.mp4"
                         
                         # 上传到MinIO
+                        logger.info(f"开始上传到MinIO: {object_name}")
                         result = await self.minio_client.upload_data(
                             bucket_name=self.minio_client.bucket_name,
                             object_name=object_name,
@@ -372,6 +430,7 @@ class VideoFavoriteService:
                         )
                         
                         if result["success"]:
+                            logger.info(f"MinIO上传成功: {object_name}")
                             return {
                                 "success": True,
                                 "data": {
@@ -383,11 +442,13 @@ class VideoFavoriteService:
                                 }
                             }
                         else:
+                            logger.error(f"MinIO上传失败: {result.get('error', '未知错误')}")
                             return {
                                 "success": False,
                                 "error": f"MinIO上传失败: {result.get('error', '未知错误')}"
                             }
                     else:
+                        logger.error(f"视频下载失败，状态码: {response.status}, URL: {file_record['original_url']}")
                         return {
                             "success": False,
                             "error": f"视频下载失败，状态码: {response.status}"

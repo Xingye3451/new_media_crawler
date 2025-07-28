@@ -86,7 +86,7 @@ remote_desktop:
   display_number: ${DISPLAY_NUMBER:-1}
   connection_timeout: 5
   max_wait_time: 1800  # 30分钟
-  check_interval: 3    # 3秒检查一次
+  check_interval: 3    # 3秒检查一次 
 
 # ==================== 存储配置 ====================
 storage:

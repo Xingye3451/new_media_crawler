@@ -132,28 +132,28 @@ class KuaishouCrawler(AbstractCrawler):
                     continue
                 
                 try:
-                    utils.logger.info(
-                        f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
+                utils.logger.info(
+                    f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
+                )
+                video_id_list: List[str] = []
+                videos_res = await self.ks_client.search_info_by_keyword(
+                    keyword=keyword,
+                    pcursor=str(page),
+                    search_session_id=search_session_id,
+                )
+                if not videos_res:
+                    utils.logger.error(
+                        f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
                     )
-                    video_id_list: List[str] = []
-                    videos_res = await self.ks_client.search_info_by_keyword(
-                        keyword=keyword,
-                        pcursor=str(page),
-                        search_session_id=search_session_id,
-                    )
-                    if not videos_res:
-                        utils.logger.error(
-                            f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
-                        )
-                        continue
+                    continue
 
-                    vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
-                    if vision_search_photo.get("result") != 1:
-                        utils.logger.error(
-                            f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
-                        )
-                        continue
-                    search_session_id = vision_search_photo.get("searchSessionId", "")
+                vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
+                if vision_search_photo.get("result") != 1:
+                    utils.logger.error(
+                        f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
+                    )
+                    continue
+                search_session_id = vision_search_photo.get("searchSessionId", "")
                     
                     # 分批处理视频详情
                     feeds = vision_search_photo.get("feeds", [])
@@ -165,8 +165,8 @@ class KuaishouCrawler(AbstractCrawler):
                         
                         for video_detail in batch_feeds:
                             try:
-                                video_id_list.append(video_detail.get("photo", {}).get("id"))
-                                await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
+                    video_id_list.append(video_detail.get("photo", {}).get("id"))
+                    await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
                                 processed_count += 1
                             except Exception as e:
                                 utils.logger.error(f"[KuaishouCrawler.search] Failed to process video: {e}")
@@ -194,7 +194,7 @@ class KuaishouCrawler(AbstractCrawler):
                     utils.logger.error(
                         f"[KuaishouCrawler.search] Unexpected error during search: {e}"
                     )
-                    page += 1
+                page += 1
                     continue
             
             utils.logger.info(f"[KuaishouCrawler.search] Search completed. Total processed: {processed_count}")
@@ -263,12 +263,12 @@ class KuaishouCrawler(AbstractCrawler):
             
             utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_videos)}")
             
-            task_list: List[Task] = []
+        task_list: List[Task] = []
             for video_id in batch_videos:
-                task = asyncio.create_task(
-                    self.get_comments(video_id, semaphore), name=video_id
-                )
-                task_list.append(task)
+            task = asyncio.create_task(
+                self.get_comments(video_id, semaphore), name=video_id
+            )
+            task_list.append(task)
 
             try:
                 # 添加超时控制

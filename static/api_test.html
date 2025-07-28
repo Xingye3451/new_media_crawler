@@ -259,79 +259,6 @@
             line-height: 1.4;
         }
 
-        .account-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .account-card {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .account-card h4 {
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .account-card .account-info {
-            margin-bottom: 15px;
-        }
-
-        .account-card .account-info div {
-            margin-bottom: 5px;
-            font-size: 0.9em;
-        }
-
-        .account-card .account-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .account-card .account-actions .btn {
-            padding: 8px 16px;
-            font-size: 0.9em;
-            margin: 0;
-        }
-
-        .remote-login-section {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 20px;
-        }
-
-        .remote-login-card {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .remote-login-card h4 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-
-        .remote-desktop-viewer {
-            width: 100%;
-            height: 400px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background-color: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            font-size: 1.1em;
-        }
-
         .loading {
             display: flex;
             align-items: center;
@@ -427,10 +354,6 @@
                 padding: 10px;
             }
             
-            .remote-login-section {
-                grid-template-columns: 1fr;
-            }
-            
             .form-row {
                 grid-template-columns: 1fr;
             }
@@ -455,15 +378,6 @@
                 </button>
                 <button class="tab-button" onclick="switchTab('multi-platform')">
                     🌐 多平台爬取
-                </button>
-                <button class="tab-button" onclick="switchTab('account-management')">
-                    👤 账号管理
-                </button>
-                <button class="tab-button" onclick="switchTab('remote-login')">
-                    🖥️ 远程登录
-                </button>
-                <button class="tab-button" onclick="switchTab('task-status')">
-                    📊 任务状态
                 </button>
             </div>
 
@@ -702,204 +616,6 @@
                     <pre id="multi-platform-result">等待开始多平台爬取任务...</pre>
                 </div>
             </div>
-
-            <!-- 账号管理 -->
-            <div id="account-management" class="tab-content">
-                <div class="section-title">👤 账号管理</div>
-                
-                <div class="info-box">
-                    <h4>🔐 账号登录状态管理</h4>
-                    <p>💾 自动保存登录状态，支持多账号管理</p>
-                    <p>🔄 定期检查账号有效性，自动更新状态</p>
-                    <p>🛡️ 支持多种登录方式，确保账号安全</p>
-                </div>
-
-                <div class="form-group">
-                    <button class="btn btn-primary" onclick="loadAccounts()">
-                        🔄 刷新账号列表
-                    </button>
-                    <button class="btn btn-success" onclick="showAddAccountForm()">
-                        ➕ 添加新账号
-                    </button>
-                    <button class="btn btn-warning" onclick="checkAllAccounts()">
-                        🔍 检查所有账号
-                    </button>
-                </div>
-
-                <div class="account-list" id="account-list">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <div>正在加载账号列表...</div>
-                    </div>
-                </div>
-
-                <!-- 添加账号表单 -->
-                <div id="add-account-form" style="display: none;">
-                    <div class="section-title">➕ 添加新账号</div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="new-account-platform">平台</label>
-                            <select id="new-account-platform">
-                                <option value="xhs">小红书</option>
-                                <option value="dy">抖音</option>
-                                <option value="ks">快手</option>
-                                <option value="bili">B站</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-account-name">账号名称</label>
-                            <input type="text" id="new-account-name" placeholder="账号备注名称">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="new-account-username">用户名</label>
-                            <input type="text" id="new-account-username" placeholder="用户名或手机号">
-                        </div>
-                        <div class="form-group">
-                            <label for="new-account-login-method">登录方式</label>
-                            <select id="new-account-login-method">
-                                <option value="qrcode">二维码登录</option>
-                                <option value="phone">手机号登录</option>
-                                <option value="email">邮箱登录</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="new-account-notes">备注</label>
-                        <textarea id="new-account-notes" placeholder="账号备注信息"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <button class="btn btn-primary" onclick="addAccount()">
-                            ✅ 添加账号
-                        </button>
-                        <button class="btn btn-secondary" onclick="hideAddAccountForm()">
-                            ❌ 取消
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 远程登录 -->
-            <div id="remote-login" class="tab-content">
-                <div class="section-title">🖥️ 远程桌面登录</div>
-                
-                <div class="info-box">
-                    <h4>🔗 远程桌面登录系统</h4>
-                    <p>🖥️ 使用远程桌面环境进行平台登录，避免本地环境问题</p>
-                    <p>🔐 支持验证码、滑块验证等复杂登录流程</p>
-                    <p>💾 自动保存登录状态，支持长期使用</p>
-                </div>
-
-                <div class="remote-login-section">
-                    <div class="remote-login-card">
-                        <h4>🎯 登录控制</h4>
-                        <div class="form-group">
-                            <label for="remote-login-platform">选择平台</label>
-                            <select id="remote-login-platform">
-                                <option value="xhs">小红书</option>
-                                <option value="dy">抖音</option>
-                                <option value="ks">快手</option>
-                                <option value="bili">B站</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="remote-login-account">选择账号 (可选)</label>
-                            <select id="remote-login-account">
-                                <option value="">自动选择</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <button class="btn btn-primary" onclick="startRemoteLogin()">
-                                🚀 开始远程登录
-                            </button>
-                            <button class="btn btn-secondary" onclick="checkRemoteDesktopStatus()">
-                                🔍 检查远程桌面状态
-                            </button>
-                        </div>
-                        <div class="form-group">
-                            <button class="btn btn-success" onclick="saveRemoteLoginState()">
-                                💾 保存登录状态
-                            </button>
-                            <button class="btn btn-warning" onclick="clearRemoteLoginState()">
-                                🗑️ 清除登录状态
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="remote-login-card">
-                        <h4>📊 远程桌面状态</h4>
-                        <div id="remote-desktop-status">
-                            <div class="loading">
-                                <div class="spinner"></div>
-                                <div>正在检查远程桌面状态...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="remote-login-card">
-                    <h4>🖥️ 远程桌面查看器</h4>
-                    <div class="remote-desktop-viewer" id="remote-desktop-viewer">
-                        <div>点击"开始远程登录"来启动远程桌面</div>
-                    </div>
-                    <div class="form-group" style="margin-top: 15px;">
-                        <button class="btn btn-primary" onclick="openRemoteDesktopInNewWindow()">
-                            🔗 在新窗口打开远程桌面
-                        </button>
-                        <button class="btn btn-secondary" onclick="refreshRemoteDesktop()">
-                            🔄 刷新远程桌面
-                        </button>
-                    </div>
-                </div>
-
-                <div class="status-display" id="remote-login-status">
-                    <h3>📊 远程登录状态</h3>
-                    <pre id="remote-login-result">等待开始远程登录...</pre>
-                </div>
-            </div>
-
-            <!-- 任务状态 -->
-            <div id="task-status" class="tab-content">
-                <div class="section-title">📊 任务状态查询</div>
-                
-                <div class="info-box">
-                    <h4>📈 实时任务监控</h4>
-                    <p>🔄 实时查看任务执行状态和进度</p>
-                    <p>📊 详细的任务统计信息和错误日志</p>
-                    <p>🎯 支持任务管理和结果导出</p>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="task-id-input">🔍 任务ID查询</label>
-                        <input type="text" id="task-id-input" placeholder="输入任务ID">
-                    </div>
-                    <div class="form-group">
-                        <label>&nbsp;</label>
-                        <button class="btn btn-primary" onclick="queryTaskStatus()">
-                            🔍 查询任务状态
-                        </button>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <button class="btn btn-secondary" onclick="loadAllTasks()">
-                        📋 获取所有任务
-                    </button>
-                    <button class="btn btn-success" onclick="loadCompletedTasks()">
-                        ✅ 获取完成任务
-                    </button>
-                    <button class="btn btn-warning" onclick="loadRunningTasks()">
-                        🔄 获取运行中任务
-                    </button>
-                </div>
-
-                <div class="status-display" id="task-status-display">
-                    <h3>📊 任务状态</h3>
-                    <pre id="task-status-result">等待查询任务状态...</pre>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -908,18 +624,11 @@
         let selectedPlatform = 'xhs';
         let selectedMultiPlatforms = new Set();
         let currentTaskId = null;
-        let remoteDesktopSession = null;
 
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
             // 默认选择小红书平台
             selectPlatform('xhs');
-            
-            // 初始化账号列表
-            loadAccounts();
-            
-            // 检查远程桌面状态
-            checkRemoteDesktopStatus();
         });
 
         // 切换标签页
@@ -1079,7 +788,11 @@
                 
                 if (response.ok) {
                     currentTaskId = data.task_id;
-                    updateStatus('single-platform-result', JSON.stringify(data, null, 2));
+                    
+                    // 创建任务管理详情页的超链接
+                    const taskLink = `<a href="/static/task_management.html?task_id=${data.task_id}" target="_blank" style="color: #007bff; text-decoration: underline;">📊 查看任务详情</a>`;
+                    
+                    updateStatus('single-platform-result', `✅ 任务创建成功！\n\n任务ID: ${data.task_id}\n\n${taskLink}\n\n${JSON.stringify(data, null, 2)}`);
                     showToast('单平台爬取任务启动成功！', 'success');
                     
                     // 自动监控任务状态
@@ -1138,7 +851,11 @@
                 
                 if (response.ok) {
                     currentTaskId = data.task_id;
-                    updateStatus('multi-platform-result', JSON.stringify(data, null, 2));
+                    
+                    // 创建任务管理详情页的超链接
+                    const taskLink = `<a href="/static/task_management.html?task_id=${data.task_id}" target="_blank" style="color: #007bff; text-decoration: underline;">📊 查看任务详情</a>`;
+                    
+                    updateStatus('multi-platform-result', `✅ 任务创建成功！\n\n任务ID: ${data.task_id}\n\n${taskLink}\n\n${JSON.stringify(data, null, 2)}`);
                     showToast('多平台爬取任务启动成功！', 'success');
                     
                     // 自动监控任务状态
@@ -1178,209 +895,6 @@
             };
             
             checkStatus();
-        }
-
-        // 加载账号列表
-        async function loadAccounts() {
-            const accountList = document.getElementById('account-list');
-            accountList.innerHTML = '<div class="loading"><div class="spinner"></div><div>正在加载账号列表...</div></div>';
-
-            try {
-                const response = await fetch('/api/v1/accounts/');
-                const data = await response.json();
-                
-                if (response.ok && data.length > 0) {
-                    renderAccounts(data);
-                } else {
-                    accountList.innerHTML = `
-                        <div style="text-align: center; padding: 40px; color: #666;">
-                            <h3>暂无账号</h3>
-                            <p>请点击"添加新账号"来添加第一个账号</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                accountList.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #dc3545;">
-                        <h3>加载失败</h3>
-                        <p>错误: ${error.message}</p>
-                    </div>
-                `;
-            }
-        }
-
-        // 渲染账号列表
-        function renderAccounts(accounts) {
-            const accountList = document.getElementById('account-list');
-            
-            if (accounts.length === 0) {
-                accountList.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #666;">
-                        <h3>暂无账号</h3>
-                        <p>请点击"添加新账号"来添加第一个账号</p>
-                    </div>
-                `;
-                return;
-            }
-
-            accountList.innerHTML = accounts.map(account => `
-                <div class="account-card">
-                    <h4>${getPlatformName(account.platform)} - ${account.account_name || account.username}</h4>
-                    <div class="account-info">
-                        <div><strong>平台:</strong> ${getPlatformName(account.platform)}</div>
-                        <div><strong>用户名:</strong> ${account.username || '未设置'}</div>
-                        <div><strong>登录方式:</strong> ${account.login_method || '未设置'}</div>
-                        <div><strong>状态:</strong> ${account.is_active ? '✅ 活跃' : '❌ 不活跃'}</div>
-                        <div><strong>创建时间:</strong> ${new Date(account.created_at).toLocaleString()}</div>
-                        ${account.notes ? `<div><strong>备注:</strong> ${account.notes}</div>` : ''}
-                    </div>
-                    <div class="account-actions">
-                        <button class="btn btn-primary" onclick="testAccount(${account.id})">
-                            🔍 测试账号
-                        </button>
-                        <button class="btn btn-warning" onclick="editAccount(${account.id})">
-                            ✏️ 编辑
-                        </button>
-                        <button class="btn btn-danger" onclick="deleteAccount(${account.id})">
-                            🗑️ 删除
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // 开始远程登录
-        async function startRemoteLogin() {
-            const platform = document.getElementById('remote-login-platform').value;
-            const accountId = document.getElementById('remote-login-account').value;
-
-            updateStatus('remote-login-result', '正在启动远程登录...');
-
-            try {
-                const requestData = {
-                    platform: platform,
-                    login_type: 'remote_desktop'
-                };
-
-                if (accountId) {
-                    requestData.account_id = parseInt(accountId);
-                }
-
-                const response = await fetch('/api/v1/login/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestData)
-                });
-
-                const data = await response.json();
-                
-                if (response.ok) {
-                    remoteDesktopSession = data.session_id;
-                    updateStatus('remote-login-result', JSON.stringify(data, null, 2));
-                    showToast('远程登录启动成功！', 'success');
-                    
-                    // 如果有远程桌面URL，更新查看器
-                    if (data.remote_desktop_url) {
-                        updateRemoteDesktopViewer(data.remote_desktop_url);
-                    }
-                } else {
-                    updateStatus('remote-login-result', `错误: ${data.detail || '启动失败'}`);
-                    showToast('远程登录启动失败: ' + (data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                updateStatus('remote-login-result', `网络错误: ${error.message}`);
-                showToast('网络错误: ' + error.message, 'error');
-            }
-        }
-
-        // 检查远程桌面状态
-        async function checkRemoteDesktopStatus() {
-            const statusElement = document.getElementById('remote-desktop-status');
-            statusElement.innerHTML = '<div class="loading"><div class="spinner"></div><div>正在检查远程桌面状态...</div></div>';
-
-            try {
-                const response = await fetch('/api/v1/login/remote-desktop-info');
-                const data = await response.json();
-                
-                if (response.ok) {
-                    statusElement.innerHTML = `
-                        <div><strong>状态:</strong> ${data.available ? '✅ 可用' : '❌ 不可用'}</div>
-                        <div><strong>VNC地址:</strong> ${data.vnc_url || '未配置'}</div>
-                        <div><strong>显示器:</strong> ${data.display_number || '未知'}</div>
-                        ${data.message ? `<div><strong>消息:</strong> ${data.message}</div>` : ''}
-                    `;
-                } else {
-                    statusElement.innerHTML = `<div style="color: #dc3545;">检查失败: ${data.detail || '未知错误'}</div>`;
-                }
-            } catch (error) {
-                statusElement.innerHTML = `<div style="color: #dc3545;">网络错误: ${error.message}</div>`;
-            }
-        }
-
-        // 更新远程桌面查看器
-        function updateRemoteDesktopViewer(url) {
-            const viewer = document.getElementById('remote-desktop-viewer');
-            viewer.innerHTML = `
-                <iframe src="${url}" width="100%" height="100%" frameborder="0"></iframe>
-            `;
-        }
-
-        // 在新窗口打开远程桌面
-        function openRemoteDesktopInNewWindow() {
-            // 这里可以获取远程桌面URL并在新窗口打开
-            showToast('正在打开远程桌面...', 'info');
-            // window.open(remoteDesktopUrl, '_blank', 'width=1200,height=800');
-        }
-
-        // 查询任务状态
-        async function queryTaskStatus() {
-            const taskId = document.getElementById('task-id-input').value.trim();
-            
-            if (!taskId) {
-                showToast('请输入任务ID', 'error');
-                return;
-            }
-
-            updateStatus('task-status-result', '正在查询任务状态...');
-
-            try {
-                const response = await fetch(`/api/v1/crawler/status/${taskId}`);
-                const data = await response.json();
-                
-                if (response.ok) {
-                    updateStatus('task-status-result', JSON.stringify(data, null, 2));
-                    showToast('任务状态查询成功！', 'success');
-                } else {
-                    updateStatus('task-status-result', `错误: ${data.detail || '查询失败'}`);
-                    showToast('查询失败: ' + (data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                updateStatus('task-status-result', `网络错误: ${error.message}`);
-                showToast('网络错误: ' + error.message, 'error');
-            }
-        }
-
-        // 加载所有任务
-        async function loadAllTasks() {
-            updateStatus('task-status-result', '正在加载所有任务...');
-
-            try {
-                const response = await fetch('/api/v1/crawler/tasks');
-                const data = await response.json();
-                
-                if (response.ok) {
-                    updateStatus('task-status-result', JSON.stringify(data, null, 2));
-                    showToast('任务列表加载成功！', 'success');
-                } else {
-                    updateStatus('task-status-result', `错误: ${data.detail || '加载失败'}`);
-                    showToast('加载失败: ' + (data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                updateStatus('task-status-result', `网络错误: ${error.message}`);
-                showToast('网络错误: ' + error.message, 'error');
-            }
         }
 
         // 工具函数
@@ -1442,60 +956,6 @@
             const multiCards = document.querySelectorAll('#multi-platform .platform-card');
             multiCards.forEach(card => card.classList.remove('selected'));
             updateStatus('multi-platform-result', '表单已清空，等待开始多平台爬取任务...');
-        }
-
-        // 账号管理相关函数
-        function showAddAccountForm() {
-            document.getElementById('add-account-form').style.display = 'block';
-        }
-
-        function hideAddAccountForm() {
-            document.getElementById('add-account-form').style.display = 'none';
-        }
-
-        function addAccount() {
-            // 添加账号逻辑
-            showToast('添加账号功能开发中...', 'info');
-        }
-
-        function testAccount(accountId) {
-            showToast(`正在测试账号 ${accountId}...`, 'info');
-        }
-
-        function editAccount(accountId) {
-            showToast(`编辑账号 ${accountId} 功能开发中...`, 'info');
-        }
-
-        function deleteAccount(accountId) {
-            if (confirm('确定要删除这个账号吗？')) {
-                showToast(`删除账号 ${accountId} 功能开发中...`, 'info');
-            }
-        }
-
-        function checkAllAccounts() {
-            showToast('正在检查所有账号状态...', 'info');
-        }
-
-        function saveRemoteLoginState() {
-            showToast('正在保存登录状态...', 'info');
-        }
-
-        function clearRemoteLoginState() {
-            if (confirm('确定要清除登录状态吗？')) {
-                showToast('正在清除登录状态...', 'info');
-            }
-        }
-
-        function refreshRemoteDesktop() {
-            showToast('正在刷新远程桌面...', 'info');
-        }
-
-        function loadCompletedTasks() {
-            showToast('正在加载已完成任务...', 'info');
-        }
-
-        function loadRunningTasks() {
-            showToast('正在加载运行中任务...', 'info');
         }
     </script>
 </body>

@@ -3,46 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediaCrawler 爬虫控制台</title>
+    <title>MediaCrawler 爬虫配置管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        .platform-card {
+        .config-card {
             transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        .platform-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        .platform-card.selected {
-            border-color: #007bff;
-            background-color: #f8f9fa;
-        }
-        .task-item {
             border-left: 4px solid #dee2e6;
-            transition: all 0.3s ease;
         }
-        .task-item.running {
+        .config-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .config-card.active {
             border-left-color: #007bff;
-        }
-        .task-item.completed {
-            border-left-color: #28a745;
-        }
-        .task-item.failed {
-            border-left-color: #dc3545;
-        }
-        .task-item.paused {
-            border-left-color: #ffc107;
-        }
-        .progress-bar {
-            transition: width 0.3s ease;
-        }
-        .config-section {
             background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
         }
         .resource-indicator {
             display: inline-block;
@@ -54,6 +29,22 @@
         .resource-normal { background-color: #28a745; }
         .resource-warning { background-color: #ffc107; }
         .resource-danger { background-color: #dc3545; }
+        .config-section {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .platform-icon {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+        .config-value {
+            font-family: monospace;
+            background-color: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -62,55 +53,47 @@
             <!-- 侧边栏 -->
             <div class="col-md-3 col-lg-2 bg-light p-3">
                 <h5 class="mb-3">
-                    <i class="bi bi-gear"></i> 爬虫控制台
+                    <i class="bi bi-gear"></i> 配置管理
                 </h5>
                 
-                <!-- 平台选择 -->
+                <!-- 平台配置 -->
                 <div class="mb-4">
-                    <h6>选择平台</h6>
-                    <div class="platform-cards">
-                        <div class="card platform-card mb-2" data-platform="xhs">
-                            <div class="card-body p-2">
-                                <i class="bi bi-camera-video"></i> 小红书
-                            </div>
-                        </div>
-                        <div class="card platform-card mb-2" data-platform="dy">
-                            <div class="card-body p-2">
-                                <i class="bi bi-camera-video"></i> 抖音
-                            </div>
-                        </div>
-                        <div class="card platform-card mb-2" data-platform="ks">
-                            <div class="card-body p-2">
-                                <i class="bi bi-camera-video"></i> 快手
-                            </div>
-                        </div>
-                        <div class="card platform-card mb-2" data-platform="bili">
-                            <div class="card-body p-2">
-                                <i class="bi bi-camera-video"></i> B站
-                            </div>
-                        </div>
+                    <h6>平台配置</h6>
+                    <div class="list-group">
+                        <a href="#" class="list-group-item list-group-item-action" data-platform="xhs">
+                            <i class="bi bi-camera-video platform-icon"></i>小红书
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action" data-platform="dy">
+                            <i class="bi bi-camera-video platform-icon"></i>抖音
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action" data-platform="ks">
+                            <i class="bi bi-camera-video platform-icon"></i>快手
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action" data-platform="bili">
+                            <i class="bi bi-camera-video platform-icon"></i>B站
+                        </a>
                     </div>
                 </div>
 
-                <!-- 快速配置 -->
+                <!-- 配置预设 -->
                 <div class="mb-4">
-                    <h6>快速配置</h6>
+                    <h6>配置预设</h6>
                     <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary btn-sm" onclick="loadConfig('conservative')">
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('conservative')">
                             保守模式
                         </button>
-                        <button class="btn btn-outline-success btn-sm" onclick="loadConfig('balanced')">
+                        <button class="btn btn-outline-success btn-sm" onclick="loadPreset('balanced')">
                             平衡模式
                         </button>
-                        <button class="btn btn-outline-warning btn-sm" onclick="loadConfig('aggressive')">
+                        <button class="btn btn-outline-warning btn-sm" onclick="loadPreset('aggressive')">
                             激进模式
                         </button>
                     </div>
                 </div>
 
-                <!-- 资源监控 -->
+                <!-- 系统状态 -->
                 <div class="mb-4">
-                    <h6>资源监控</h6>
+                    <h6>系统状态</h6>
                     <div class="small">
                         <div class="mb-2">
                             <span class="resource-indicator resource-normal"></span>
@@ -126,47 +109,65 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 快捷操作 -->
+                <div class="mb-4">
+                    <h6>快捷操作</h6>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-sm" onclick="saveAllConfigs()">
+                            <i class="bi bi-save"></i> 保存所有配置
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="resetAllConfigs()">
+                            <i class="bi bi-arrow-clockwise"></i> 重置配置
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="exportConfigs()">
+                            <i class="bi bi-download"></i> 导出配置
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- 主内容区 -->
             <div class="col-md-9 col-lg-10 p-4">
-                <!-- 配置表单 -->
                 <div class="row">
-                    <div class="col-lg-8">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="mb-0">
-                                    <i class="bi bi-sliders"></i> 爬虫配置
+                                    <i class="bi bi-sliders"></i> 
+                                    <span id="current-platform">小红书</span> 爬虫配置
                                 </h5>
                             </div>
                             <div class="card-body">
                                 <form id="crawlerConfigForm">
                                     <!-- 基础配置 -->
                                     <div class="config-section">
-                                        <h6>基础配置</h6>
+                                        <h6><i class="bi bi-gear"></i> 基础配置</h6>
                                         <div class="row">
                                             <div class="col-md-6">
-                                                <label class="form-label">搜索关键词</label>
-                                                <input type="text" class="form-control" id="keywords" placeholder="输入搜索关键词">
+                                                <label class="form-label">默认关键词</label>
+                                                <input type="text" class="form-control" id="defaultKeywords" placeholder="编程副业,编程兼职">
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label">最大爬取数量</label>
-                                                <input type="number" class="form-control" id="maxCount" value="20" min="1" max="100">
+                                                <label class="form-label">默认爬取数量</label>
+                                                <input type="number" class="form-control" id="defaultMaxCount" value="20" min="1" max="100">
                                             </div>
                                         </div>
                                         <div class="row mt-3">
                                             <div class="col-md-6">
-                                                <label class="form-label">爬虫类型</label>
-                                                <select class="form-select" id="crawlerType">
+                                                <label class="form-label">默认爬虫类型</label>
+                                                <select class="form-select" id="defaultCrawlerType">
                                                     <option value="search">关键词搜索</option>
-                                                    <option value="user">用户内容</option>
+                                                    <option value="detail">指定内容详情</option>
+                                                    <option value="creator">创作者主页</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label">登录类型</label>
-                                                <select class="form-select" id="loginType">
+                                                <label class="form-label">默认登录类型</label>
+                                                <select class="form-select" id="defaultLoginType">
                                                     <option value="qrcode">二维码登录</option>
                                                     <option value="phone">手机号登录</option>
+                                                    <option value="cookie">Cookie登录</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -174,24 +175,30 @@
 
                                     <!-- 功能开关 -->
                                     <div class="config-section">
-                                        <h6>功能开关</h6>
+                                        <h6><i class="bi bi-toggle-on"></i> 功能开关</h6>
                                         <div class="row">
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="getComments">
+                                                    <input class="form-check-input" type="checkbox" id="enableComments">
                                                     <label class="form-check-label">获取评论</label>
                                                 </div>
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="getSubComments">
+                                                    <input class="form-check-input" type="checkbox" id="enableSubComments">
                                                     <label class="form-check-label">获取子评论</label>
                                                 </div>
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="downloadMedia">
-                                                    <label class="form-check-label">下载媒体</label>
+                                                    <input class="form-check-input" type="checkbox" id="enableImages">
+                                                    <label class="form-check-label">获取图片</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="enableVideos">
+                                                    <label class="form-check-label">获取视频</label>
                                                 </div>
                                             </div>
                                         </div>
@@ -199,7 +206,7 @@
 
                                     <!-- 资源控制 -->
                                     <div class="config-section">
-                                        <h6>资源控制</h6>
+                                        <h6><i class="bi bi-speedometer2"></i> 资源控制</h6>
                                         <div class="row">
                                             <div class="col-md-4">
                                                 <label class="form-label">最大并发数</label>
@@ -218,12 +225,12 @@
 
                                     <!-- 代理设置 -->
                                     <div class="config-section">
-                                        <h6>代理设置</h6>
+                                        <h6><i class="bi bi-globe"></i> 代理设置</h6>
                                         <div class="row">
                                             <div class="col-md-6">
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" id="useProxy">
-                                                    <label class="form-check-label">使用代理</label>
+                                                    <label class="form-check-label">启用代理</label>
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
@@ -233,60 +240,69 @@
                                                     <option value="round_robin">轮询</option>
                                                     <option value="random">随机</option>
                                                     <option value="weighted">权重</option>
+                                                    <option value="failover">故障转移</option>
                                                 </select>
                                             </div>
                                         </div>
                                     </div>
 
+                                    <!-- 数据存储 -->
+                                    <div class="config-section">
+                                        <h6><i class="bi bi-database"></i> 数据存储</h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label class="form-label">存储方式</label>
+                                                <select class="form-select" id="saveDataOption">
+                                                    <option value="db">数据库存储</option>
+                                                    <option value="json">JSON文件</option>
+                                                    <option value="csv">CSV文件</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">数据保留天数</label>
+                                                <input type="number" class="form-control" id="dataRetentionDays" value="30" min="1" max="365">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 平台特定配置 -->
+                                    <div class="config-section">
+                                        <h6><i class="bi bi-puzzle"></i> 平台特定配置</h6>
+                                        <div id="platformSpecificConfig">
+                                            <!-- 平台特定配置将在这里动态加载 -->
+                                        </div>
+                                    </div>
+
                                     <!-- 操作按钮 -->
                                     <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-primary" onclick="configureCrawler()">
-                                            <i class="bi bi-gear"></i> 配置爬虫
+                                        <button type="button" class="btn btn-primary" onclick="saveCurrentConfig()">
+                                            <i class="bi bi-save"></i> 保存当前配置
                                         </button>
-                                        <button type="button" class="btn btn-success" onclick="startCrawler()">
-                                            <i class="bi bi-play"></i> 启动爬虫
+                                        <button type="button" class="btn btn-secondary" onclick="loadCurrentConfig()">
+                                            <i class="bi bi-arrow-clockwise"></i> 重新加载
                                         </button>
-                                        <button type="button" class="btn btn-warning" onclick="pauseAllTasks()">
-                                            <i class="bi bi-pause"></i> 暂停所有
-                                        </button>
-                                        <button type="button" class="btn btn-danger" onclick="stopAllTasks()">
-                                            <i class="bi bi-stop"></i> 停止所有
+                                        <button type="button" class="btn btn-warning" onclick="resetCurrentConfig()">
+                                            <i class="bi bi-arrow-counterclockwise"></i> 重置配置
                                         </button>
                                     </div>
                                 </form>
                             </div>
                         </div>
                     </div>
-
-                    <!-- 任务列表 -->
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-list-task"></i> 任务列表
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div id="taskList">
-                                    <!-- 任务列表将在这里动态生成 -->
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                <!-- 任务详情 -->
+                <!-- 配置概览 -->
                 <div class="row mt-4">
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="mb-0">
-                                    <i class="bi bi-info-circle"></i> 任务详情
+                                    <i class="bi bi-list-ul"></i> 配置概览
                                 </h5>
                             </div>
                             <div class="card-body">
-                                <div id="taskDetails">
-                                    <!-- 任务详情将在这里显示 -->
+                                <div id="configOverview">
+                                    <!-- 配置概览将在这里显示 -->
                                 </div>
                             </div>
                         </div>
@@ -299,287 +315,497 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // 全局变量
-        let selectedPlatform = 'xhs';
-        let currentTasks = [];
+        let currentPlatform = 'xhs';
+        let platformConfigs = {};
         let resourceMonitor = null;
+
+        // 平台配置模板
+        const platformTemplates = {
+            xhs: {
+                defaultKeywords: '编程副业,编程兼职',
+                defaultMaxCount: 20,
+                defaultCrawlerType: 'search',
+                defaultLoginType: 'qrcode',
+                enableComments: true,
+                enableSubComments: false,
+                enableImages: false,
+                enableVideos: true,
+                maxConcurrency: 2,
+                sleepInterval: 5,
+                timeoutSeconds: 300,
+                useProxy: false,
+                proxyStrategy: 'disabled',
+                saveDataOption: 'db',
+                dataRetentionDays: 30,
+                platformSpecific: {
+                    searchNoteType: 'video',
+                    enableVideoFilter: true
+                }
+            },
+            dy: {
+                defaultKeywords: '编程教程,技术分享',
+                defaultMaxCount: 25,
+                defaultCrawlerType: 'search',
+                defaultLoginType: 'qrcode',
+                enableComments: true,
+                enableSubComments: false,
+                enableImages: false,
+                enableVideos: true,
+                maxConcurrency: 3,
+                sleepInterval: 3,
+                timeoutSeconds: 300,
+                useProxy: false,
+                proxyStrategy: 'disabled',
+                saveDataOption: 'db',
+                dataRetentionDays: 30,
+                platformSpecific: {
+                    publishTimeType: 0,
+                    enableVideoFilter: true
+                }
+            },
+            ks: {
+                defaultKeywords: '编程学习,技术分享',
+                defaultMaxCount: 20,
+                defaultCrawlerType: 'search',
+                defaultLoginType: 'qrcode',
+                enableComments: true,
+                enableSubComments: false,
+                enableImages: false,
+                enableVideos: true,
+                maxConcurrency: 2,
+                sleepInterval: 4,
+                timeoutSeconds: 300,
+                useProxy: false,
+                proxyStrategy: 'disabled',
+                saveDataOption: 'db',
+                dataRetentionDays: 30,
+                platformSpecific: {
+                    enableVideoFilter: true
+                }
+            },
+            bili: {
+                defaultKeywords: '编程教程,技术分享',
+                defaultMaxCount: 30,
+                defaultCrawlerType: 'search',
+                defaultLoginType: 'qrcode',
+                enableComments: true,
+                enableSubComments: false,
+                enableImages: false,
+                enableVideos: true,
+                maxConcurrency: 2,
+                sleepInterval: 5,
+                timeoutSeconds: 300,
+                useProxy: false,
+                proxyStrategy: 'disabled',
+                saveDataOption: 'db',
+                dataRetentionDays: 30,
+                platformSpecific: {
+                    allDay: false,
+                    startDay: '2024-01-01',
+                    endDay: '2024-01-31',
+                    creatorMode: false
+                }
+            }
+        };
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
             initializePlatformSelection();
-            loadTasks();
+            loadCurrentConfig();
             startResourceMonitoring();
         });
 
         // 平台选择
         function initializePlatformSelection() {
-            document.querySelectorAll('.platform-card').forEach(card => {
-                card.addEventListener('click', function() {
-                    document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
-                    this.classList.add('selected');
-                    selectedPlatform = this.dataset.platform;
-                    loadPlatformTemplate(selectedPlatform);
+            document.querySelectorAll('[data-platform]').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // 更新选中状态
+                    document.querySelectorAll('[data-platform]').forEach(i => i.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // 更新当前平台
+                    currentPlatform = this.dataset.platform;
+                    document.getElementById('current-platform').textContent = getPlatformName(currentPlatform);
+                    
+                    // 加载平台配置
+                    loadCurrentConfig();
                 });
             });
             
             // 默认选择小红书
-            document.querySelector('[data-platform="xhs"]').classList.add('selected');
+            document.querySelector('[data-platform="xhs"]').classList.add('active');
         }
 
-        // 加载平台配置模板
-        async function loadPlatformTemplate(platform) {
+        // 加载当前平台配置
+        async function loadCurrentConfig() {
             try {
-                const response = await fetch(`/api/v1/crawler/config/template/${platform}`);
+                // 从配置管理API获取当前配置
+                const response = await fetch(`/api/v1/config/load/${currentPlatform}`);
                 const data = await response.json();
                 
-                if (data.template) {
-                    document.getElementById('maxConcurrency').value = data.template.max_concurrency || 2;
-                    document.getElementById('sleepInterval').value = data.template.sleep_interval || 5;
-                    document.getElementById('getComments').checked = data.template.get_comments || false;
-                    document.getElementById('downloadMedia').checked = data.template.download_media || false;
+                if (data.config) {
+                    // 填充表单
+                    fillFormWithConfig(data.config);
+                } else {
+                    // 使用默认模板
+                    fillFormWithConfig(platformTemplates[currentPlatform]);
+                }
+                
+                updateConfigOverview();
+            } catch (error) {
+                console.error('加载配置失败:', error);
+                // 使用默认模板
+                fillFormWithConfig(platformTemplates[currentPlatform]);
+                updateConfigOverview();
+            }
+        }
+
+        // 用配置填充表单
+        function fillFormWithConfig(config) {
+            // 基础配置
+            document.getElementById('defaultKeywords').value = config.defaultKeywords || '';
+            document.getElementById('defaultMaxCount').value = config.defaultMaxCount || 20;
+            document.getElementById('defaultCrawlerType').value = config.defaultCrawlerType || 'search';
+            document.getElementById('defaultLoginType').value = config.defaultLoginType || 'qrcode';
+            
+            // 功能开关
+            document.getElementById('enableComments').checked = config.enableComments || false;
+            document.getElementById('enableSubComments').checked = config.enableSubComments || false;
+            document.getElementById('enableImages').checked = config.enableImages || false;
+            document.getElementById('enableVideos').checked = config.enableVideos || false;
+            
+            // 资源控制
+            document.getElementById('maxConcurrency').value = config.maxConcurrency || 2;
+            document.getElementById('sleepInterval').value = config.sleepInterval || 5;
+            document.getElementById('timeoutSeconds').value = config.timeoutSeconds || 300;
+            
+            // 代理设置
+            document.getElementById('useProxy').checked = config.useProxy || false;
+            document.getElementById('proxyStrategy').value = config.proxyStrategy || 'disabled';
+            
+            // 数据存储
+            document.getElementById('saveDataOption').value = config.saveDataOption || 'db';
+            document.getElementById('dataRetentionDays').value = config.dataRetentionDays || 30;
+            
+            // 平台特定配置
+            loadPlatformSpecificConfig(config.platformSpecific);
+        }
+
+        // 加载平台特定配置
+        function loadPlatformSpecificConfig(specificConfig) {
+            const container = document.getElementById('platformSpecificConfig');
+            
+            switch (currentPlatform) {
+                case 'xhs':
+                    container.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">搜索笔记类型</label>
+                                <select class="form-select" id="searchNoteType">
+                                    <option value="ALL">全部</option>
+                                    <option value="VIDEO">仅视频</option>
+                                    <option value="IMAGE">仅图片</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableVideoFilter">
+                                    <label class="form-check-label">启用视频过滤</label>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    if (specificConfig) {
+                        document.getElementById('searchNoteType').value = specificConfig.searchNoteType || 'VIDEO';
+                        document.getElementById('enableVideoFilter').checked = specificConfig.enableVideoFilter || true;
+                    }
+                    break;
+                    
+                case 'dy':
+                    container.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">发布时间类型</label>
+                                <select class="form-select" id="publishTimeType">
+                                    <option value="0">全部时间</option>
+                                    <option value="1">最近一天</option>
+                                    <option value="2">最近一周</option>
+                                    <option value="3">最近一月</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableVideoFilter">
+                                    <label class="form-check-label">启用视频过滤</label>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    if (specificConfig) {
+                        document.getElementById('publishTimeType').value = specificConfig.publishTimeType || 0;
+                        document.getElementById('enableVideoFilter').checked = specificConfig.enableVideoFilter || true;
+                    }
+                    break;
+                    
+                case 'bili':
+                    container.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="allDay">
+                                    <label class="form-check-label">全天候爬取</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="startDay">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="endDay">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="creatorMode">
+                                    <label class="form-check-label">创作者模式</label>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    if (specificConfig) {
+                        document.getElementById('allDay').checked = specificConfig.allDay || false;
+                        document.getElementById('startDay').value = specificConfig.startDay || '2024-01-01';
+                        document.getElementById('endDay').value = specificConfig.endDay || '2024-01-31';
+                        document.getElementById('creatorMode').checked = specificConfig.creatorMode || false;
+                    }
+                    break;
+                    
+                default:
+                    container.innerHTML = '<p class="text-muted">该平台暂无特定配置</p>';
+            }
+        }
+
+        // 保存当前配置
+        async function saveCurrentConfig() {
+            const config = getCurrentConfig();
+            
+            try {
+                const response = await fetch(`/api/v1/config/save/${currentPlatform}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert('配置保存成功', 'success');
+                    updateConfigOverview();
+                } else {
+                    showAlert('保存失败: ' + data.detail, 'danger');
                 }
             } catch (error) {
-                console.error('加载平台模板失败:', error);
+                showAlert('保存失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 获取当前配置
+        function getCurrentConfig() {
+            const config = {
+                platform: currentPlatform,
+                defaultKeywords: document.getElementById('defaultKeywords').value,
+                defaultMaxCount: parseInt(document.getElementById('defaultMaxCount').value),
+                defaultCrawlerType: document.getElementById('defaultCrawlerType').value,
+                defaultLoginType: document.getElementById('defaultLoginType').value,
+                enableComments: document.getElementById('enableComments').checked,
+                enableSubComments: document.getElementById('enableSubComments').checked,
+                enableImages: document.getElementById('enableImages').checked,
+                enableVideos: document.getElementById('enableVideos').checked,
+                maxConcurrency: parseInt(document.getElementById('maxConcurrency').value),
+                sleepInterval: parseInt(document.getElementById('sleepInterval').value),
+                timeoutSeconds: parseInt(document.getElementById('timeoutSeconds').value),
+                useProxy: document.getElementById('useProxy').checked,
+                proxyStrategy: document.getElementById('proxyStrategy').value,
+                saveDataOption: document.getElementById('saveDataOption').value,
+                dataRetentionDays: parseInt(document.getElementById('dataRetentionDays').value)
+            };
+
+            // 添加平台特定配置
+            config.platformSpecific = getPlatformSpecificConfig();
+
+            return config;
+        }
+
+        // 获取平台特定配置
+        function getPlatformSpecificConfig() {
+            const specific = {};
+            
+            switch (currentPlatform) {
+                case 'xhs':
+                    specific.searchNoteType = document.getElementById('searchNoteType')?.value || 'VIDEO';
+                    specific.enableVideoFilter = document.getElementById('enableVideoFilter')?.checked || true;
+                    break;
+                case 'dy':
+                    specific.publishTimeType = parseInt(document.getElementById('publishTimeType')?.value || 0);
+                    specific.enableVideoFilter = document.getElementById('enableVideoFilter')?.checked || true;
+                    break;
+                case 'bili':
+                    specific.allDay = document.getElementById('allDay')?.checked || false;
+                    specific.startDay = document.getElementById('startDay')?.value || '2024-01-01';
+                    specific.endDay = document.getElementById('endDay')?.value || '2024-01-31';
+                    specific.creatorMode = document.getElementById('creatorMode')?.checked || false;
+                    break;
+            }
+            
+            return specific;
+        }
+
+        // 重置当前配置
+        function resetCurrentConfig() {
+            if (confirm('确定要重置当前平台的配置吗？')) {
+                fillFormWithConfig(platformTemplates[currentPlatform]);
+                updateConfigOverview();
+                showAlert('配置已重置', 'warning');
             }
         }
 
         // 加载配置预设
-        function loadConfig(preset) {
-            const configs = {
-                conservative: {
-                    maxConcurrency: 1,
-                    sleepInterval: 8,
-                    maxCount: 10,
-                    getComments: false,
-                    downloadMedia: false
-                },
-                balanced: {
-                    maxConcurrency: 2,
-                    sleepInterval: 5,
-                    maxCount: 20,
-                    getComments: false,
-                    downloadMedia: false
-                },
-                aggressive: {
-                    maxConcurrency: 3,
-                    sleepInterval: 3,
-                    maxCount: 30,
-                    getComments: true,
-                    downloadMedia: false
-                }
-            };
-
-            const config = configs[preset];
-            Object.keys(config).forEach(key => {
-                const element = document.getElementById(key.charAt(0).toLowerCase() + key.slice(1));
-                if (element) {
-                    if (element.type === 'checkbox') {
-                        element.checked = config[key];
-                    } else {
-                        element.value = config[key];
-                    }
-                }
-            });
-        }
-
-        // 配置爬虫
-        async function configureCrawler() {
-            const config = {
-                platform: selectedPlatform,
-                keywords: document.getElementById('keywords').value,
-                max_count: parseInt(document.getElementById('maxCount').value),
-                crawler_type: document.getElementById('crawlerType').value,
-                login_type: document.getElementById('loginType').value,
-                get_comments: document.getElementById('getComments').checked,
-                get_sub_comments: document.getElementById('getSubComments').checked,
-                download_media: document.getElementById('downloadMedia').checked,
-                max_concurrency: parseInt(document.getElementById('maxConcurrency').value),
-                sleep_interval: parseInt(document.getElementById('sleepInterval').value),
-                timeout_seconds: parseInt(document.getElementById('timeoutSeconds').value),
-                use_proxy: document.getElementById('useProxy').checked,
-                proxy_strategy: document.getElementById('proxyStrategy').value
-            };
-
+        async function loadPreset(preset) {
             try {
-                const response = await fetch('/api/v1/crawler/configure', {
+                const response = await fetch('/api/v1/config/preset', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(config)
+                    body: JSON.stringify({
+                        preset: preset,
+                        platform: currentPlatform
+                    })
                 });
 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert('配置成功', 'success');
-                    console.log('配置详情:', data);
+                    // 重新加载配置
+                    await loadCurrentConfig();
+                    showAlert(`已应用${preset}预设配置`, 'success');
                 } else {
-                    showAlert('配置失败: ' + data.detail, 'danger');
+                    showAlert('应用预设失败: ' + data.detail, 'danger');
                 }
             } catch (error) {
-                showAlert('配置失败: ' + error.message, 'danger');
+                showAlert('应用预设失败: ' + error.message, 'danger');
             }
         }
 
-        // 启动爬虫
-        async function startCrawler() {
-            const config = {
-                platform: selectedPlatform,
-                keywords: document.getElementById('keywords').value,
-                max_count: parseInt(document.getElementById('maxCount').value),
-                crawler_type: document.getElementById('crawlerType').value,
-                login_type: document.getElementById('loginType').value,
-                get_comments: document.getElementById('getComments').checked,
-                get_sub_comments: document.getElementById('getSubComments').checked,
-                download_media: document.getElementById('downloadMedia').checked,
-                max_concurrency: parseInt(document.getElementById('maxConcurrency').value),
-                sleep_interval: parseInt(document.getElementById('sleepInterval').value),
-                timeout_seconds: parseInt(document.getElementById('timeoutSeconds').value),
-                use_proxy: document.getElementById('useProxy').checked,
-                proxy_strategy: document.getElementById('proxyStrategy').value
-            };
-
-            try {
-                const response = await fetch('/api/v1/crawler/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(config)
-                });
-
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showAlert('爬虫启动成功', 'success');
-                    loadTasks();
-                } else {
-                    showAlert('启动失败: ' + data.detail, 'danger');
-                }
-            } catch (error) {
-                showAlert('启动失败: ' + error.message, 'danger');
-            }
-        }
-
-        // 加载任务列表
-        async function loadTasks() {
-            try {
-                const response = await fetch('/api/v1/crawler/tasks');
-                const data = await response.json();
-                
-                currentTasks = data.tasks || [];
-                renderTaskList();
-            } catch (error) {
-                console.error('加载任务列表失败:', error);
-            }
-        }
-
-        // 渲染任务列表
-        function renderTaskList() {
-            const taskList = document.getElementById('taskList');
+        // 更新配置概览
+        function updateConfigOverview() {
+            const config = getCurrentConfig();
+            const overview = document.getElementById('configOverview');
             
-            if (currentTasks.length === 0) {
-                taskList.innerHTML = '<p class="text-muted">暂无任务</p>';
-                return;
-            }
-
-            taskList.innerHTML = currentTasks.map(task => `
-                <div class="task-item p-2 mb-2 ${task.status}" onclick="showTaskDetails('${task.task_id}')">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>${task.platform.toUpperCase()}</strong>
-                            <br>
-                            <small class="text-muted">${task.status}</small>
-                        </div>
-                        <div class="text-end">
-                            <small class="text-muted">${formatTime(task.created_at)}</small>
-                        </div>
+            overview.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>基础配置</h6>
+                        <p><strong>默认关键词:</strong> <span class="config-value">${config.defaultKeywords}</span></p>
+                        <p><strong>最大数量:</strong> <span class="config-value">${config.defaultMaxCount}</span></p>
+                        <p><strong>爬虫类型:</strong> <span class="config-value">${config.defaultCrawlerType}</span></p>
+                        <p><strong>登录类型:</strong> <span class="config-value">${config.defaultLoginType}</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>功能开关</h6>
+                        <p><strong>获取评论:</strong> <span class="config-value">${config.enableComments ? '✅' : '❌'}</span></p>
+                        <p><strong>获取图片:</strong> <span class="config-value">${config.enableImages ? '✅' : '❌'}</span></p>
+                        <p><strong>获取视频:</strong> <span class="config-value">${config.enableVideos ? '✅' : '❌'}</span></p>
+                        <p><strong>代理使用:</strong> <span class="config-value">${config.useProxy ? '✅' : '❌'}</span></p>
                     </div>
                 </div>
-            `).join('');
-        }
-
-        // 显示任务详情
-        async function showTaskDetails(taskId) {
-            try {
-                const response = await fetch(`/api/v1/crawler/status/${taskId}`);
-                const task = await response.json();
-                
-                document.getElementById('taskDetails').innerHTML = `
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6>任务信息</h6>
-                            <p><strong>任务ID:</strong> ${task.task_id}</p>
-                            <p><strong>状态:</strong> ${task.status}</p>
-                            <p><strong>进度:</strong> ${task.progress || 0}%</p>
-                            <p><strong>创建时间:</strong> ${formatTime(task.created_at)}</p>
-                            <p><strong>更新时间:</strong> ${formatTime(task.updated_at)}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <h6>操作</h6>
-                            <div class="d-grid gap-2">
-                                <button class="btn btn-sm btn-warning" onclick="pauseTask('${taskId}')">暂停</button>
-                                <button class="btn btn-sm btn-success" onclick="resumeTask('${taskId}')">恢复</button>
-                                <button class="btn btn-sm btn-danger" onclick="stopTask('${taskId}')">停止</button>
-                                <button class="btn btn-sm btn-secondary" onclick="deleteTask('${taskId}')">删除</button>
-                            </div>
-                        </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>资源控制</h6>
+                        <p><strong>最大并发:</strong> <span class="config-value">${config.maxConcurrency}</span></p>
+                        <p><strong>请求间隔:</strong> <span class="config-value">${config.sleepInterval}s</span></p>
+                        <p><strong>超时时间:</strong> <span class="config-value">${config.timeoutSeconds}s</span></p>
                     </div>
-                `;
-            } catch (error) {
-                console.error('获取任务详情失败:', error);
-            }
+                    <div class="col-md-6">
+                        <h6>数据存储</h6>
+                        <p><strong>存储方式:</strong> <span class="config-value">${config.saveDataOption}</span></p>
+                        <p><strong>保留天数:</strong> <span class="config-value">${config.dataRetentionDays}天</span></p>
+                    </div>
+                </div>
+            `;
         }
 
-        // 任务操作
-        async function pauseTask(taskId) {
-            await taskOperation(taskId, 'pause');
-        }
-
-        async function resumeTask(taskId) {
-            await taskOperation(taskId, 'resume');
-        }
-
-        async function stopTask(taskId) {
-            await taskOperation(taskId, 'stop');
-        }
-
-        async function deleteTask(taskId) {
-            await taskOperation(taskId, 'delete');
-        }
-
-        async function taskOperation(taskId, operation) {
+        // 保存所有配置
+        async function saveAllConfigs() {
             try {
-                const response = await fetch(`/api/v1/crawler/${operation}/${taskId}`, {
+                const response = await fetch('/api/v1/config/save-all', {
                     method: 'POST'
                 });
+
+                const data = await response.json();
                 
                 if (response.ok) {
-                    showAlert(`${operation}操作成功`, 'success');
-                    loadTasks();
+                    showAlert(`已保存 ${data.saved_count} 个平台配置`, 'success');
                 } else {
-                    const data = await response.json();
-                    showAlert(`${operation}操作失败: ${data.detail}`, 'danger');
+                    showAlert('保存所有配置失败: ' + data.detail, 'danger');
                 }
             } catch (error) {
-                showAlert(`${operation}操作失败: ${error.message}`, 'danger');
+                showAlert('保存所有配置失败: ' + error.message, 'danger');
             }
         }
 
-        // 批量操作
-        async function pauseAllTasks() {
-            for (const task of currentTasks) {
-                if (task.status === 'running') {
-                    await pauseTask(task.task_id);
+        // 重置所有配置
+        async function resetAllConfigs() {
+            if (confirm('确定要重置所有平台的配置吗？这将恢复默认设置。')) {
+                try {
+                    const response = await fetch('/api/v1/config/reset-all', {
+                        method: 'POST'
+                    });
+
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showAlert(`已重置 ${data.reset_count} 个平台配置`, 'success');
+                        // 重新加载当前配置
+                        await loadCurrentConfig();
+                    } else {
+                        showAlert('重置所有配置失败: ' + data.detail, 'danger');
+                    }
+                } catch (error) {
+                    showAlert('重置所有配置失败: ' + error.message, 'danger');
                 }
             }
         }
 
-        async function stopAllTasks() {
-            for (const task of currentTasks) {
-                if (['running', 'paused'].includes(task.status)) {
-                    await stopTask(task.task_id);
+        // 导出配置
+        async function exportConfigs() {
+            try {
+                const response = await fetch('/api/v1/config/export');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // 创建下载链接
+                    const dataStr = JSON.stringify(data.configs, null, 2);
+                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `crawler_configs_${new Date().toISOString().split('T')[0]}.json`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                    
+                    showAlert('配置已导出', 'success');
+                } else {
+                    showAlert('导出配置失败: ' + data.detail, 'danger');
                 }
+            } catch (error) {
+                showAlert('导出配置失败: ' + error.message, 'danger');
             }
         }
 
@@ -587,8 +813,7 @@
         function startResourceMonitoring() {
             resourceMonitor = setInterval(async () => {
                 try {
-                    // 这里应该调用实际的资源监控API
-                    // 暂时使用模拟数据
+                    // 模拟资源监控数据
                     const cpuUsage = Math.floor(Math.random() * 100);
                     const memoryUsage = Math.floor(Math.random() * 100);
                     const diskUsage = Math.floor(Math.random() * 100);
@@ -621,9 +846,14 @@
         }
 
         // 工具函数
-        function formatTime(timeStr) {
-            if (!timeStr) return '--';
-            return new Date(timeStr).toLocaleString();
+        function getPlatformName(platform) {
+            const names = {
+                'xhs': '小红书',
+                'dy': '抖音',
+                'ks': '快手',
+                'bili': 'B站'
+            };
+            return names[platform] || platform;
         }
 
         function showAlert(message, type) {
@@ -640,9 +870,7 @@
                 alertDiv.remove();
             }, 3000);
         }
-
-        // 定期刷新任务列表
-        setInterval(loadTasks, 10000);
     </script>
 </body>
+</html> 
 </html> 

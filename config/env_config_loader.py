@@ -145,16 +145,16 @@ class EnvConfigLoader:
                 "retry_interval": 60,
                 "status_check_interval": 10,
                 "result_retention_days": 30
-            },
-            "performance": {
+                },
+                "performance": {
                 "enable_cache": True,
                 "cache_size_limit": 100,
                 "enable_compression": True,
                 "enable_async": True,
                 "async_queue_size": 50,
                 "async_timeout": 300
-            },
-            "monitoring": {
+                },
+                "monitoring": {
                 "enable_system_monitor": True,
                 "data_retention_days": 7,
                 "collection_interval": 60,

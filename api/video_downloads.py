@@ -32,26 +32,89 @@ async def download_video(request: VideoDownloadRequest):
         # 设置请求头，模拟浏览器访问
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Referer': 'https://www.douyin.com/',
             'Accept': '*/*',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive'
         }
         
+        # 根据平台设置不同的Referer
+        platform = request.platform.lower()
+        video_url = request.video_url.lower()
+        
+        # 平台识别和Referer设置
+        if (platform == "xhs" or 
+            'xiaohongshu' in video_url or 
+            'xhscdn' in video_url or 
+            'xhs' in video_url):
+            headers['Referer'] = 'https://www.xiaohongshu.com/'
+            headers['Origin'] = 'https://www.xiaohongshu.com'
+            logger.info(f"识别为小红书平台: {platform}")
+            
+        elif (platform == "dy" or 
+              'douyin' in video_url or 
+              'aweme' in video_url or
+              'amemv' in video_url):
+            headers['Referer'] = 'https://www.douyin.com/'
+            headers['Origin'] = 'https://www.douyin.com'
+            logger.info(f"识别为抖音平台: {platform}")
+            
+        elif (platform == "ks" or 
+              'kuaishou' in video_url or 
+              'gifshow' in video_url or
+              'ks' in video_url):
+            headers['Referer'] = 'https://www.kuaishou.com/'
+            headers['Origin'] = 'https://www.kuaishou.com'
+            logger.info(f"识别为快手平台: {platform}")
+            
+        elif (platform == "bili" or 
+              'bilibili' in video_url or 
+              'b23.tv' in video_url or
+              'bilivideo' in video_url):
+            headers['Referer'] = 'https://www.bilibili.com/'
+            headers['Origin'] = 'https://www.bilibili.com'
+            logger.info(f"识别为B站平台: {platform}")
+            
+        elif (platform == "wb" or 
+              'weibo' in video_url or 
+              'sina' in video_url):
+            headers['Referer'] = 'https://weibo.com/'
+            headers['Origin'] = 'https://weibo.com'
+            logger.info(f"识别为微博平台: {platform}")
+            
+        elif (platform == "zhihu" or 
+              'zhihu' in video_url):
+            headers['Referer'] = 'https://www.zhihu.com/'
+            headers['Origin'] = 'https://www.zhihu.com'
+            logger.info(f"识别为知乎平台: {platform}")
+            
+        else:
+            # 默认使用Google作为Referer
+            headers['Referer'] = 'https://www.google.com/'
+            headers['Origin'] = 'https://www.google.com'
+            logger.info(f"使用默认Referer，平台: {platform}")
+        
         # 生成文件名
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{request.platform}_{request.video_id}_{timestamp}.mp4"
         
         async def video_stream():
+            logger.info(f"开始下载视频: {request.video_url}, 平台: {request.platform}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(request.video_url, headers=headers) as response:
                     if response.status == 200:
+                        logger.info(f"视频下载成功，开始流式传输: {request.video_url}")
                         # 流式传输视频数据
+                        chunk_count = 0
                         async for chunk in response.content.iter_chunked(8192):
                             yield chunk
+                            chunk_count += 1
+                        logger.info(f"视频流式传输完成，共传输 {chunk_count} 个数据块: {request.video_url}")
                     else:
-                        raise HTTPException(status_code=response.status, detail="视频下载失败")
+                        # 记录错误但不抛出异常
+                        logger.error(f"视频下载失败，状态码: {response.status}, URL: {request.video_url}")
+                        # 返回空内容，让前端处理
+                        yield b""
         
         return StreamingResponse(
             video_stream(),

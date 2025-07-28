@@ -538,7 +538,7 @@ class DouyinRedisStoreImplement(AbstractStore):
         aweme_id = aweme_detail.get("aweme_id", "")
         if aweme_id:
             return f"https://www.douyin.com/video/{aweme_id}"
-        return ""
+            return ""
     
     def _extract_content_cover_url(self, aweme_detail: Dict) -> str:
         """
@@ -561,7 +561,7 @@ class DouyinRedisStoreImplement(AbstractStore):
         origin_cover = video_item.get("origin_cover", {})
         if origin_cover and origin_cover.get("url_list"):
             return origin_cover["url_list"][0]
-        
+
         return ""
     
     async def store_content(self, content_item: Dict):

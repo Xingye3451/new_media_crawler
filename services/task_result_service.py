@@ -203,7 +203,7 @@ class TaskResultService:
                     'comment_count': row.get('comment_count', 0),
                     'collect_count': row.get('collect_count', 0),
                     'view_count': row.get('view_count', 0),
-                    'video_url': row.get('video_url') or row.get('video_play_url'),
+                    'video_url': row.get('video_download_url') or row.get('video_url') or row.get('video_play_url'),
                     'cover_url': row.get('cover_url'),
                     'aweme_url': row.get('content_id'),
                     'platform': platform
@@ -481,7 +481,7 @@ class TaskResultService:
                     'comment_count': row.get('comment_count', 0),
                     'collect_count': row.get('collect_count', 0),
                     'view_count': row.get('view_count', 0),
-                    'video_url': row.get('video_url') or row.get('video_play_url'),
+                    'video_url': row.get('video_download_url') or row.get('video_url') or row.get('video_play_url'),
                     'cover_url': row.get('cover_url'),
                     'aweme_url': row.get('content_id'),  # 使用content_id作为URL标识
                     'platform': platform,

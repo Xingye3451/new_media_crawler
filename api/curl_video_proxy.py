@@ -50,6 +50,9 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
             '-H', 'Accept-Encoding: gzip, deflate, br',
             '-H', 'Connection: keep-alive',
             '-H', 'Upgrade-Insecure-Requests: 1',
+            '-H', 'Sec-Fetch-Dest: ' + ('video' if is_video else 'image'),
+            '-H', 'Sec-Fetch-Mode: no-cors',
+            '-H', 'Sec-Fetch-Site: cross-site',
         ]
         
         # 设置Referer - 这是关键
@@ -57,6 +60,11 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
             curl_cmd.extend([
                 '-H', 'Referer: https://www.douyin.com/',
                 '-H', 'Origin: https://www.douyin.com',
+            ])
+        elif 'xiaohongshu' in url or 'xhscdn' in url:
+            curl_cmd.extend([
+                '-H', 'Referer: https://www.xiaohongshu.com/',
+                '-H', 'Origin: https://www.xiaohongshu.com',
             ])
         else:
             parsed_url = urlparse(url)
@@ -79,12 +87,15 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
             timeout=timeout + 5
         )
         
-        if result.returncode == 0 and os.path.exists(file_path) and os.path.getsize(file_path) > 1000:  # 确保文件大小合理
-            logger.info(f"{'视频' if is_video else '图片'}下载完成: {file_path}")
+        if result.returncode == 0 and os.path.exists(file_path) and os.path.getsize(file_path) > (100 if is_video else 100):  # 确保文件大小合理
+            logger.info(f"{'视频' if is_video else '图片'}下载完成: {file_path}, 大小: {os.path.getsize(file_path)} 字节")
             return True
         else:
             logger.error(f"curl下载失败，返回码: {result.returncode}")
             logger.error(f"错误输出: {result.stderr}")
+            logger.error(f"文件存在: {os.path.exists(file_path)}")
+            if os.path.exists(file_path):
+                logger.error(f"文件大小: {os.path.getsize(file_path)} 字节")
             # 检查下载的文件内容
             if os.path.exists(file_path):
                 try:
@@ -207,17 +218,24 @@ async def curl_proxy_thumbnail(
         )
         
         if success:
-            return FileResponse(
-                thumbnail_path,
-                media_type='image/jpeg',
-                headers={
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                    'Access-Control-Allow-Headers': '*',
-                    'Cache-Control': 'public, max-age=86400',
-                }
-            )
+            # 检查文件是否存在且大小合理
+            if os.path.exists(thumbnail_path) and os.path.getsize(thumbnail_path) > 100:
+                logger.info(f"缩略图代理成功: {thumbnail_path}, 大小: {os.path.getsize(thumbnail_path)} 字节")
+                return FileResponse(
+                    thumbnail_path,
+                    media_type='image/jpeg',
+                    headers={
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                        'Access-Control-Allow-Headers': '*',
+                        'Cache-Control': 'public, max-age=86400',
+                    }
+                )
+            else:
+                logger.error(f"缩略图文件无效: {thumbnail_path}, 大小: {os.path.getsize(thumbnail_path) if os.path.exists(thumbnail_path) else 0} 字节")
+                raise HTTPException(status_code=500, detail="缩略图文件无效")
         else:
+            logger.error(f"缩略图下载失败: {url}")
             raise HTTPException(status_code=500, detail="缩略图下载失败")
         
     except Exception as e:

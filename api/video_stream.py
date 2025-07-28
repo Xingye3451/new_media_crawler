@@ -98,6 +98,105 @@ async def stream_local_video(file_hash: str):
         logger.error(f"流式播放本地视频失败 {file_hash}: {str(e)}")
         raise HTTPException(status_code=500, detail="播放失败")
 
+@router.get("/stream/direct")
+async def stream_direct_video(
+    video_url: str = Query(..., description="视频URL"),
+    platform: str = Query(..., description="平台")
+):
+    """直接流式传输视频"""
+    try:
+        import aiohttp
+        import urllib.parse
+        
+        # URL解码
+        decoded_url = urllib.parse.unquote(video_url)
+        logger.info(f"开始直接流式传输: {decoded_url}, 平台: {platform}")
+        
+        # 根据平台设置不同的请求头
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "video",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "cross-site"
+        }
+        
+        # 根据平台设置不同的Referer
+        if platform == "xhs":
+            headers.update({
+                "Referer": "https://www.xiaohongshu.com/",
+                "Origin": "https://www.xiaohongshu.com"
+            })
+            logger.info(f"识别为小红书平台: {platform}")
+        elif platform == "dy":
+            headers.update({
+                "Referer": "https://www.douyin.com/",
+                "Origin": "https://www.douyin.com"
+            })
+            logger.info(f"识别为抖音平台: {platform}")
+        elif platform == "ks":
+            headers.update({
+                "Referer": "https://www.kuaishou.com/",
+                "Origin": "https://www.kuaishou.com"
+            })
+            logger.info(f"识别为快手平台: {platform}")
+        elif platform == "bili":
+            headers.update({
+                "Referer": "https://www.bilibili.com/",
+                "Origin": "https://www.bilibili.com"
+            })
+            logger.info(f"识别为B站平台: {platform}")
+        elif platform == "wb":
+            headers.update({
+                "Referer": "https://weibo.com/",
+                "Origin": "https://weibo.com"
+            })
+            logger.info(f"识别为微博平台: {platform}")
+        elif platform == "zhihu":
+            headers.update({
+                "Referer": "https://www.zhihu.com/",
+                "Origin": "https://www.zhihu.com"
+            })
+            logger.info(f"识别为知乎平台: {platform}")
+        else:
+            # 默认使用Google的Referer
+            headers.update({
+                "Referer": "https://www.google.com/",
+                "Origin": "https://www.google.com"
+            })
+            logger.info(f"使用默认Referer，平台: {platform}")
+        
+        async def video_stream():
+            """视频流生成器"""
+            async with aiohttp.ClientSession() as session:
+                async with session.get(decoded_url, headers=headers) as response:
+                    if response.status == 200:
+                        logger.info(f"开始流式传输视频，状态码: {response.status}")
+                        async for chunk in response.content.iter_chunked(8192):
+                            yield chunk
+                    else:
+                        logger.error(f"视频下载失败，状态码: {response.status}")
+                        yield b""
+        
+        return StreamingResponse(
+            video_stream(),
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"直接流式传输失败 {video_url}: {str(e)}")
+        raise HTTPException(status_code=500, detail="流式传输失败")
+
 @router.get("/stream/cache-info")
 async def get_cache_info():
     """获取缓存信息"""

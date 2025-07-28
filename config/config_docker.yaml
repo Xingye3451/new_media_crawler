@@ -143,7 +143,7 @@ storage:
   chunk_size: 8192
   download_timeout: 300
   max_retries: 3
-  retry_delay: 5
+  retry_delay: 5 
   
   # 监控配置
   storage_usage_threshold: 0.8

@@ -54,7 +54,8 @@ class VideoStreamService:
                         "success": True,
                         "stream_url": f"/api/v1/stream/cache/{cache_key}",
                         "cache_file": cache_file,
-                        "cached": True
+                        "cached": True,
+                        "direct_stream": False
                     }
                 else:
                     # 删除过期缓存
@@ -79,7 +80,7 @@ class VideoStreamService:
                         }
             
             # 实时下载并流式播放
-            return await self._stream_and_cache(video_url, cache_key, cache_file)
+            return await self._stream_and_cache(video_url, cache_key, cache_file, platform)
             
         except Exception as e:
             logger.error(f"流式播放失败 {video_url}: {str(e)}")
@@ -88,17 +89,51 @@ class VideoStreamService:
                 "error": str(e)
             }
     
-    async def _stream_and_cache(self, video_url: str, cache_key: str, cache_file: str) -> Dict[str, Any]:
+    async def _stream_and_cache(self, video_url: str, cache_key: str, cache_file: str, platform: str = None) -> Dict[str, Any]:
         """实时下载并缓存"""
         try:
-            # 使用aiohttp下载
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            # 根据平台设置不同的请求头
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Sec-Fetch-Dest": "video",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "cross-site"
+            }
+            
+            # 根据平台设置不同的Referer
+            if platform == "xhs":
+                headers.update({
+                    "Referer": "https://www.xiaohongshu.com/",
+                    "Origin": "https://www.xiaohongshu.com"
+                })
+            elif platform == "dy":
+                headers.update({
                     "Referer": "https://www.douyin.com/",
                     "Origin": "https://www.douyin.com"
-                }
-                
+                })
+            elif platform == "ks":
+                headers.update({
+                    "Referer": "https://www.kuaishou.com/",
+                    "Origin": "https://www.kuaishou.com"
+                })
+            elif platform == "bili":
+                headers.update({
+                    "Referer": "https://www.bilibili.com/",
+                    "Origin": "https://www.bilibili.com"
+                })
+            else:
+                # 默认使用抖音的Referer
+                headers.update({
+                    "Referer": "https://www.douyin.com/",
+                    "Origin": "https://www.douyin.com"
+                })
+            
+            # 使用aiohttp下载
+            async with aiohttp.ClientSession() as session:
                 async with session.get(video_url, headers=headers) as response:
                     if response.status == 200:
                         # 开始下载到缓存
@@ -108,11 +143,14 @@ class VideoStreamService:
                         
                         logger.info(f"视频下载完成: {cache_file}")
                         
+                        import urllib.parse
+                        encoded_url = urllib.parse.quote(video_url, safe='')
                         return {
                             "success": True,
-                            "stream_url": f"/api/v1/stream/cache/{cache_key}",
+                            "stream_url": f"/api/v1/stream/direct?video_url={encoded_url}&platform={platform}",
                             "cache_file": cache_file,
-                            "cached": False
+                            "cached": False,
+                            "direct_stream": True
                         }
                     else:
                         return {

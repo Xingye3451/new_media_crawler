@@ -689,7 +689,7 @@
                 videoCard.className = 'video-card';
                 videoCard.innerHTML = `
                     <div class="video-thumbnail" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">
-                        ${video.video_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}">` : ''}
+                        ${video.cover_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" onerror="handleThumbnailError(this)">` : ''}
                         <div class="play-icon">▶</div>
                     </div>
                     <div class="video-info">
@@ -734,7 +734,7 @@
                 listItem.className = 'video-list-item';
                 listItem.innerHTML = `
                     <div class="list-thumbnail">
-                        ${video.video_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 5px;">` : '📹'}
+                        ${video.cover_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 5px;" onerror="handleThumbnailError(this)">` : '📹'}
                     </div>
                     <div class="list-content">
                         <div class="video-title">${video.desc || video.title || '无标题'}</div>
@@ -810,29 +810,36 @@
 
             const modalContent = document.getElementById('modalContent');
             
-            // 使用后端访问转换API播放视频
+            // 使用新的直接流式传输API播放视频
             let videoSrc = '';
             if (video.video_url) {
                 const encodedUrl = encodeURIComponent(video.video_url);
                 const platform = taskInfo.task_info?.platform || 'unknown';
                 const contentId = video.aweme_id || video.note_id || video.video_id;
                 
-                // 先获取流信息
+                // 优先使用直接流式传输
                 try {
+                    // 先尝试获取流信息
                     const streamResponse = await fetch(`/api/v1/stream/video?video_url=${encodedUrl}&platform=${platform}&content_id=${contentId}`);
                     const streamData = await streamResponse.json();
                     
                     if (streamData.code === 200 && streamData.data.success) {
-                        videoSrc = streamData.data.stream_url;
+                        // 如果支持直接流式传输，使用直接流URL
+                        if (streamData.data.direct_stream) {
+                            videoSrc = streamData.data.stream_url;
+                        } else {
+                            // 否则使用缓存URL
+                            videoSrc = streamData.data.stream_url;
+                        }
                     } else {
                         console.error('获取流信息失败:', streamData.message);
-                        // 降级到原始代理
-                        videoSrc = `/api/v1/curl-proxy/video?url=${encodedUrl}`;
+                        // 降级到直接流式传输
+                        videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                     }
                 } catch (error) {
                     console.error('获取流信息失败:', error);
-                    // 降级到原始代理
-                    videoSrc = `/api/v1/curl-proxy/video?url=${encodedUrl}`;
+                    // 降级到直接流式传输
+                    videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                 }
             }
             
@@ -846,11 +853,18 @@
                             您的浏览器不支持视频播放
                         </video>
                         <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                            💡 使用后端访问转换，避免防盗链问题
+                            💡 使用直接流式传输，实时播放视频内容
+                        </div>
+                    ` : video.cover_url ? `
+                        <div style="margin: 20px 0;">
+                            <img src="${getThumbnail(video)}" alt="${video.desc || video.title}" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+                            <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                📷 视频缩略图预览
+                            </div>
                         </div>
                     ` : '<p>暂无视频预览</p>'}
                     <div style="margin-top: 20px;">
-                        <button class="btn btn-success" onclick="downloadVideo('${videoId}')">📥 下载到本地</button>
+                        ${video.video_url ? `<button class="btn btn-success" onclick="downloadVideo('${videoId}')">📥 下载到本地</button>` : ''}
                         <button class="btn btn-info" onclick="addToFavorites('${videoId}')" style="margin-left: 10px;">⭐ 收藏视频</button>
                     </div>
                 </div>
@@ -866,8 +880,13 @@
                     v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId
                 );
                 
-                if (!video || !video.video_url) {
-                    alert('视频链接不可用');
+                if (!video) {
+                    alert('视频信息不存在');
+                    return;
+                }
+                
+                if (!video.video_url) {
+                    alert('视频下载链接不可用，但可以收藏视频');
                     return;
                 }
 
@@ -898,6 +917,13 @@
                 if (response.ok) {
                     // 获取文件流并下载
                     const blob = await response.blob();
+                    
+                    // 检查文件是否为空
+                    if (blob.size === 0) {
+                        alert('❌ 下载失败：视频文件为空，可能是网络问题或视频链接已失效');
+                        return;
+                    }
+                    
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -907,7 +933,7 @@
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
                     
-                    // 静默下载，不显示弹窗
+                    console.log(`✅ 视频下载成功: ${filename}, 大小: ${blob.size} 字节`);
                 } else {
                     alert('❌ 下载失败，请稍后重试');
                 }
@@ -968,6 +994,14 @@
                             if (response.ok) {
                                 // 获取文件流并下载
                                 const blob = await response.blob();
+                                
+                                // 检查文件是否为空
+                                if (blob.size === 0) {
+                                    console.error(`下载失败 ${videoId}: 文件为空`);
+                                    failCount++;
+                                    continue;
+                                }
+                                
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -978,6 +1012,7 @@
                                 document.body.removeChild(a);
                                 
                                 successCount++;
+                                console.log(`✅ 批量下载成功: ${filename}, 大小: ${blob.size} 字节`);
                                 
                                 // 添加延迟，避免浏览器阻止多个下载
                                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1026,12 +1061,25 @@
 
         // 工具函数
         function getThumbnail(video) {
-            // 使用视频代理API获取缩略图
+            // 使用新的缩略图代理API
             if (video.cover_url) {
                 const encodedUrl = encodeURIComponent(video.cover_url);
-                return `/api/v1/curl-proxy/thumbnail?url=${encodedUrl}`;
+                return `/api/v1/thumbnail-proxy?url=${encodedUrl}`;
             }
             return video.thumbnail || '/static/default-thumbnail.jpg';
+        }
+        
+        // 缩略图加载错误处理
+        function handleThumbnailError(img) {
+            img.style.display = 'none';
+            const parent = img.parentElement;
+            if (parent) {
+                // 添加默认图标
+                const icon = document.createElement('div');
+                icon.innerHTML = '📹';
+                icon.style.cssText = 'display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 2em; color: #ccc;';
+                parent.appendChild(icon);
+            }
         }
 
         // 添加收藏功能

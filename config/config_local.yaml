@@ -151,7 +151,7 @@ storage:
 
 # ==================== 服务配置 ====================
 server:
-  port: 8000
+  port: 8100
   host: "0.0.0.0"
   debug: false
   enable_cors: true

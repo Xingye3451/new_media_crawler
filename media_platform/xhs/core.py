@@ -146,14 +146,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
             if not ping_success:
                 utils.logger.info("[XiaoHongShuCrawler] 需要重新登录")
                 try:
-                    login_obj = XiaoHongShuLogin(
-                        login_type=config.LOGIN_TYPE,
-                        login_phone="",  # input your phone number
-                        browser_context=self.browser_context,
-                        context_page=self.context_page,
-                        cookie_str=cookie_str,
-                    )
-                    await login_obj.begin()
+                login_obj = XiaoHongShuLogin(
+                    login_type=config.LOGIN_TYPE,
+                    login_phone="",  # input your phone number
+                    browser_context=self.browser_context,
+                    context_page=self.context_page,
+                    cookie_str=cookie_str,
+                )
+                await login_obj.begin()
                     # 登录成功后更新客户端cookies
                     await self.xhs_client.update_cookies(browser_context=self.browser_context)
                     utils.logger.info("[XiaoHongShuCrawler] 登录成功，已更新cookies")
@@ -277,13 +277,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         batch_items = filtered_items[i:i + batch_size]
                         utils.logger.info(f"[XiaoHongShuCrawler.search] Processing batch {i//batch_size + 1}, items: {len(batch_items)}")
                         
-                        task_list = [
-                            self.get_note_detail_async_task(
-                                note_id=post_item.get("id"),
-                                xsec_source=post_item.get("xsec_source"),
-                                xsec_token=post_item.get("xsec_token"),
-                                semaphore=semaphore,
-                            )
+                    task_list = [
+                        self.get_note_detail_async_task(
+                            note_id=post_item.get("id"),
+                            xsec_source=post_item.get("xsec_source"),
+                            xsec_token=post_item.get("xsec_token"),
+                            semaphore=semaphore,
+                        )
                             for post_item in batch_items
                         ]
                         
@@ -310,10 +310,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     for note_detail in note_details:
                         if note_detail:
                             try:
-                                await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
-                                await self.get_notice_media(note_detail)
-                                note_ids.append(note_detail.get("note_id"))
-                                xsec_tokens.append(note_detail.get("xsec_token"))
+                            await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
+                            await self.get_notice_media(note_detail)
+                            note_ids.append(note_detail.get("note_id"))
+                            xsec_tokens.append(note_detail.get("xsec_token"))
                                 successful_details += 1
                                 processed_count += 1
                             except Exception as e:
@@ -530,15 +530,15 @@ class XiaoHongShuCrawler(AbstractCrawler):
             
             utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Processing comment batch {i//batch_size + 1}, notes: {len(batch_notes)}")
             
-            task_list: List[Task] = []
+        task_list: List[Task] = []
             for index, note_id in enumerate(batch_notes):
-                task = asyncio.create_task(
-                    self.get_comments(
+            task = asyncio.create_task(
+                self.get_comments(
                         note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore
-                    ),
-                    name=note_id,
-                )
-                task_list.append(task)
+                ),
+                name=note_id,
+            )
+            task_list.append(task)
             
             try:
                 # 添加超时控制
