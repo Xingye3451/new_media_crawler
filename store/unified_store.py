@@ -91,28 +91,35 @@ UNIFIED_COMMENT_FIELDS = {
 PLATFORM_FIELD_MAPPINGS = {
     "douyin": {
         "content_id": "aweme_id",
-        "content_type": "aweme_type", 
-        "title": "title",
+        "content_type": "video",  # 固定值
+        "title": "desc",
         "description": "desc",
-        "author_id": "user_id",
-        "author_name": "nickname",
-        "author_nickname": "nickname",
-        "author_avatar": "avatar",
-        "author_signature": "user_signature",
-        "author_unique_id": "user_unique_id",
-        "author_sec_uid": "sec_uid",
-        "author_short_id": "short_user_id",
-        "like_count": "liked_count",
-        "comment_count": "comment_count",
-        "share_count": "share_count",
-        "collect_count": "collected_count",
-        "cover_url": "cover_url",
-        "video_url": "video_play_url",
-        "video_download_url": "video_download_url",
-        "video_share_url": "video_share_url",
+        "content": "desc",
+        "author_id": "author.uid",
+        "author_name": "author.nickname",
+        "author_nickname": "author.nickname",
+        "author_avatar": "author.avatar_thumb.url_list.0",
+        "author_signature": "author.signature",
+        "author_unique_id": "author.unique_id",
+        "author_sec_uid": "author.sec_uid",
+        "author_short_id": "author.short_id",
+        "like_count": "statistics.digg_count",
+        "comment_count": "statistics.comment_count",
+        "share_count": "statistics.share_count",
+        "collect_count": "statistics.collect_count",
+        "view_count": "statistics.play_count",
+        "cover_url": "video.cover.url_list.0",
+        "video_url": "aweme_url",  # 播放页链接
+        "video_download_url": "download_url",  # 下载链接
+        "video_play_url": "aweme_url",  # 播放页链接
+        "video_share_url": "aweme_url",  # 分享链接（使用播放页链接）
+        "audio_url": "music.play_url.uri",
         "ip_location": "ip_location",
         "create_time": "create_time",
-        "metadata": "meta"
+        "publish_time": "create_time",
+        "update_time": "create_time",
+        "topics": "cha_list",
+        "raw_data": "raw_data"
     },
     "xhs": {
         "content_id": "note_id",
@@ -240,6 +247,48 @@ def serialize_for_db(data):
         return data
 
 
+def get_nested_value(data: Dict, path: str):
+    """
+    根据路径获取嵌套字典中的值
+    
+    Args:
+        data (Dict): 数据字典
+        path (str): 路径，如 "author.nickname" 或 "video.cover.url_list.0"
+    
+    Returns:
+        任意类型: 找到的值，如果路径不存在则返回None
+    """
+    if not path or not data:
+        return None
+    
+    keys = path.split('.')
+    current = data
+    
+    for key in keys:
+        if isinstance(current, dict):
+            if key.isdigit() and isinstance(current, list):
+                # 处理数组索引
+                try:
+                    current = current[int(key)]
+                except (IndexError, ValueError):
+                    return None
+            else:
+                current = current.get(key)
+        elif isinstance(current, list) and key.isdigit():
+            # 处理数组索引
+            try:
+                current = current[int(key)]
+            except (IndexError, ValueError):
+                return None
+        else:
+            return None
+        
+        if current is None:
+            return None
+    
+    return current
+
+
 def map_platform_fields(platform: str, data: Dict) -> Dict:
     """将平台特定字段映射到统一字段"""
     if platform not in PLATFORM_FIELD_MAPPINGS:
@@ -253,11 +302,37 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
     
     # 映射字段
     for unified_field, platform_field in mapping.items():
-        if platform_field in data:
-            mapped_data[unified_field] = data[platform_field]
-    
-    # 保留原始数据
-    mapped_data["raw_data"] = json.dumps(data, ensure_ascii=False)
+        if platform_field == "raw_data":
+            # 特殊处理原始数据字段
+            mapped_data[unified_field] = json.dumps(data, ensure_ascii=False)
+        elif platform_field == "topics" and platform_field in data:
+            # 特殊处理话题字段
+            topics_data = data.get(platform_field, [])
+            if isinstance(topics_data, list):
+                topic_names = []
+                for topic in topics_data:
+                    if isinstance(topic, dict):
+                        topic_names.append(topic.get("cha_name", ""))
+                    else:
+                        topic_names.append(str(topic))
+                mapped_data[unified_field] = json.dumps(topic_names, ensure_ascii=False)
+        elif platform_field in ["video", "image", "note", "post"]:
+            # 固定值映射
+            mapped_data[unified_field] = platform_field
+        elif "." not in platform_field and platform_field not in data:
+            # 其他固定值映射（如果字段不在数据中）
+            mapped_data[unified_field] = platform_field
+        else:
+            # 处理嵌套字段路径或直接字段
+            if "." in platform_field:
+                # 嵌套字段路径
+                value = get_nested_value(data, platform_field)
+                if value is not None:
+                    mapped_data[unified_field] = value
+            else:
+                # 直接字段
+                if platform_field in data:
+                    mapped_data[unified_field] = data[platform_field]
     
     return mapped_data
 

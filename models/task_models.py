@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, Float, JSON, func, BigInteger, LONGTEXT, TINYINT
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, Float, JSON, func, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -116,7 +116,7 @@ class UnifiedContent(Base):
     source_keyword = Column(String(200), comment='来源关键词')
     title = Column(String(500), comment='标题')
     description = Column(Text, comment='描述')
-    content = Column(LONGTEXT, comment='内容')
+    content = Column(Text, comment='内容')
     create_time = Column(BigInteger, comment='创建时间戳')
     publish_time = Column(BigInteger, comment='发布时间戳')
     update_time = Column(BigInteger, comment='更新时间戳')
@@ -146,16 +146,16 @@ class UnifiedContent(Base):
     tags = Column(Text, comment='标签')
     categories = Column(Text, comment='分类')
     topics = Column(Text, comment='话题')
-    is_favorite = Column(TINYINT, default=0, comment='是否收藏')
-    is_deleted = Column(TINYINT, default=0, comment='是否删除')
-    is_private = Column(TINYINT, default=0, comment='是否私密')
-    is_original = Column(TINYINT, default=0, comment='是否原创')
+    is_favorite = Column(Boolean, default=False, comment='是否收藏')
+    is_deleted = Column(Boolean, default=False, comment='是否删除')
+    is_private = Column(Boolean, default=False, comment='是否私密')
+    is_original = Column(Boolean, default=False, comment='是否原创')
     minio_url = Column(Text, comment='MinIO URL')
     local_path = Column(String(500), comment='本地路径')
     file_size = Column(BigInteger, comment='文件大小')
     storage_type = Column(String(20), default='url_only', comment='存储类型')
-    metadata = Column(Text, comment='元数据')
-    raw_data = Column(LONGTEXT, comment='原始数据')
+    meta_data = Column(Text, comment='元数据')
+    raw_data = Column(Text, comment='原始数据')
     extra_info = Column(Text, comment='额外信息')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
@@ -208,7 +208,7 @@ class UnifiedContent(Base):
             'local_path': self.local_path,
             'file_size': self.file_size,
             'storage_type': self.storage_type,
-            'metadata': self.metadata,
+            'meta_data': self.meta_data,
             'raw_data': self.raw_data,
             'extra_info': self.extra_info,
             'add_ts': self.add_ts,

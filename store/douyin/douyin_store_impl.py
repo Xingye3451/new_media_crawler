@@ -111,6 +111,197 @@ class DouyinCsvStoreImplement(AbstractStore):
 
 
 class DouyinDbStoreImplement(AbstractStore):
+    
+    def _extract_video_download_url(self, aweme_detail: Dict) -> str:
+        """
+        提取视频下载地址
+
+        Args:
+            aweme_detail (Dict): 抖音视频
+
+        Returns:
+            str: 视频下载地址
+        """
+        # 优先使用 download_addr
+        video_item = aweme_detail.get("video", {})
+        download_addr = video_item.get("download_addr", {})
+        if download_addr and download_addr.get("url_list"):
+            return download_addr["url_list"][0]
+        
+        # 备用 play_addr
+        play_addr = video_item.get("play_addr", {})
+        if play_addr and play_addr.get("url_list"):
+            return play_addr["url_list"][0]
+        
+        return ""
+    
+    def _extract_video_play_url(self, aweme_detail: Dict) -> str:
+        """
+        提取视频播放页链接
+
+        Args:
+            aweme_detail (Dict): 抖音视频
+
+        Returns:
+            str: 视频播放页链接
+        """
+        aweme_id = aweme_detail.get("aweme_id", "")
+        if aweme_id:
+            return f"https://www.douyin.com/video/{aweme_id}"
+        return ""
+    
+    def _extract_content_cover_url(self, aweme_detail: Dict) -> str:
+        """
+        提取视频封面地址
+
+        Args:
+            aweme_detail (Dict): 抖音内容详情
+
+        Returns:
+            str: 视频封面地址
+        """
+        video_item = aweme_detail.get("video", {})
+        
+        # 优先使用 cover
+        cover = video_item.get("cover", {})
+        if cover and cover.get("url_list"):
+            return cover["url_list"][0]
+        
+        # 备用 origin_cover
+        origin_cover = video_item.get("origin_cover", {})
+        if origin_cover and origin_cover.get("url_list"):
+            return origin_cover["url_list"][0]
+        
+        return ""
+    
+    def _extract_author_info(self, aweme_detail: Dict) -> Dict:
+        """
+        提取作者信息
+
+        Args:
+            aweme_detail (Dict): 抖音内容详情
+
+        Returns:
+            Dict: 作者信息
+        """
+        author = aweme_detail.get("author", {})
+        return {
+            "author_id": author.get("uid", ""),
+            "author_name": author.get("nickname", ""),
+            "author_nickname": author.get("nickname", ""),
+            "author_avatar": author.get("avatar_thumb", {}).get("url_list", [""])[0] if author.get("avatar_thumb") else "",
+            "author_signature": author.get("signature", ""),
+            "author_unique_id": author.get("unique_id", ""),
+            "author_sec_uid": author.get("sec_uid", ""),
+            "author_short_id": author.get("short_id", "")
+        }
+    
+    def _extract_video_info(self, aweme_detail: Dict) -> Dict:
+        """
+        提取视频信息
+
+        Args:
+            aweme_detail (Dict): 抖音内容详情
+
+        Returns:
+            Dict: 视频信息
+        """
+        video_item = aweme_detail.get("video", {})
+        return {
+            "video_url": self._extract_video_download_url(aweme_detail),
+            "video_download_url": self._extract_video_download_url(aweme_detail),
+            "video_play_url": self._extract_video_play_url(aweme_detail),
+            "cover_url": self._extract_content_cover_url(aweme_detail),
+            "file_size": video_item.get("data_size", 0),
+            "duration": video_item.get("duration", 0)
+        }
+    
+    def _flatten_douyin_data(self, content_item: Dict) -> Dict:
+        """
+        将抖音原始数据扁平化为统一表结构
+
+        Args:
+            content_item (Dict): 抖音原始数据
+
+        Returns:
+            Dict: 扁平化后的数据
+        """
+        # 基础信息
+        flattened = {
+            "content_id": content_item.get("aweme_id", ""),
+            "platform": "douyin",
+            "content_type": "video",
+            "task_id": content_item.get("task_id", ""),
+            "source_keyword": content_item.get("source_keyword", ""),
+            
+            # 内容信息
+            "title": content_item.get("desc", ""),
+            "description": content_item.get("desc", ""),
+            "content": content_item.get("desc", ""),
+            "create_time": content_item.get("create_time", 0),
+            "publish_time": content_item.get("create_time", 0),
+            "update_time": content_item.get("create_time", 0),
+            
+            # 统计信息
+            "like_count": content_item.get("statistics", {}).get("digg_count", 0),
+            "comment_count": content_item.get("statistics", {}).get("comment_count", 0),
+            "share_count": content_item.get("statistics", {}).get("share_count", 0),
+            "collect_count": content_item.get("statistics", {}).get("collect_count", 0),
+            "view_count": content_item.get("statistics", {}).get("play_count", 0),
+            
+            # 状态信息
+            "is_favorite": content_item.get("is_favorite", False),
+            "is_deleted": content_item.get("is_deleted", False),
+            "is_private": content_item.get("is_private", False),
+            "is_original": content_item.get("is_original", False),
+            
+            # 存储信息
+            "storage_type": "url_only",
+            "raw_data": json.dumps(content_item, ensure_ascii=False),
+            
+            # 时间戳
+            "add_ts": utils.get_current_timestamp(),
+            "last_modify_ts": utils.get_current_timestamp()
+        }
+        
+        # 提取作者信息
+        author_info = self._extract_author_info(content_item)
+        flattened.update(author_info)
+        
+        # 提取视频信息
+        video_info = self._extract_video_info(content_item)
+        flattened.update(video_info)
+        
+        # 生成URL信息
+        aweme_id = content_item.get("aweme_id", "")
+        if aweme_id:
+            flattened["aweme_url"] = f"https://www.douyin.com/video/{aweme_id}"
+            flattened["video_url"] = f"https://www.douyin.com/video/{aweme_id}"
+            flattened["video_play_url"] = f"https://www.douyin.com/video/{aweme_id}"
+            flattened["video_share_url"] = f"https://www.douyin.com/video/{aweme_id}"
+        
+        # 提取下载链接
+        download_url = self._extract_video_download_url(content_item)
+        if download_url:
+            flattened["download_url"] = download_url
+            flattened["video_download_url"] = download_url
+        
+        # 提取音乐信息
+        music = content_item.get("music", {})
+        if music:
+            flattened["audio_url"] = music.get("play_url", {}).get("uri", "")
+        
+        # 提取话题标签
+        cha_list = content_item.get("cha_list", [])
+        if cha_list:
+            flattened["topics"] = json.dumps([cha.get("cha_name", "") for cha in cha_list], ensure_ascii=False)
+        
+        # 提取位置信息
+        if content_item.get("ip_location"):
+            flattened["ip_location"] = content_item.get("ip_location", "")
+        
+        return flattened
+
     async def store_content(self, content_item: Dict):
         """
         Douyin content DB storage implementation
@@ -120,19 +311,30 @@ class DouyinDbStoreImplement(AbstractStore):
         Returns:
 
         """
-
         from .douyin_store_sql import (add_new_content,
                                        query_content_by_content_id,
                                        update_content_by_content_id)
-        aweme_id = content_item.get("aweme_id")
-        aweme_detail: Dict = await query_content_by_content_id(content_id=aweme_id)
+        
+        # 扁平化数据
+        flattened_data = self._flatten_douyin_data(content_item)
+        content_id = flattened_data.get("content_id")
+        
+        if not content_id:
+            utils.logger.error("内容ID为空，跳过存储")
+            return
+        
+        # 查询是否已存在
+        existing_content: Dict = await query_content_by_content_id(content_id=content_id)
         task_id = content_item.get("task_id")
-        if not aweme_detail:
-            content_item["add_ts"] = utils.get_current_timestamp()
-            if content_item.get("title"):
-                await add_new_content(content_item, task_id=task_id)
+        
+        if not existing_content:
+            # 新增内容
+            await add_new_content(flattened_data, task_id=task_id)
+            utils.logger.info(f"✅ 新增抖音内容: {content_id}")
         else:
-            await update_content_by_content_id(aweme_id, content_item=content_item)
+            # 更新内容
+            await update_content_by_content_id(content_id, content_item=flattened_data)
+            utils.logger.info(f"✅ 更新抖音内容: {content_id}")
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -146,13 +348,41 @@ class DouyinDbStoreImplement(AbstractStore):
         from .douyin_store_sql import (add_new_comment,
                                        query_comment_by_comment_id,
                                        update_comment_by_comment_id)
-        comment_id = comment_item.get("comment_id")
+        
+        # 扁平化评论数据
+        flattened_comment = {
+            "comment_id": comment_item.get("cid", ""),
+            "content_id": comment_item.get("aweme_id", ""),
+            "platform": "douyin",
+            "content": comment_item.get("text", ""),
+            "text": comment_item.get("text", ""),
+            "author_id": comment_item.get("user", {}).get("uid", ""),
+            "author_name": comment_item.get("user", {}).get("nickname", ""),
+            "author_nickname": comment_item.get("user", {}).get("nickname", ""),
+            "author_avatar": comment_item.get("user", {}).get("avatar_thumb", {}).get("url_list", [""])[0] if comment_item.get("user", {}).get("avatar_thumb") else "",
+            "like_count": comment_item.get("digg_count", 0),
+            "reply_count": comment_item.get("reply_comment_total", 0),
+            "create_time": comment_item.get("create_time", 0),
+            "is_deleted": comment_item.get("is_deleted", False),
+            "is_hidden": comment_item.get("is_hidden", False),
+            "is_top": comment_item.get("is_top", False),
+            "raw_data": json.dumps(comment_item, ensure_ascii=False),
+            "add_ts": utils.get_current_timestamp(),
+            "last_modify_ts": utils.get_current_timestamp()
+        }
+        
+        comment_id = flattened_comment.get("comment_id")
+        if not comment_id:
+            utils.logger.error("评论ID为空，跳过存储")
+            return
+        
         comment_detail: Dict = await query_comment_by_comment_id(comment_id=comment_id)
         if not comment_detail:
-            comment_item["add_ts"] = utils.get_current_timestamp()
-            await add_new_comment(comment_item)
+            await add_new_comment(flattened_comment)
+            utils.logger.info(f"✅ 新增抖音评论: {comment_id}")
         else:
-            await update_comment_by_comment_id(comment_id, comment_item=comment_item)
+            await update_comment_by_comment_id(comment_id, comment_item=flattened_comment)
+            utils.logger.info(f"✅ 更新抖音评论: {comment_id}")
 
     async def store_creator(self, creator: Dict):
         """
@@ -282,14 +512,33 @@ class DouyinRedisStoreImplement(AbstractStore):
         Returns:
             str: 视频下载地址
         """
+        # 优先使用 download_addr
         video_item = aweme_detail.get("video", {})
-        url_h264_list = video_item.get("play_addr_h264", {}).get("url_list", [])
-        url_256_list = video_item.get("play_addr_256", {}).get("url_list", [])
-        url_list = video_item.get("play_addr", {}).get("url_list", [])
-        actual_url_list = url_h264_list or url_256_list or url_list
-        if not actual_url_list or len(actual_url_list) < 2:
-            return ""
-        return actual_url_list[-1]
+        download_addr = video_item.get("download_addr", {})
+        if download_addr and download_addr.get("url_list"):
+            return download_addr["url_list"][0]
+        
+        # 备用 play_addr
+        play_addr = video_item.get("play_addr", {})
+        if play_addr and play_addr.get("url_list"):
+            return play_addr["url_list"][0]
+        
+        return ""
+    
+    def _extract_video_play_url(self, aweme_detail: Dict) -> str:
+        """
+        提取视频播放页链接
+
+        Args:
+            aweme_detail (Dict): 抖音视频
+
+        Returns:
+            str: 视频播放页链接
+        """
+        aweme_id = aweme_detail.get("aweme_id", "")
+        if aweme_id:
+            return f"https://www.douyin.com/video/{aweme_id}"
+        return ""
     
     def _extract_content_cover_url(self, aweme_detail: Dict) -> str:
         """
@@ -301,16 +550,19 @@ class DouyinRedisStoreImplement(AbstractStore):
         Returns:
             str: 视频封面地址
         """
-        res_cover_url = ""
-
         video_item = aweme_detail.get("video", {})
-        raw_cover_url_list = (
-                video_item.get("raw_cover", {}) or video_item.get("origin_cover", {})
-        ).get("url_list", [])
-        if raw_cover_url_list and len(raw_cover_url_list) > 1:
-            res_cover_url = raw_cover_url_list[1]
-
-        return res_cover_url
+        
+        # 优先使用 cover
+        cover = video_item.get("cover", {})
+        if cover and cover.get("url_list"):
+            return cover["url_list"][0]
+        
+        # 备用 origin_cover
+        origin_cover = video_item.get("origin_cover", {})
+        if origin_cover and origin_cover.get("url_list"):
+            return origin_cover["url_list"][0]
+        
+        return ""
     
     async def store_content(self, content_item: Dict):
         """
@@ -325,7 +577,7 @@ class DouyinRedisStoreImplement(AbstractStore):
 
         processed_content = {
             "aweme_id": aweme_id,
-            "aweme_url": f"https://www.douyin.com/video/{aweme_id}",  # 必须
+            "aweme_url": self._extract_video_play_url(content_item),  # 必须
             "download_url": self._extract_video_download_url(content_item),  # 有则存
             "cover_url": self._extract_content_cover_url(content_item),
             "title": content_item.get("desc", "") or content_item.get("title", ""),
@@ -365,6 +617,9 @@ class DouyinRedisStoreImplement(AbstractStore):
                 db_content_item.update({
                     "aweme_url": processed_content.get("aweme_url"),
                     "download_url": processed_content.get("download_url"),
+                    "video_download_url": processed_content.get("download_url"),  # 确保映射到video_download_url字段
+                    "video_url": processed_content.get("aweme_url"),  # 确保映射到video_url字段
+                    "video_play_url": processed_content.get("aweme_url"),  # 确保映射到video_play_url字段
                     "add_ts": utils.get_current_timestamp()
                 })
                 if db_content_item.get("title") or db_content_item.get("desc"):
@@ -375,7 +630,10 @@ class DouyinRedisStoreImplement(AbstractStore):
                 update_content_item = content_item.copy()
                 update_content_item.update({
                     "aweme_url": processed_content.get("aweme_url"),
-                    "download_url": processed_content.get("download_url")
+                    "download_url": processed_content.get("download_url"),
+                    "video_download_url": processed_content.get("download_url"),  # 确保映射到video_download_url字段
+                    "video_url": processed_content.get("aweme_url"),  # 确保映射到video_url字段
+                    "video_play_url": processed_content.get("aweme_url"),  # 确保映射到video_play_url字段
                 })
                 await update_content_by_content_id(aweme_id, content_item=update_content_item)
                 utils.logger.info(f"✅ [DouyinRedisStore] 数据已更新到数据库: {aweme_id}")
