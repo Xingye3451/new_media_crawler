@@ -78,25 +78,41 @@ class DouYinCrawler(AbstractCrawler):
             await self.context_page.goto(self.index_url)
 
             self.dy_client = await self.create_douyin_client(httpx_proxy_format)
-            if not await self.dy_client.pong(browser_context=self.browser_context):
-                # 从数据库读取cookies，支持账号选择
-                account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-                cookie_str = await get_cookies_from_database("dy", account_id)
-                
-                if account_id:
-                    utils.logger.info(f"[DouYinCrawler] 使用指定账号: {account_id}")
-                else:
-                    utils.logger.info(f"[DouYinCrawler] 使用默认账号（最新登录）")
-                
-                login_obj = DouYinLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # you phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str
-                )
-                await login_obj.begin()
-                await self.dy_client.update_cookies(browser_context=self.browser_context)
+            
+            # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
+            utils.logger.info("[DouYinCrawler] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[DouYinCrawler] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[DouYinCrawler] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("dy", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[DouYinCrawler] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.dy_client.set_cookies_from_string(cookie_str)
+                    
+                    # 验证cookies是否有效
+                    if await self.dy_client.pong(browser_context=self.browser_context):
+                        utils.logger.info("[DouYinCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                        # 更新cookies到客户端
+                        await self.dy_client.update_cookies(browser_context=self.browser_context)
+                    else:
+                        utils.logger.error("[DouYinCrawler] ❌ 数据库中的cookies无效，无法继续")
+                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                except Exception as e:
+                    utils.logger.error(f"[DouYinCrawler] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[DouYinCrawler] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
@@ -410,6 +426,11 @@ class DouYinCrawler(AbstractCrawler):
         """
         try:
             utils.logger.info(f"[DouYinCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            
+            # 🆕 设置account_id到实例变量，供start方法使用
+            self.account_id = account_id
+            if account_id:
+                utils.logger.info(f"[DouYinCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
             
             # 设置配置
             import config

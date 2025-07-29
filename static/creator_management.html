@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创作者管理 - MediaCrawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-info h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header-info p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-white {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-white:hover {
+            background: #f8f9fa;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
+        .controls-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 250px;
+            font-size: 1em;
+        }
+
+        .filter-select {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            background: white;
+        }
+
+        .creators-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .creators-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .creator-card {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .creator-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .creator-header {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .creator-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            color: #6c757d;
+        }
+
+        .creator-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .creator-info {
+            flex: 1;
+        }
+
+        .creator-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .creator-platform {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .creator-nickname {
+            font-size: 0.85em;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* 创作者详情样式 */
+        .creator-detail-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+        }
+
+        .creator-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .creator-info-main {
+            flex: 1;
+        }
+
+        .creator-name-large {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .creator-platform-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .creator-signature-large {
+            font-size: 14px;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .content-section {
+            margin: 20px 0;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .recent-content-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .content-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+
+        .content-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .content-thumbnail {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+
+        .content-info {
+            flex: 1;
+        }
+
+        .content-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .content-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .content-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .trend-chart {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .tags-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .tag-item {
+            padding: 4px 12px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 15px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .tag-count {
+            background: #1976d2;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+
+        .platform-link {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .platform-link:hover {
+            background: #0056b3;
+            color: white;
+        }
+
+        .detail-tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab-button.active {
+            border-bottom-color: #007bff;
+            color: #007bff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .creator-details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .detail-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+            margin-right: 10px;
+            min-width: 80px;
+        }
+
+        .detail-value {
+            color: #333;
+            word-break: break-all;
+        }
+
+        .creator-body {
+            padding: 15px;
+        }
+
+        .creator-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .creator-signature {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .creator-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .page-btn {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .page-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90%;
+            overflow: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            background: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .modal-large {
+            max-width: 800px; /* Adjust as needed */
+            max-height: 90%;
+        }
+
+        .modal-body {
+            overflow-y: auto;
+            max-height: calc(90% - 150px); /* Adjust for header and footer */
+        }
+
+        .modal-body .loading {
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .controls-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-box {
+                width: 100%;
+            }
+            
+            .creators-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .creator-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-info">
+                    <h1>👤 创作者管理</h1>
+                    <p>管理您收藏的创作者，查看他们的作品和动态</p>
+                </div>
+                <div class="header-actions">
+                    <a href="/static/index.html" class="btn btn-white">← 返回首页</a>
+                    <button class="btn btn-primary" onclick="showAddCreatorModal()">➕ 添加创作者</button>
+                    <button class="btn btn-success" onclick="refreshAllCreators()">🔄 刷新所有数据</button>
+                    <button class="btn btn-info" onclick="loadCreators()">📊 重新加载</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="controls-section">
+            <div class="controls-row">
+                <input type="text" class="search-box" placeholder="搜索创作者..." id="searchInput" onkeyup="handleSearch()">
+                <select class="filter-select" id="platformFilter" onchange="handleFilter()">
+                    <option value="">所有平台</option>
+                    <option value="dy">抖音</option>
+                    <option value="xhs">小红书</option>
+                    <option value="ks">快手</option>
+                    <option value="bili">哔哩哔哩</option>
+                    <option value="wb">微博</option>
+                    <option value="zhihu">知乎</option>
+                </select>
+                <button class="btn btn-info" onclick="refreshCreators()">🔄 刷新</button>
+            </div>
+        </div>
+
+        <!-- 创作者列表 -->
+        <div class="creators-section">
+            <div class="section-header">
+                <div class="section-title">📋 创作者列表</div>
+                <div class="section-info">
+                    <span id="creatorCount">共 0 位创作者</span>
+                </div>
+            </div>
+            
+            <div id="creatorsContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>正在加载创作者列表...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- 添加/编辑创作者模态框 -->
+    <div class="modal" id="creatorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">添加创作者</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="creatorForm" onsubmit="handleSubmit(event)">
+                <div class="form-group">
+                    <label class="form-label">创作者ID *</label>
+                    <input type="text" class="form-input" id="creatorId" name="creator_id" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">平台 *</label>
+                    <select class="form-select" id="platform" name="platform" required>
+                        <option value="">请选择平台</option>
+                        <option value="dy">抖音</option>
+                        <option value="xhs">小红书</option>
+                        <option value="ks">快手</option>
+                        <option value="bili">哔哩哔哩</option>
+                        <option value="wb">微博</option>
+                        <option value="zhihu">知乎</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">创作者名称 *</label>
+                    <input type="text" class="form-input" id="creatorName" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">昵称</label>
+                    <input type="text" class="form-input" id="creatorNickname" name="nickname">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">头像URL</label>
+                    <input type="url" class="form-input" id="creatorAvatar" name="avatar">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">签名/简介</label>
+                    <textarea class="form-textarea" id="creatorSignature" name="signature"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">唯一ID</label>
+                    <input type="text" class="form-input" id="creatorUniqueId" name="unique_id">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">性别</label>
+                    <select class="form-select" id="creatorGender" name="gender">
+                        <option value="">未知</option>
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">位置</label>
+                    <input type="text" class="form-input" id="creatorLocation" name="location">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">粉丝数</label>
+                    <input type="number" class="form-input" id="creatorFans" name="fans_count" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">关注数</label>
+                    <input type="number" class="form-input" id="creatorFollows" name="follow_count" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">获赞数</label>
+                    <input type="number" class="form-input" id="creatorLikes" name="like_count" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">作品数</label>
+                    <input type="number" class="form-input" id="creatorContent" name="content_count" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">标签</label>
+                    <input type="text" class="form-input" id="creatorTags" name="tags" placeholder="用逗号分隔多个标签">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">主页URL</label>
+                    <input type="url" class="form-input" id="creatorProfileUrl" name="profile_url">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">保存创作者</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 创作者详情模态框 -->
+    <div id="creatorDetailModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>👤 创作者详情</h2>
+                <span class="close" onclick="closeCreatorDetailModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="creatorDetailContent">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创作者编辑模态框 -->
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let pageSize = 20;
+        let creators = [];
+        let editingCreator = null;
+        let searchKeyword = '';
+        let platformFilter = '';
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCreators();
+            // 设置定时刷新，每分钟刷新一次
+            setInterval(loadCreators, 60000); 
+        });
+
+        // 加载创作者列表
+        async function loadCreators() {
+            try {
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    page_size: pageSize
+                });
+                
+                if (searchKeyword) {
+                    params.append('keyword', searchKeyword);
+                }
+                if (platformFilter) {
+                    params.append('platform', platformFilter);
+                }
+
+                const response = await fetch(`/api/v1/creators?${params}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    creators = data.data.creators;
+                    renderCreators();
+                    renderPagination(data.data.total_pages);
+                    updateCreatorCount(data.data.total);
+                } else {
+                    console.error('加载创作者列表失败:', data.message);
+                    showEmptyState('加载失败，请稍后重试');
+                }
+            } catch (error) {
+                console.error('加载创作者列表失败:', error);
+                showEmptyState('网络错误，请稍后重试');
+            }
+        }
+
+        // 渲染创作者列表
+        function renderCreators() {
+            const container = document.getElementById('creatorsContainer');
+            
+            if (creators.length === 0) {
+                showEmptyState('暂无创作者数据');
+                return;
+            }
+
+            container.innerHTML = `<div class="creators-grid" id="creatorsGrid"></div>`;
+            const grid = document.getElementById('creatorsGrid');
+
+            creators.forEach(creator => {
+                const creatorCard = document.createElement('div');
+                creatorCard.className = 'creator-card';
+                creatorCard.innerHTML = `
+                    <div class="creator-header">
+                        <div class="creator-avatar">
+                            ${creator.avatar ? `<img src="${creator.avatar}" alt="${creator.name}" onerror="this.style.display='none'">` : '👤'}
+                        </div>
+                        <div class="creator-info">
+                            <div class="creator-name">${creator.name || creator.nickname || '未知创作者'}</div>
+                            <div class="creator-platform">${getPlatformText(creator.platform)}</div>
+                            ${creator.nickname && creator.nickname !== creator.name ? `<div class="creator-nickname">@${creator.nickname}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="creator-body">
+                        <div class="creator-stats">
+                            <div class="stat-item">
+                                <div class="stat-value">${creator.fans_count || 0}</div>
+                                <div class="stat-label">粉丝</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${creator.follow_count || 0}</div>
+                                <div class="stat-label">关注</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${creator.like_count || 0}</div>
+                                <div class="stat-label">获赞</div>
+                            </div>
+                        </div>
+                        ${creator.signature ? `<div class="creator-signature">${creator.signature}</div>` : ''}
+                        <div class="creator-details">
+                            ${creator.unique_id ? `<div class="detail-item"><span class="detail-label">唯一ID:</span> <span class="detail-value">${creator.unique_id}</span></div>` : ''}
+                            ${creator.sec_uid ? `<div class="detail-item"><span class="detail-label">SecUID:</span> <span class="detail-value">${creator.sec_uid}</span></div>` : ''}
+                            ${creator.short_id ? `<div class="detail-item"><span class="detail-label">短ID:</span> <span class="detail-value">${creator.short_id}</span></div>` : ''}
+                            ${creator.ip_location ? `<div class="detail-item"><span class="detail-label">IP位置:</span> <span class="detail-value">${creator.ip_location}</span></div>` : ''}
+                            <div class="detail-item">
+                                <span class="detail-label">添加时间:</span> 
+                                <span class="detail-value">${formatDate(creator.add_ts)}</span>
+                            </div>
+                            ${creator.last_refresh_ts ? `<div class="detail-item"><span class="detail-label">最后刷新:</span> <span class="detail-value">${formatDate(creator.last_refresh_ts)}</span></div>` : ''}
+                        </div>
+                        <div class="creator-actions">
+                            <button class="btn btn-info btn-sm" onclick="viewCreatorDetail('${creator.creator_id}', '${creator.platform}')">👁️ 查看</button>
+                            <button class="btn btn-warning btn-sm" onclick="editCreator('${creator.creator_id}', '${creator.platform}')">✏️ 编辑</button>
+                            <button class="btn btn-success btn-sm" onclick="refreshCreatorData('${creator.creator_id}', '${creator.platform}')">🔄 刷新</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteCreator('${creator.creator_id}', '${creator.platform}')">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(creatorCard);
+            });
+        }
+
+        // 显示空状态
+        function showEmptyState(message) {
+            const container = document.getElementById('creatorsContainer');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">👤</div>
+                    <h3>暂无创作者</h3>
+                    <p>${message}</p>
+                    <button class="btn btn-primary" onclick="showAddCreatorModal()" style="margin-top: 20px;">添加第一个创作者</button>
+                </div>
+            `;
+        }
+
+        // 更新创作者数量
+        function updateCreatorCount(total) {
+            document.getElementById('creatorCount').textContent = `共 ${total} 位创作者`;
+        }
+
+        // 渲染分页
+        function renderPagination(totalPages) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `page-btn ${i === currentPage ? 'active' : ''}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => changePage(i);
+                pagination.appendChild(pageBtn);
+            }
+        }
+
+        // 切换页面
+        function changePage(page) {
+            currentPage = page;
+            loadCreators();
+        }
+
+        // 处理搜索
+        function handleSearch() {
+            searchKeyword = document.getElementById('searchInput').value.trim();
+            currentPage = 1;
+            loadCreators();
+        }
+
+        // 处理筛选
+        function handleFilter() {
+            platformFilter = document.getElementById('platformFilter').value;
+            currentPage = 1;
+            loadCreators();
+        }
+
+        // 刷新创作者列表
+        function refreshCreators() {
+            loadCreators();
+        }
+
+        // 刷新所有创作者数据
+        async function refreshAllCreators() {
+            if (!confirm('确定要刷新所有创作者数据吗？这将重新抓取所有创作者的最新信息。')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/v1/creators/refresh-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert(`刷新完成！\n成功: ${data.data.refreshed_count} 个\n失败: ${data.data.failed_count} 个\n总计: ${data.data.total_count} 个`);
+                    loadCreators(); // 刷新当前页面数据
+                } else {
+                    alert('刷新失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('刷新失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 刷新单个创作者数据
+        async function refreshCreatorData(creatorId, platform) {
+            if (!confirm('确定要刷新这个创作者的最新数据吗？')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/v1/creators/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        creator_id: creatorId,
+                        platform: platform
+                    })
+                });
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert('创作者数据已刷新！');
+                    loadCreators(); // 刷新当前页面数据
+                } else {
+                    alert('刷新失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('刷新失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 显示添加创作者模态框
+        function showAddCreatorModal() {
+            editingCreator = null;
+            document.getElementById('modalTitle').textContent = '添加创作者';
+            document.getElementById('creatorForm').reset();
+            document.getElementById('creatorModal').classList.add('show');
+        }
+
+        // 编辑创作者
+        async function editCreator(creatorId, platform) {
+            try {
+                const response = await fetch(`/api/v1/creators/${creatorId}?platform=${platform}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    editingCreator = data.data;
+                    document.getElementById('modalTitle').textContent = '编辑创作者';
+                    fillCreatorForm(editingCreator);
+                    document.getElementById('creatorModal').classList.add('show');
+                } else {
+                    alert('获取创作者信息失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('获取创作者信息失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 填充创作者表单
+        function fillCreatorForm(creator) {
+            document.getElementById('creatorId').value = creator.creator_id || '';
+            document.getElementById('platform').value = creator.platform || '';
+            document.getElementById('creatorName').value = creator.name || '';
+            document.getElementById('creatorNickname').value = creator.nickname || '';
+            document.getElementById('creatorAvatar').value = creator.avatar || '';
+            document.getElementById('creatorSignature').value = creator.signature || '';
+            document.getElementById('creatorUniqueId').value = creator.unique_id || '';
+            document.getElementById('creatorGender').value = creator.gender || '';
+            document.getElementById('creatorLocation').value = creator.location || '';
+            document.getElementById('creatorFans').value = creator.fans_count || '';
+            document.getElementById('creatorFollows').value = creator.follow_count || '';
+            document.getElementById('creatorLikes').value = creator.like_count || '';
+            document.getElementById('creatorContent').value = creator.content_count || '';
+            document.getElementById('creatorTags').value = creator.tags || '';
+            document.getElementById('creatorProfileUrl').value = creator.profile_url || '';
+        }
+
+        // 处理表单提交
+        async function handleSubmit(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const creatorData = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (value.trim()) {
+                    creatorData[key] = value.trim();
+                }
+            }
+
+            try {
+                let response;
+                if (editingCreator) {
+                    // 更新创作者
+                    response = await fetch(`/api/v1/creators/${editingCreator.creator_id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(creatorData)
+                    });
+                } else {
+                    // 添加创作者
+                    response = await fetch('/api/v1/creators/add', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(creatorData)
+                    });
+                }
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert(editingCreator ? '创作者更新成功！' : '创作者添加成功！');
+                    closeModal();
+                    loadCreators();
+                } else {
+                    alert('操作失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('操作失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 删除创作者
+        async function deleteCreator(creatorId, platform) {
+            if (!confirm('确定要删除这个创作者吗？此操作不可恢复。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/creators/${creatorId}?platform=${platform}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                if (data.code === 200) {
+                    alert('创作者删除成功！');
+                    loadCreators();
+                } else {
+                    alert('删除失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 查看创作者详情
+        async function viewCreatorDetail(creatorId, platform) {
+            try {
+                // 显示模态框
+                document.getElementById('creatorDetailModal').classList.add('show');
+                
+                // 显示加载状态
+                document.getElementById('creatorDetailContent').innerHTML = '<div class="loading">加载中...</div>';
+                
+                // 获取创作者详情
+                const response = await fetch(`/api/v1/creators/${creatorId}/detail?platform=${platform}`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    renderCreatorDetail(data.data);
+                } else {
+                    document.getElementById('creatorDetailContent').innerHTML = 
+                        `<div class="error">获取创作者详情失败: ${data.message}</div>`;
+                }
+            } catch (error) {
+                console.error('获取创作者详情失败:', error);
+                document.getElementById('creatorDetailContent').innerHTML = 
+                    '<div class="error">网络错误，请稍后重试</div>';
+            }
+        }
+
+        // 渲染创作者详情
+        function renderCreatorDetail(detailData) {
+            const { creator_info, content_stats, recent_content, content_trends, popular_tags, platform_info } = detailData;
+            
+            const content = `
+                <!-- 创作者基本信息 -->
+                <div class="creator-detail-header">
+                    <img src="${creator_info.avatar || '/static/default-avatar.png'}" alt="头像" class="creator-avatar" onerror="this.src='/static/default-avatar.png'">
+                    <div class="creator-info-main">
+                        <div class="creator-name-large">${creator_info.name || creator_info.nickname || '未知创作者'}</div>
+                        <div class="creator-platform-badge">${platform_info.platform_name}</div>
+                        ${creator_info.signature ? `<div class="creator-signature-large">${creator_info.signature}</div>` : ''}
+                        <a href="${platform_info.creator_url}" target="_blank" class="platform-link">🌐 访问主页</a>
+                    </div>
+                </div>
+
+                <!-- 标签页导航 -->
+                <div class="detail-tabs">
+                    <button class="tab-button active" onclick="switchTab('overview')">📊 概览</button>
+                    <button class="tab-button" onclick="switchTab('content')">📝 内容</button>
+                    <button class="tab-button" onclick="switchTab('trends')">📈 趋势</button>
+                    <button class="tab-button" onclick="switchTab('tags')">🏷️ 标签</button>
+                </div>
+
+                <!-- 概览标签页 -->
+                <div id="overview-tab" class="tab-content active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(creator_info.fans_count || 0)}</div>
+                            <div class="stat-label">粉丝数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(creator_info.follow_count || 0)}</div>
+                            <div class="stat-label">关注数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(creator_info.like_count || 0)}</div>
+                            <div class="stat-label">获赞数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(content_stats.total_content || 0)}</div>
+                            <div class="stat-label">作品数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(content_stats.total_views || 0)}</div>
+                            <div class="stat-label">总播放</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${formatNumber(content_stats.total_likes || 0)}</div>
+                            <div class="stat-label">总点赞</div>
+                        </div>
+                    </div>
+
+                    <div class="content-section">
+                        <div class="section-title">📋 详细信息</div>
+                        <div class="creator-details">
+                            ${creator_info.unique_id ? `<div class="detail-item"><span class="detail-label">唯一ID:</span> <span class="detail-value">${creator_info.unique_id}</span></div>` : ''}
+                            ${creator_info.sec_uid ? `<div class="detail-item"><span class="detail-label">SecUID:</span> <span class="detail-value">${creator_info.sec_uid}</span></div>` : ''}
+                            ${creator_info.short_id ? `<div class="detail-item"><span class="detail-label">短ID:</span> <span class="detail-value">${creator_info.short_id}</span></div>` : ''}
+                            ${creator_info.ip_location ? `<div class="detail-item"><span class="detail-label">IP位置:</span> <span class="detail-value">${creator_info.ip_location}</span></div>` : ''}
+                            <div class="detail-item">
+                                <span class="detail-label">添加时间:</span> 
+                                <span class="detail-value">${formatDate(creator_info.add_ts)}</span>
+                            </div>
+                            ${creator_info.last_refresh_ts ? `<div class="detail-item"><span class="detail-label">最后刷新:</span> <span class="detail-value">${formatDate(creator_info.last_refresh_ts)}</span></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 内容标签页 -->
+                <div id="content-tab" class="tab-content">
+                    <div class="content-section">
+                        <div class="section-title">📝 最新内容 (${recent_content.length}条)</div>
+                        <div class="recent-content-list">
+                            ${recent_content.length > 0 ? recent_content.map(content => `
+                                <div class="content-item">
+                                    <img src="${content.cover_url || '/static/default-thumbnail.png'}" alt="封面" class="content-thumbnail" onerror="this.src='/static/default-thumbnail.png'">
+                                    <div class="content-info">
+                                        <div class="content-title">${content.title || content.description || '无标题'}</div>
+                                        <div class="content-meta">${formatDate(content.create_time)}</div>
+                                        <div class="content-stats">
+                                            <span>👁️ ${formatNumber(content.view_count || 0)}</span>
+                                            <span>👍 ${formatNumber(content.like_count || 0)}</span>
+                                            <span>💬 ${formatNumber(content.comment_count || 0)}</span>
+                                            <span>⭐ ${formatNumber(content.collect_count || 0)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('') : '<div class="no-data">暂无内容数据</div>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 趋势标签页 -->
+                <div id="trends-tab" class="tab-content">
+                    <div class="content-section">
+                        <div class="section-title">📈 内容趋势 (最近12个月)</div>
+                        <div class="trend-chart">
+                            ${content_trends.length > 0 ? `
+                                <div style="height: 300px; overflow-x: auto;">
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <thead>
+                                            <tr style="background: #f8f9fa;">
+                                                <th style="padding: 10px; text-align: left; border-bottom: 1px solid #ddd;">月份</th>
+                                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">内容数</th>
+                                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">总播放</th>
+                                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">总点赞</th>
+                                                <th style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">总评论</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${content_trends.map(trend => `
+                                                <tr>
+                                                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${trend.month}</td>
+                                                    <td style="padding: 10px; text-align: center; border-bottom: 1px solid #eee;">${trend.content_count}</td>
+                                                    <td style="padding: 10px; text-align: center; border-bottom: 1px solid #eee;">${formatNumber(trend.total_views)}</td>
+                                                    <td style="padding: 10px; text-align: center; border-bottom: 1px solid #eee;">${formatNumber(trend.total_likes)}</td>
+                                                    <td style="padding: 10px; text-align: center; border-bottom: 1px solid #eee;">${formatNumber(trend.total_comments)}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ` : '<div class="no-data">暂无趋势数据</div>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 标签标签页 -->
+                <div id="tags-tab" class="tab-content">
+                    <div class="content-section">
+                        <div class="section-title">🏷️ 热门标签 (${popular_tags.length}个)</div>
+                        <div class="tags-cloud">
+                            ${popular_tags.length > 0 ? popular_tags.map(tag => `
+                                <div class="tag-item">
+                                    ${tag.tag}
+                                    <span class="tag-count">${tag.count}</span>
+                                </div>
+                            `).join('') : '<div class="no-data">暂无标签数据</div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('creatorDetailContent').innerHTML = content;
+        }
+
+        // 切换标签页
+        function switchTab(tabName) {
+            // 隐藏所有标签页内容
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // 移除所有标签页按钮的active状态
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => button.classList.remove('active'));
+            
+            // 显示选中的标签页
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // 关闭创作者详情模态框
+        function closeCreatorDetailModal() {
+            document.getElementById('creatorDetailModal').classList.remove('show');
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(1) + '亿';
+            } else if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            } else {
+                return num.toString();
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('creatorModal').classList.remove('show');
+            editingCreator = null;
+        }
+
+        // 工具函数
+        function getPlatformText(platform) {
+            const platforms = {
+                'dy': '抖音',
+                'xhs': '小红书',
+                'ks': '快手',
+                'bili': '哔哩哔哩',
+                'wb': '微博',
+                'zhihu': '知乎'
+            };
+            return platforms[platform] || platform;
+        }
+
+        // 格式化日期
+        function formatDate(timestamp) {
+            if (!timestamp) return '未知时间';
+            const date = new Date(timestamp);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('creatorModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // 点击创作者详情模态框外部关闭
+        document.getElementById('creatorDetailModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreatorDetailModal();
+            }
+        });
+    </script>
+</body>
+</html> 

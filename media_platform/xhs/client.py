@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 
 import httpx
 from playwright.async_api import BrowserContext, Page
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, wait_exponential
 
 import config
 from base.base_crawler import AbstractApiClient
@@ -81,7 +81,7 @@ class XiaoHongShuClient(AbstractApiClient):
         self.headers.update(headers)
         return self.headers
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def request(self, method, url, **kwargs) -> Union[str, Any]:
         """
         封装httpx的公共请求方法，对请求响应做一些处理
@@ -101,21 +101,31 @@ class XiaoHongShuClient(AbstractApiClient):
 
         if response.status_code == 471 or response.status_code == 461:
             # someday someone maybe will bypass captcha
-            verify_type = response.headers["Verifytype"]
-            verify_uuid = response.headers["Verifyuuid"]
+            verify_type = response.headers.get("Verifytype", "unknown")
+            verify_uuid = response.headers.get("Verifyuuid", "unknown")
+            utils.logger.error(f"[XiaoHongShuClient.request] 出现验证码，请求失败，Verifytype: {verify_type}，Verifyuuid: {verify_uuid}")
             raise Exception(
                 f"出现验证码，请求失败，Verifytype: {verify_type}，Verifyuuid: {verify_uuid}, Response: {response}"
             )
 
         if return_response:
             return response.text
-        data: Dict = response.json()
-        if data["success"]:
+        
+        try:
+            data: Dict = response.json()
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuClient.request] JSON解析失败: {e}, Response: {response.text}")
+            raise DataFetchError(f"响应数据格式错误: {e}")
+        
+        if data.get("success"):
             return data.get("data", data.get("success", {}))
-        elif data["code"] == self.IP_ERROR_CODE:
+        elif data.get("code") == self.IP_ERROR_CODE:
+            utils.logger.error(f"[XiaoHongShuClient.request] IP被限制: {data}")
             raise IPBlockError(self.IP_ERROR_STR)
         else:
-            raise DataFetchError(data.get("msg", None))
+            error_msg = data.get("msg", f"未知错误，状态码: {response.status_code}")
+            utils.logger.error(f"[XiaoHongShuClient.request] 请求失败: {error_msg}, 完整响应: {data}")
+            raise DataFetchError(error_msg)
 
     async def get(self, uri: str, params=None) -> Dict:
         """
@@ -175,6 +185,13 @@ class XiaoHongShuClient(AbstractApiClient):
         """get a note to check if login state is ok"""
         utils.logger.info("[XiaoHongShuClient.pong] Begin to pong xhs...")
         ping_flag = False
+        
+        # 检查cookies状态
+        cookie_count = len(self.cookie_dict) if self.cookie_dict else 0
+        utils.logger.info(f"[XiaoHongShuClient.pong] Current cookies count: {cookie_count}")
+        if cookie_count > 0:
+            utils.logger.info(f"[XiaoHongShuClient.pong] Cookie keys: {list(self.cookie_dict.keys())}")
+        
         try:
             note_card: Dict = await self.get_note_by_keyword(keyword="小红书")
             if note_card.get("items"):
@@ -182,6 +199,7 @@ class XiaoHongShuClient(AbstractApiClient):
                 utils.logger.info("[XiaoHongShuClient.pong] Ping xhs success")
             else:
                 utils.logger.warning("[XiaoHongShuClient.pong] Ping xhs failed: no items returned")
+                utils.logger.debug(f"[XiaoHongShuClient.pong] Response: {note_card}")
         except DataFetchError as e:
             utils.logger.error(
                 f"[XiaoHongShuClient.pong] Ping xhs failed with DataFetchError: {e}, and try to login again..."
@@ -198,12 +216,18 @@ class XiaoHongShuClient(AbstractApiClient):
             )
             ping_flag = False
         
-        # 如果ping失败，记录当前cookies状态
+        # 如果ping失败，尝试使用不同的关键词
         if not ping_flag:
-            cookie_count = len(self.cookie_dict) if self.cookie_dict else 0
-            utils.logger.info(f"[XiaoHongShuClient.pong] Current cookies count: {cookie_count}")
-            if cookie_count > 0:
-                utils.logger.info(f"[XiaoHongShuClient.pong] Cookie keys: {list(self.cookie_dict.keys())}")
+            utils.logger.info("[XiaoHongShuClient.pong] 尝试使用备用关键词进行ping测试...")
+            try:
+                note_card: Dict = await self.get_note_by_keyword(keyword="美食")
+                if note_card.get("items"):
+                    ping_flag = True
+                    utils.logger.info("[XiaoHongShuClient.pong] 备用关键词ping成功")
+                else:
+                    utils.logger.warning("[XiaoHongShuClient.pong] 备用关键词ping也失败")
+            except Exception as e:
+                utils.logger.error(f"[XiaoHongShuClient.pong] 备用关键词ping失败: {e}")
         
         return ping_flag
 
@@ -219,6 +243,47 @@ class XiaoHongShuClient(AbstractApiClient):
         cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
+
+    async def set_cookies_from_string(self, cookie_str: str):
+        """从字符串设置cookies"""
+        try:
+            from tools import utils as crawler_utils
+            cookie_dict = crawler_utils.convert_str_cookie_to_dict(cookie_str)
+            
+            # 设置cookies到浏览器上下文
+            for key, value in cookie_dict.items():
+                await self.playwright_page.context.add_cookies([{
+                    'name': key,
+                    'value': value,
+                    'domain': '.xiaohongshu.com',
+                    'path': '/'
+                }])
+            
+            # 更新客户端cookies
+            self.headers["Cookie"] = cookie_str
+            self.cookie_dict = cookie_dict
+            
+            utils.logger.info(f"[XiaoHongShuClient] 已设置 {len(cookie_dict)} 个cookies")
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuClient] 设置cookies失败: {e}")
+            raise
+
+    async def clear_cookies(self):
+        """清除cookies"""
+        try:
+            # 清除浏览器上下文中的cookies
+            await self.playwright_page.context.clear_cookies()
+            
+            # 清除客户端cookies
+            self.headers["Cookie"] = ""
+            self.cookie_dict = {}
+            
+            utils.logger.info("[XiaoHongShuClient] 已清除所有cookies")
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuClient] 清除cookies失败: {e}")
+            raise
 
     async def get_note_by_keyword(
         self,

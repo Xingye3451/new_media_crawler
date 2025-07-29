@@ -252,72 +252,6 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         await update_task_progress(task_id, 0.0, "running")
         await log_task_step(task_id, request.platform, "task_start", "任务开始执行", "INFO", 0)
         
-        # 检查登录状态
-        utils.logger.info(f"[任务 {task_id}] 检查登录状态...")
-        await log_task_step(task_id, request.platform, "login_check", "检查登录状态", "INFO", 10)
-        
-        from login_manager import login_manager
-        
-        if request.session_id:
-            utils.logger.info(f"[任务 {task_id}] 使用指定的会话ID: {request.session_id}")
-            # 使用指定的会话ID
-            session = await login_manager.check_login_status(request.platform, request.session_id)
-            if session.status.value == "need_verification":
-                utils.logger.warning(f"[任务 {task_id}] 需要验证，会话状态: {session.status.value}")
-                task_status[task_id]["status"] = "need_verification"
-                task_status[task_id]["error"] = "需要验证"
-                task_status[task_id]["session_id"] = session.session_id
-                task_status[task_id]["updated_at"] = datetime.now().isoformat()
-                await update_task_progress(task_id, 0.0, "need_verification")
-                await log_task_step(task_id, request.platform, "login_failed", "需要验证", "WARN", 0)
-                return
-            elif session.status.value == "logged_in":
-                utils.logger.info(f"[任务 {task_id}] 会话状态正常")
-                await log_task_step(task_id, request.platform, "login_success", "登录状态正常", "INFO", 20)
-                # 已登录，cookies由爬虫直接从数据库读取
-            else:
-                utils.logger.warning(f"[任务 {task_id}] 会话状态异常: {session.status.value}")
-                await log_task_step(task_id, request.platform, "login_error", f"会话状态异常: {session.status.value}", "ERROR", 0)
-        else:
-            utils.logger.info(f"[任务 {task_id}] 查找平台 {request.platform} 的最新会话")
-            # 查找平台的最新会话
-            session = await login_manager.check_login_status(request.platform)
-            if session.status.value == "logged_in":
-                utils.logger.info(f"[任务 {task_id}] 找到有效会话")
-                await log_task_step(task_id, request.platform, "login_success", "找到有效会话", "INFO", 20)
-                # 已登录，cookies由爬虫直接从数据库读取
-            elif session.status.value in ["not_logged_in", "expired", "need_verification"]:
-                utils.logger.warning(f"[任务 {task_id}] 需要登录，会话状态: {session.status.value}")
-                # 需要登录或验证
-                task_status[task_id]["status"] = "need_login"
-                task_status[task_id]["error"] = "需要登录"
-                task_status[task_id]["session_id"] = session.session_id
-                task_status[task_id]["updated_at"] = datetime.now().isoformat()
-                await update_task_progress(task_id, 0.0, "need_login")
-                await log_task_step(task_id, request.platform, "login_failed", "需要登录", "WARN", 0)
-                return
-                
-        # 检查指定账号的凭证有效性（如果提供了账号ID）
-        if request.account_id:
-            utils.logger.info(f"[任务 {task_id}] 检查指定账号凭证有效性: {request.account_id}")
-            await log_task_step(task_id, request.platform, "account_check", f"检查账号凭证: {request.account_id}", "INFO", 25)
-            
-            from api.login_management import check_token_validity
-            validity = await check_token_validity(request.platform, request.account_id)
-            if validity["status"] not in ["valid", "expiring_soon"]:
-                utils.logger.error(f"[任务 {task_id}] 指定账号凭证无效: {validity['message']}")
-                task_status[task_id]["status"] = "failed"
-                task_status[task_id]["error"] = f"指定账号凭证无效: {validity['message']}"
-                task_status[task_id]["updated_at"] = datetime.now().isoformat()
-                await update_task_progress(task_id, 0.0, "failed")
-                await log_task_step(task_id, request.platform, "account_failed", f"账号凭证无效: {validity['message']}", "ERROR", 0)
-                return
-            elif validity["status"] == "expiring_soon":
-                utils.logger.warning(f"[任务 {task_id}] 指定账号凭证即将过期: {validity['expires_at']}")
-                await log_task_step(task_id, request.platform, "account_warning", f"账号凭证即将过期: {validity['expires_at']}", "WARN", 30)
-            else:
-                await log_task_step(task_id, request.platform, "account_success", "账号凭证有效", "INFO", 30)
-        
         # 设置爬虫配置
         utils.logger.info(f"[TASK_{task_id}] ⚙️ 设置爬虫配置...")
         await log_task_step(task_id, request.platform, "config_setup", "设置爬虫配置", "INFO", 35)
@@ -437,6 +371,42 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         # 参数验证
         utils.logger.info("[CRAWLER_START] 参数验证通过")
         
+        # 🆕 检查登录状态 - 在任务启动前检查
+        utils.logger.info("[CRAWLER_START] 检查登录状态...")
+        
+        # 直接调用登录检查API
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://localhost:8100/api/v1/login/check",
+                    json={"platform": request.platform},
+                    timeout=10.0
+                )
+                login_result = response.json()
+        except Exception as e:
+            utils.logger.error(f"[CRAWLER_START] 登录检查API调用失败: {e}")
+            login_result = {"code": 500, "message": f"登录检查失败: {str(e)}"}
+        
+        if login_result["code"] != 200:
+            utils.logger.warning(f"[CRAWLER_START] 平台 {request.platform} 未登录，状态: {login_result.get('message', 'unknown')}")
+            
+            # 返回需要登录的错误信息
+            error_message = f"平台 {request.platform} 需要登录，请先进行远程登录"
+            
+            return CrawlerResponse(
+                task_id="",
+                status="need_login",
+                message=error_message,
+                data={
+                    "platform": request.platform,
+                    "login_status": "not_logged_in",
+                    "redirect_url": "/static/account_management.html"
+                }
+            )
+        
+        utils.logger.info(f"[CRAWLER_START] 平台 {request.platform} 登录状态正常")
+        
         # 生成任务ID
         task_id = str(uuid.uuid4())
         utils.logger.info(f"[CRAWLER_START] 生成任务ID: {task_id}")
@@ -465,7 +435,7 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         response_data = {
             "task_id": task_id,
             "status": "pending",
-            "message": "爬虫任务已启动，正在检查登录状态...",
+            "message": "爬虫任务已启动，正在执行...",
             "data": None
         }
         utils.logger.info(f"[CRAWLER_START] 响应数据: {response_data}")

@@ -386,7 +386,8 @@ class DatabaseInitializer:
                     {'name': 'raw_data', 'type': 'LONGTEXT COMMENT "原始数据"'},
                     {'name': 'extra_info', 'type': 'TEXT COMMENT "额外信息"'},
                     {'name': 'add_ts', 'type': 'BIGINT COMMENT "添加时间戳"'},
-                    {'name': 'last_modify_ts', 'type': 'BIGINT COMMENT "最后修改时间戳"'}
+                    {'name': 'last_modify_ts', 'type': 'BIGINT COMMENT "最后修改时间戳"'},
+                    {'name': 'last_refresh_ts', 'type': 'BIGINT COMMENT "最后刷新时间戳"'}
                 ],
                 'indexes': [
                     {'name': 'idx_unified_creator_platform_creator_id', 'columns': '(platform, creator_id)'},

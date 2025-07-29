@@ -127,6 +127,47 @@ class BilibiliClient(AbstractApiClient):
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 
+    async def set_cookies_from_string(self, cookie_str: str):
+        """从字符串设置cookies"""
+        try:
+            from tools import utils as crawler_utils
+            cookie_dict = crawler_utils.convert_str_cookie_to_dict(cookie_str)
+            
+            # 设置cookies到浏览器上下文
+            for key, value in cookie_dict.items():
+                await self.playwright_page.context.add_cookies([{
+                    'name': key,
+                    'value': value,
+                    'domain': '.bilibili.com',
+                    'path': '/'
+                }])
+            
+            # 更新客户端cookies
+            self.headers["Cookie"] = cookie_str
+            self.cookie_dict = cookie_dict
+            
+            utils.logger.info(f"[BilibiliClient] 已设置 {len(cookie_dict)} 个cookies")
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliClient] 设置cookies失败: {e}")
+            raise
+
+    async def clear_cookies(self):
+        """清除cookies"""
+        try:
+            # 清除浏览器上下文中的cookies
+            await self.playwright_page.context.clear_cookies()
+            
+            # 清除客户端cookies
+            self.headers["Cookie"] = ""
+            self.cookie_dict = {}
+            
+            utils.logger.info("[BilibiliClient] 已清除所有cookies")
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliClient] 清除cookies失败: {e}")
+            raise
+
     async def search_video_by_keyword(self, keyword: str, page: int = 1, page_size: int = 20,
                                       order: SearchOrderType = SearchOrderType.DEFAULT,
                                       pubtime_begin_s: int = 0, pubtime_end_s: int = 0) -> Dict:

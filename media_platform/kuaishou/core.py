@@ -44,64 +44,73 @@ class KuaishouCrawler(AbstractCrawler):
         self.user_agent = utils.get_user_agent()
         self.task_id = task_id
 
-    async def start(self):
+    async def start(self) -> None:
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
-            ip_proxy_pool = await create_ip_pool(
-                config.IP_PROXY_POOL_COUNT, enable_validate_ip=True
-            )
+            ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
-            playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(
-                ip_proxy_info
-            )
+            playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
         async with async_playwright() as playwright:
             # Launch a browser context.
             chromium = playwright.chromium
             self.browser_context = await self.launch_browser(
-                chromium, None, self.user_agent, headless=config.HEADLESS
+                chromium,
+                None,
+                user_agent=None,
+                headless=config.HEADLESS
             )
             # stealth.min.js is a js script to prevent the website from detecting the crawler.
             await self.browser_context.add_init_script(path="libs/stealth.min.js")
             self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(f"{self.index_url}?isHome=1")
+            await self.context_page.goto(self.index_url)
 
-            # Create a client to interact with the kuaishou website.
-            self.ks_client = await self.create_ks_client(httpx_proxy_format)
-            if not await self.ks_client.pong():
-                # 从数据库读取cookies，支持账号选择
-                account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-                cookie_str = await get_cookies_from_database("ks", account_id)
-                
-                if account_id:
-                    utils.logger.info(f"[KuaishouCrawler] 使用指定账号: {account_id}")
-                else:
-                    utils.logger.info(f"[KuaishouCrawler] 使用默认账号（最新登录）")
-                
-                login_obj = KuaishouLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone=httpx_proxy_format,
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str,
-                )
-                await login_obj.begin()
-                await self.ks_client.update_cookies(
-                    browser_context=self.browser_context
-                )
-
+            self.ks_client = await self.create_kuaishou_client(httpx_proxy_format)
+            
+            # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
+            utils.logger.info("[KuaishouCrawler] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[KuaishouCrawler] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[KuaishouCrawler] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("ks", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[KuaishouCrawler] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.ks_client.set_cookies_from_string(cookie_str)
+                    
+                    # 验证cookies是否有效
+                    if await self.ks_client.pong():
+                        utils.logger.info("[KuaishouCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                        # 更新cookies到客户端
+                        await self.ks_client.update_cookies(browser_context=self.browser_context)
+                    else:
+                        utils.logger.error("[KuaishouCrawler] ❌ 数据库中的cookies无效，无法继续")
+                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                except Exception as e:
+                    utils.logger.error(f"[KuaishouCrawler] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[KuaishouCrawler] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
-                # Search for videos and retrieve their comment information.
+                # Search for notes and retrieve their comment information.
                 await self.search()
             elif config.CRAWLER_TYPE == "detail":
                 # Get the information and comments of the specified post
-                await self.get_specified_videos()
+                await self.get_specified_notes()
             elif config.CRAWLER_TYPE == "creator":
-                # Get creator's information and their videos and comments
-                await self.get_creators_and_videos()
-            else:
-                pass
+                # Get the information and comments of the specified creator
+                await self.get_creators_and_notes()
 
             utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
@@ -459,6 +468,11 @@ class KuaishouCrawler(AbstractCrawler):
         try:
             utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
             
+            # 🆕 设置account_id到实例变量，供start方法使用
+            self.account_id = account_id
+            if account_id:
+                utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
+            
             # 设置配置
             import config
             config.KEYWORDS = keywords
@@ -470,10 +484,22 @@ class KuaishouCrawler(AbstractCrawler):
             # 启动爬虫
             await self.start()
             
-            # 获取存储的数据
+            # 由于Redis存储是通过回调函数处理的，我们需要从Redis中获取数据
+            # 或者直接返回爬取过程中收集的数据
             results = []
+            
+            # 如果使用了Redis存储，尝试从Redis获取数据
             if hasattr(self, 'kuaishou_store') and hasattr(self.kuaishou_store, 'get_all_content'):
                 results = await self.kuaishou_store.get_all_content()
+            
+            # 如果Redis中没有数据，尝试从任务结果中获取
+            if not results and hasattr(self, 'task_id'):
+                from utils.redis_manager import redis_manager
+                try:
+                    task_videos = await redis_manager.get_task_videos(self.task_id, "ks")
+                    results = task_videos
+                except Exception as e:
+                    utils.logger.warning(f"[KuaishouCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
             
             utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results

@@ -41,31 +41,31 @@ async def _get_db_connection():
 
 
 async def get_cookies_from_database(platform: str, account_id: Optional[str] = None) -> str:
-    """从数据库读取指定平台和账号的cookies"""
+    """从数据库获取指定平台和账号的cookies"""
     try:
-        # 获取数据库连接
         db = await _get_db_connection()
         if not db:
             utils.logger.error("[DB_UTILS] 无法获取数据库连接")
             return ""
         
+        # 🆕 根据account_id参数构建查询条件
         if account_id:
-            # 查询指定账号的最新有效cookies
+            # 查询指定账号的最新有效token
             query = """
-            SELECT token_data FROM login_tokens 
+            SELECT token_data, created_at, expires_at
+            FROM login_tokens 
             WHERE platform = %s AND account_id = %s AND is_valid = 1 AND token_type = 'cookie'
-            AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC 
             LIMIT 1
             """
             result = await db.get_first(query, platform, account_id)
             utils.logger.info(f"[DB_UTILS] 查询指定账号cookies - 平台: {platform}, 账号ID: {account_id}")
         else:
-            # 查询该平台最新的有效cookies（任意账号）
+            # 查询平台最新登录的token（兼容旧逻辑）
             query = """
-            SELECT token_data FROM login_tokens 
+            SELECT token_data, created_at, expires_at
+            FROM login_tokens 
             WHERE platform = %s AND is_valid = 1 AND token_type = 'cookie'
-            AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC 
             LIMIT 1
             """
@@ -75,29 +75,23 @@ async def get_cookies_from_database(platform: str, account_id: Optional[str] = N
         if result and result['token_data']:
             token_data_str = result['token_data']
             
-            # 尝试解析token_data
+            # 🆕 修复：token_data存储的是JSON格式的cookies字典
             try:
                 token_data = json.loads(token_data_str)
                 
-                # 检查token_data的格式
+                # token_data本身就是cookies的字典格式 {"cookie_name": "cookie_value", ...}
                 if isinstance(token_data, dict):
-                    # 情况1: token_data包含cookies字段 {"cookies": "...", "other": "..."}
-                    if 'cookies' in token_data:
-                        cookie_str = token_data['cookies']
-                        utils.logger.info(f"[DB_UTILS] 使用cookies字段，长度: {len(cookie_str)}")
-                    # 情况2: token_data直接就是cookies的字典格式 {"__ac_nonce": "...", ...}
-                    else:
-                        # 将cookies字典转换为字符串格式
-                        cookie_parts = []
-                        for key, value in token_data.items():
-                            if key and value:  # 跳过空键值
-                                cookie_parts.append(f"{key}={value}")
-                        cookie_str = "; ".join(cookie_parts)
-                        utils.logger.info(f"[DB_UTILS] 直接使用token_data作为cookies，转换后长度: {len(cookie_str)}")
+                    # 将cookies字典转换为字符串格式
+                    cookie_parts = []
+                    for key, value in token_data.items():
+                        if key and value and isinstance(value, str) and key not in ["user_info"]:
+                            cookie_parts.append(f"{key}={value}")
+                    cookie_str = "; ".join(cookie_parts)
+                    utils.logger.info(f"[DB_UTILS] 从token_data解析cookies，字段数: {len(token_data)}, 转换后长度: {len(cookie_str)}")
                 else:
-                    # 情况3: token_data就是字符串格式的cookies
+                    # 如果不是字典，直接当作字符串使用
                     cookie_str = str(token_data)
-                    utils.logger.info(f"[DB_UTILS] token_data为字符串格式，长度: {len(cookie_str)}")
+                    utils.logger.info(f"[DB_UTILS] token_data非字典格式，直接使用，长度: {len(cookie_str)}")
                     
             except json.JSONDecodeError:
                 # 如果无法解析JSON，直接当作字符串使用

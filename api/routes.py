@@ -23,6 +23,7 @@ from api.curl_video_proxy import router as curl_video_proxy_router
 from api.video_favorites import router as video_favorites_router
 from api.video_stream import router as video_stream_router
 from api.thumbnail_proxy import router as thumbnail_proxy_router
+from api.creator_management import router as creator_management_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -144,4 +145,11 @@ api_router.include_router(
     thumbnail_proxy_router,
     prefix="/v1",
     tags=["thumbnail-proxy"]
+)
+
+# 创作者管理相关路由
+api_router.include_router(
+    creator_management_router,
+    prefix="/v1",
+    tags=["creator-management"]
 ) 

@@ -375,6 +375,8 @@ class TaskResultService:
                 return {
                     "total_videos": 0,
                     "total_comments": 0,
+                    "avg_likes": 0.0,
+                    "total_size": 0,
                     "platforms": "",
                     "completed_at": ""
                 }
@@ -382,27 +384,34 @@ class TaskResultService:
             platform = task_result.get('platform')
             
             # 使用统一表进行统计
-            # 统计内容数量
-            content_count_query = """
-                SELECT COUNT(*) as total FROM unified_content 
+            # 统计内容数量和平均点赞数
+            content_stats_query = """
+                SELECT 
+                    COUNT(*) as total_videos,
+                    AVG(like_count) as avg_likes,
+                    SUM(like_count) as total_likes,
+                    AVG(comment_count) as avg_comments,
+                    SUM(comment_count) as total_comments,
+                    SUM(view_count) as total_views
+                FROM unified_content 
                 WHERE task_id = %s
             """
-            content_result = await db.get_first(content_count_query, task_id)
-            total_videos = content_result.get('total', 0) if content_result else 0
+            content_result = await db.get_first(content_stats_query, task_id)
             
-            # 统计评论数量
-            comment_count_query = """
-                SELECT COUNT(*) as total FROM unified_comment 
-                WHERE content_id IN (
-                    SELECT content_id FROM unified_content WHERE task_id = %s
-                )
-            """
-            comment_result = await db.get_first(comment_count_query, task_id)
-            total_comments = comment_result.get('total', 0) if comment_result else 0
+            total_videos = content_result.get('total_videos', 0) if content_result else 0
+            avg_likes = round(content_result.get('avg_likes', 0) or 0, 1) if content_result else 0
+            avg_comments = round(content_result.get('avg_comments', 0) or 0, 1) if content_result else 0
+            total_comments = content_result.get('total_comments', 0) if content_result else 0
+            
+            # 估算数据大小（每个视频假设平均10MB）
+            estimated_size = total_videos * 10 * 1024 * 1024  # 10MB per video
             
             return {
                 "total_videos": total_videos,
-                "total_comments": total_comments,
+                "total_comments": int(total_comments) if total_comments else 0,
+                "avg_comments": float(avg_comments) if avg_comments else 0.0,
+                "avg_likes": float(avg_likes) if avg_likes else 0.0,
+                "total_size": estimated_size,
                 "platforms": platform,
                 "completed_at": datetime.now().isoformat()
             }
@@ -412,6 +421,9 @@ class TaskResultService:
             return {
                 "total_videos": 0,
                 "total_comments": 0,
+                "avg_comments": 0.0,
+                "avg_likes": 0.0,
+                "total_size": 0,
                 "platforms": "",
                 "completed_at": ""
             }
@@ -476,6 +488,22 @@ class TaskResultService:
                     'desc': row.get('description') or row.get('title', ''),
                     'nickname': row.get('author_nickname') or row.get('author_name', ''),
                     'user_name': row.get('author_nickname') or row.get('author_name', ''),
+                    'author_name': row.get('author_name', ''),
+                    'author_id': row.get('author_id', ''),
+                    'author_nickname': row.get('author_nickname', ''),
+                    'author_avatar': row.get('author_avatar', ''),
+                    'author_signature': row.get('author_signature', ''),
+                    'author_unique_id': row.get('author_unique_id', ''),
+                    'author_sec_uid': row.get('author_sec_uid', ''),
+                    'author_short_id': row.get('author_short_id', ''),
+                    'user_id': row.get('user_id', ''),
+                    'uid': row.get('uid', ''),
+                    'avatar': row.get('avatar', ''),
+                    'signature': row.get('signature', ''),
+                    'unique_id': row.get('unique_id', ''),
+                    'sec_uid': row.get('sec_uid', ''),
+                    'short_id': row.get('short_id', ''),
+                    'ip_location': row.get('ip_location', ''),
                     'create_time': row.get('create_time'),
                     'digg_count': row.get('like_count', 0),
                     'comment_count': row.get('comment_count', 0),

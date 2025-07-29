@@ -457,9 +457,12 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="single-account-select">👤 选择账号</label>
-                        <select id="single-account-select">
-                            <option value="">自动选择账号</option>
+                        <label for="single-account-select" class="form-label">
+                            <i class="fas fa-user text-danger"></i>
+                            当前账号
+                        </label>
+                        <select id="single-account-select" class="form-control">
+                            <option value="">加载中...</option>
                         </select>
                     </div>
                 </div>
@@ -629,6 +632,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             // 默认选择小红书平台
             selectPlatform('xhs');
+            
+            // 预检查所有平台的登录状态
+            checkAllPlatformsLoginStatus();
         });
 
         // 切换标签页
@@ -648,8 +654,78 @@
             event.target.classList.add('active');
         }
 
+        // 检查所有平台的登录状态
+        async function checkAllPlatformsLoginStatus() {
+            const platforms = ['xhs', 'dy', 'ks', 'bili'];
+            
+            for (const platform of platforms) {
+                try {
+                    // 首先获取该平台的账号列表
+                    const accountsResponse = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
+                    const accountsResult = await accountsResponse.json();
+                    
+                    let accountId = null;
+                    
+                    // 如果有可用账号，选择第一个
+                    if (accountsResponse.ok && accountsResult.code === 200 && accountsResult.data && accountsResult.data.length > 0) {
+                        const firstAccount = accountsResult.data[0];
+                        accountId = firstAccount.id;
+                    }
+                    
+                    // 构建登录检查请求数据
+                    const loginCheckData = {
+                        platform: platform
+                    };
+                    
+                    // 如果有账号ID，添加到请求中
+                    if (accountId) {
+                        loginCheckData.account_id = accountId;
+                    }
+                    
+                    const response = await fetch('/api/v1/login/check', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(loginCheckData)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.code === 200) {
+                        updatePlatformStatus(platform, 'logged_in');
+                    } else {
+                        updatePlatformStatus(platform, 'not_logged_in');
+                    }
+                } catch (error) {
+                    console.error(`检查平台 ${platform} 登录状态失败:`, error);
+                    updatePlatformStatus(platform, 'error');
+                }
+            }
+        }
+
+        // 更新平台状态显示
+        function updatePlatformStatus(platform, status) {
+            const card = document.querySelector(`.platform-card[data-platform="${platform}"]`);
+            if (card) {
+                const statusElement = card.querySelector('.platform-status');
+                if (statusElement) {
+                    if (status === 'logged_in') {
+                        statusElement.textContent = '✅ 已登录';
+                        statusElement.style.color = '#28a745';
+                    } else if (status === 'error') {
+                        statusElement.textContent = '❌ 检查失败';
+                        statusElement.style.color = '#dc3545';
+                    } else {
+                        statusElement.textContent = '⚠️ 需登录';
+                        statusElement.style.color = '#ffc107';
+                    }
+                }
+            }
+        }
+
         // 选择单平台
-        function selectPlatform(platform) {
+        async function selectPlatform(platform) {
             // 移除所有平台的选中状态
             const platformCards = document.querySelectorAll('#single-platform .platform-card');
             platformCards.forEach(card => card.classList.remove('selected'));
@@ -659,40 +735,148 @@
             if (selectedCard && !selectedCard.classList.contains('coming-soon')) {
                 selectedCard.classList.add('selected');
                 selectedPlatform = platform;
+                
+                // 检查该平台的登录状态
+                await checkPlatformLoginStatus(platform);
+                
                 // 加载该平台的账号列表
                 loadPlatformAccounts(platform);
             }
         }
 
-        // 加载指定平台的账号列表
+        // 检查指定平台的登录状态
+        async function checkPlatformLoginStatus(platform) {
+            try {
+                // 首先获取该平台的账号列表
+                const accountsResponse = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
+                const accountsResult = await accountsResponse.json();
+                
+                let accountId = null;
+                let accountName = "自动选择账号";
+                
+                // 如果有可用账号，选择第一个
+                if (accountsResponse.ok && accountsResult.code === 200 && accountsResult.data && accountsResult.data.length > 0) {
+                    const firstAccount = accountsResult.data[0];
+                    accountId = firstAccount.id;
+                    accountName = firstAccount.account_name || firstAccount.username || `账号${firstAccount.id}`;
+                    console.log(`自动选择账号: ${accountName} (ID: ${accountId})`);
+                }
+                
+                // 使用正确的登录检查API
+                const loginCheckData = {
+                    platform: platform
+                };
+                
+                // 如果有账号ID，添加到请求中
+                if (accountId) {
+                    loginCheckData.account_id = accountId;
+                }
+                
+                const response = await fetch('/api/v1/login/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginCheckData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    // 登录状态正常
+                    const platformName = getPlatformName(platform);
+                    showToast(`${platformName} 登录状态正常`, 'success');
+                    
+                    // 更新状态显示
+                    updateStatus('single-platform-result', 
+                        `✅ ${platformName} 登录状态检查\n\n` +
+                        `状态: ${data.data?.status || 'logged_in'}\n` +
+                        `账号: ${data.data?.account_info?.account_name || accountName}\n` +
+                        `消息: ${data.message}\n\n` +
+                        `可以开始爬取任务`
+                    );
+                    
+                    // 更新平台状态显示
+                    updatePlatformStatus(platform, 'logged_in');
+                } else {
+                    // 需要登录
+                    const platformName = getPlatformName(platform);
+                    showToast(`${platformName} 需要登录，请先进行远程登录`, 'warning');
+                    
+                    // 更新状态显示
+                    updateStatus('single-platform-result', 
+                        `⚠️ ${platformName} 登录状态检查\n\n` +
+                        `状态: ${data.data?.status || 'not_logged_in'}\n` +
+                        `消息: ${data.message}\n\n` +
+                        `请先进行远程登录：\n\n` +
+                        `<button onclick="window.open('/static/account_management.html', '_blank')" class="btn btn-primary">🔐 前往账号管理</button>`
+                    );
+                    
+                    // 更新平台状态显示
+                    updatePlatformStatus(platform, 'not_logged_in');
+                }
+                
+            } catch (error) {
+                console.error('检查平台登录状态失败:', error);
+                showToast('检查登录状态失败', 'error');
+                
+                // 更新平台状态显示
+                updatePlatformStatus(platform, 'error');
+            }
+        }
+
+        // 加载平台账号列表
         async function loadPlatformAccounts(platform) {
-            const accountSelect = document.getElementById('single-account-select');
-            
-            // 重置选项
-            accountSelect.innerHTML = '<option value="">自动选择账号</option>';
-            
             try {
                 const response = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
-                const accounts = await response.json();
+                const result = await response.json();
                 
-                if (response.ok && accounts.length > 0) {
-                    accounts.forEach(account => {
-                        const option = document.createElement('option');
-                        option.value = account.id;
-                        option.textContent = `${account.account_name || account.username} (ID: ${account.id})`;
-                        accountSelect.appendChild(option);
-                    });
-                } else {
-                    // 没有账号时添加提示选项
+                const accountSelect = document.getElementById('single-account-select');
+                
+                if (response.ok && result.code === 200 && result.data && result.data.length > 0) {
+                    // 清空现有选项
+                    accountSelect.innerHTML = '';
+                    
+                    // 直接选择第一个账号
+                    const firstAccount = result.data[0];
                     const option = document.createElement('option');
-                    option.value = "";
-                    option.textContent = "暂无可用账号，请先添加账号";
-                    option.disabled = true;
+                    option.value = firstAccount.id;
+                    option.textContent = firstAccount.account_name || firstAccount.username || `账号${firstAccount.id}`;
+                    option.selected = true; // 默认选中第一个
                     accountSelect.appendChild(option);
+                    
+                    console.log(`自动选择账号: ${option.textContent} (ID: ${firstAccount.id})`);
+                    
+                    // 更新显示状态
+                    updateStatus('single-platform-result', 
+                        `✅ 已自动选择账号\n\n` +
+                        `平台: ${getPlatformName(platform)}\n` +
+                        `账号: ${option.textContent}\n` +
+                        `账号ID: ${firstAccount.id}\n\n` +
+                        `可以开始爬取任务`
+                    );
+                    
+                } else {
+                    // 没有可用账号
+                    accountSelect.innerHTML = '<option value="">暂无可用账号</option>';
+                    
+                    updateStatus('single-platform-result', 
+                        `⚠️ 平台 ${getPlatformName(platform)} 没有可用账号\n\n` +
+                        `请先添加账号：\n\n` +
+                        `<button onclick="window.open('/static/account_management.html', '_blank')" class="btn btn-primary">➕ 添加账号</button>`
+                    );
                 }
+                
             } catch (error) {
                 console.error('加载账号列表失败:', error);
-                showToast('加载账号列表失败', 'error');
+                const accountSelect = document.getElementById('single-account-select');
+                accountSelect.innerHTML = '<option value="">加载失败</option>';
+                
+                updateStatus('single-platform-result', 
+                    `❌ 加载账号列表失败\n\n` +
+                    `错误: ${error.message}\n\n` +
+                    `请检查网络连接或刷新页面重试`
+                );
             }
         }
 
@@ -729,53 +913,49 @@
             });
         });
 
-        // 开始单平台爬取
+        // 启动单平台爬虫
         async function startSinglePlatformCrawler() {
+            if (!selectedPlatform) {
+                showToast('请先选择平台', 'warning');
+                return;
+            }
+            
+            // 获取选中的账号ID
+            const accountSelect = document.getElementById('single-account-select');
+            const selectedAccountId = accountSelect.value;
+            
+            if (!selectedAccountId) {
+                showToast('没有可用的账号，请先添加账号', 'error');
+                return;
+            }
+            
             const keywords = document.getElementById('single-keywords').value.trim();
-            const maxCount = parseInt(document.getElementById('single-max-count').value);
-            const crawlerType = document.getElementById('single-crawler-type').value;
-            const accountId = document.getElementById('single-account-select').value;
+            if (!keywords) {
+                showToast('请输入搜索关键词', 'warning');
+                return;
+            }
+            
+            const maxCount = document.getElementById('single-max-count').value;
+            const crawlType = document.getElementById('single-crawler-type').value;
             const proxyStrategy = document.getElementById('single-proxy-strategy').value;
             const getComments = document.getElementById('single-get-comments').checked;
             const videoPriority = document.getElementById('single-video-priority').checked;
 
-            if (!keywords) {
-                showToast('请输入搜索关键词', 'error');
-                return;
-            }
-
-            if (!selectedPlatform) {
-                showToast('请选择爬取平台', 'error');
-                return;
-            }
-
             const requestData = {
                 platform: selectedPlatform,
                 keywords: keywords,
-                max_notes_count: maxCount,
-                crawler_type: crawlerType,
+                max_notes_count: parseInt(maxCount),
+                crawler_type: crawlType,
+                proxy_strategy: proxyStrategy,
                 get_comments: getComments,
                 video_priority: videoPriority,
-                save_data_option: "db"  // 固定为数据库存储
+                save_data_option: "db",  // 固定为数据库存储
+                account_id: parseInt(selectedAccountId) // 使用选中的账号ID
             };
-
-            // 添加账号ID（如果选择了）
-            if (accountId) {
-                requestData.account_id = parseInt(accountId);
-            }
-
-            // 添加代理配置
-            if (proxyStrategy && proxyStrategy !== 'disabled') {
-                requestData.use_proxy = true;
-                requestData.proxy_strategy = proxyStrategy;
-            } else {
-                requestData.use_proxy = false;
-                requestData.proxy_strategy = 'disabled';
-            }
-
-            updateStatus('single-platform-result', '正在启动单平台爬取任务...');
-
+            
             try {
+                showToast('正在启动爬虫任务...', 'info');
+                
                 const response = await fetch('/api/v1/crawler/start', {
                     method: 'POST',
                     headers: {
@@ -783,90 +963,176 @@
                     },
                     body: JSON.stringify(requestData)
                 });
-
-                const data = await response.json();
                 
-                if (response.ok) {
-                    currentTaskId = data.task_id;
+                const result = await response.json();
+                
+                if (result.status === 'need_login') {
+                    // 需要登录
+                    const platformName = getPlatformName(selectedPlatform);
+                    showToast(`${platformName} 需要登录，请先进行远程登录`, 'warning');
                     
-                    // 创建任务管理详情页的超链接
-                    const taskLink = `<a href="/static/task_management.html?task_id=${data.task_id}" target="_blank" style="color: #007bff; text-decoration: underline;">📊 查看任务详情</a>`;
-                    
-                    updateStatus('single-platform-result', `✅ 任务创建成功！\n\n任务ID: ${data.task_id}\n\n${taskLink}\n\n${JSON.stringify(data, null, 2)}`);
-                    showToast('单平台爬取任务启动成功！', 'success');
-                    
-                    // 自动监控任务状态
-                    monitorTaskStatus(data.task_id, 'single-platform-result');
-                } else {
-                    updateStatus('single-platform-result', `错误: ${data.detail || '启动失败'}`);
-                    showToast('启动失败: ' + (data.detail || '未知错误'), 'error');
+                    updateStatus('single-platform-result', 
+                        `⚠️ ${platformName} 登录状态检查\n\n` +
+                        `状态: 需要登录\n` +
+                        `消息: ${result.message}\n\n` +
+                        `请先进行远程登录：\n\n` +
+                        `<button onclick="window.open('/static/account_management.html', '_blank')" class="btn btn-primary">🔐 前往账号管理</button>`
+                    );
+                    return;
                 }
+                
+                if (response.ok && result.status === 'started') {
+                    showToast('爬虫任务启动成功', 'success');
+                    
+                    updateStatus('single-platform-result', 
+                        `✅ 爬虫任务启动成功\n\n` +
+                        `任务ID: ${result.task_id}\n` +
+                        `平台: ${getPlatformName(selectedPlatform)}\n` +
+                        `关键词: ${keywords}\n` +
+                        `最大数量: ${maxCount}\n` +
+                        `账号ID: ${selectedAccountId}\n\n` +
+                        `任务正在后台运行，请查看任务结果页面`
+                    );
+                    
+                    // 清空表单
+                    clearSinglePlatformForm();
+                    
+                } else {
+                    showToast(`启动失败: ${result.message || '未知错误'}`, 'error');
+                    
+                    updateStatus('single-platform-result', 
+                        `❌ 爬虫任务启动失败\n\n` +
+                        `错误信息: ${result.message || '未知错误'}\n\n` +
+                        `请检查配置或重试`
+                    );
+                }
+                
             } catch (error) {
-                updateStatus('single-platform-result', `网络错误: ${error.message}`);
-                showToast('网络错误: ' + error.message, 'error');
+                console.error('启动爬虫任务失败:', error);
+                showToast('启动失败，请检查网络连接', 'error');
+                
+                updateStatus('single-platform-result', 
+                    `❌ 启动爬虫任务失败\n\n` +
+                    `网络错误: ${error.message}\n\n` +
+                    `请检查网络连接后重试`
+                );
             }
         }
 
-        // 开始多平台爬取
+        // 启动多平台爬虫
         async function startMultiPlatformCrawler() {
             const keywords = document.getElementById('multi-keywords').value.trim();
-            const maxCount = parseInt(document.getElementById('multi-max-count').value);
-            const saveFormat = document.getElementById('multi-save-format').value;
-            const accountStrategy = document.getElementById('multi-account-strategy').value;
-            const getComments = document.getElementById('multi-get-comments').checked;
-            const enableImages = document.getElementById('multi-enable-images').checked;
-
             if (!keywords) {
-                showToast('请输入搜索关键词', 'error');
+                showToast('请输入搜索关键词', 'warning');
                 return;
             }
-
-            if (selectedMultiPlatforms.size === 0) {
-                showToast('请至少选择一个平台', 'error');
+            
+            const maxCount = parseInt(document.getElementById('multi-max-count').value);
+            const selectedPlatforms = Array.from(document.querySelectorAll('#multi-platform .platform-card.selected')).map(card => card.dataset.platform);
+            
+            if (selectedPlatforms.length === 0) {
+                showToast('请至少选择一个平台', 'warning');
                 return;
             }
-
+            
+            // 为每个平台获取账号信息
+            const platformAccounts = {};
+            for (const platform of selectedPlatforms) {
+                try {
+                    const response = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
+                    const result = await response.json();
+                    
+                    if (response.ok && result.code === 200 && result.data && result.data.length > 0) {
+                        // 选择第一个账号
+                        const firstAccount = result.data[0];
+                        platformAccounts[platform] = {
+                            account_id: firstAccount.id,
+                            account_name: firstAccount.account_name || firstAccount.username || `账号${firstAccount.id}`
+                        };
+                    } else {
+                        showToast(`平台 ${getPlatformName(platform)} 没有可用账号`, 'error');
+                        return;
+                    }
+                } catch (error) {
+                    showToast(`获取平台 ${getPlatformName(platform)} 账号失败`, 'error');
+                    return;
+                }
+            }
+            
             const requestData = {
-                platforms: Array.from(selectedMultiPlatforms),
+                platforms: selectedPlatforms,
                 keywords: keywords,
-                max_count_per_platform: maxCount,
-                enable_comments: getComments,
-                enable_images: enableImages,
-                save_format: saveFormat,
-                account_strategy: accountStrategy
+                max_notes_count: maxCount,
+                platform_accounts: platformAccounts // 传递账号信息
             };
-
-            updateStatus('multi-platform-result', '正在启动多平台爬取任务...');
-
+            
             try {
-                const response = await fetch('/api/v1/multi-platform/start', {
+                showToast('正在启动多平台爬虫任务...', 'info');
+                
+                const response = await fetch('/api/v1/crawler/start-multi', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(requestData)
                 });
-
-                const data = await response.json();
                 
-                if (response.ok) {
-                    currentTaskId = data.task_id;
+                const result = await response.json();
+                
+                if (result.status === 'need_login') {
+                    // 需要登录
+                    const platformName = getPlatformName(result.data?.platform || selectedPlatforms[0]);
+                    showToast(`${platformName} 需要登录，请先进行远程登录`, 'warning');
                     
-                    // 创建任务管理详情页的超链接
-                    const taskLink = `<a href="/static/task_management.html?task_id=${data.task_id}" target="_blank" style="color: #007bff; text-decoration: underline;">📊 查看任务详情</a>`;
-                    
-                    updateStatus('multi-platform-result', `✅ 任务创建成功！\n\n任务ID: ${data.task_id}\n\n${taskLink}\n\n${JSON.stringify(data, null, 2)}`);
-                    showToast('多平台爬取任务启动成功！', 'success');
-                    
-                    // 自动监控任务状态
-                    monitorTaskStatus(data.task_id, 'multi-platform-result');
-                } else {
-                    updateStatus('multi-platform-result', `错误: ${data.detail || '启动失败'}`);
-                    showToast('启动失败: ' + (data.detail || '未知错误'), 'error');
+                    updateStatus('multi-platform-result', 
+                        `⚠️ ${platformName} 登录状态检查\n\n` +
+                        `状态: 需要登录\n` +
+                        `消息: ${result.message}\n\n` +
+                        `请先进行远程登录：\n\n` +
+                        `<button onclick="window.open('/static/account_management.html', '_blank')" class="btn btn-primary">🔐 前往账号管理</button>`
+                    );
+                    return;
                 }
+                
+                if (response.ok && result.status === 'started') {
+                    showToast('多平台爬虫任务启动成功', 'success');
+                    
+                    let accountInfo = '';
+                    for (const [platform, account] of Object.entries(platformAccounts)) {
+                        accountInfo += `${getPlatformName(platform)}: ${account.account_name} (ID: ${account.account_id})\n`;
+                    }
+                    
+                    updateStatus('multi-platform-result', 
+                        `✅ 多平台爬虫任务启动成功\n\n` +
+                        `任务ID: ${result.task_id}\n` +
+                        `关键词: ${keywords}\n` +
+                        `最大数量: ${maxCount}\n` +
+                        `平台账号:\n${accountInfo}\n` +
+                        `任务正在后台运行，请查看任务结果页面`
+                    );
+                    
+                    // 清空表单
+                    clearMultiPlatformForm();
+                    
+                } else {
+                    showToast(`启动失败: ${result.message || '未知错误'}`, 'error');
+                    
+                    updateStatus('multi-platform-result', 
+                        `❌ 多平台爬虫任务启动失败\n\n` +
+                        `错误信息: ${result.message || '未知错误'}\n\n` +
+                        `请检查配置或重试`
+                    );
+                }
+                
             } catch (error) {
-                updateStatus('multi-platform-result', `网络错误: ${error.message}`);
-                showToast('网络错误: ' + error.message, 'error');
+                console.error('启动多平台爬虫任务失败:', error);
+                showToast('启动失败，请检查网络连接', 'error');
+                
+                updateStatus('multi-platform-result', 
+                    `❌ 启动多平台爬虫任务失败\n\n` +
+                    `网络错误: ${error.message}\n\n` +
+                    `请检查网络连接后重试`
+                );
             }
         }
 

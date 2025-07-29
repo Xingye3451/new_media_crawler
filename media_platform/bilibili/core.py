@@ -52,13 +52,12 @@ class BilibiliCrawler(AbstractCrawler):
         self.bilibili_store = BilibiliStoreFactory.create_store()
         self.task_id = task_id
 
-    async def start(self):
+    async def start(self) -> None:
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
             ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
-            playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(
-                ip_proxy_info)
+            playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
         async with async_playwright() as playwright:
             # Launch a browser context.
@@ -76,73 +75,53 @@ class BilibiliCrawler(AbstractCrawler):
 
             # Create a client to interact with the xiaohongshu website.
             self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
-            if not await self.bili_client.pong():
-                # 从数据库读取cookies，支持账号选择
-                account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-                cookie_str = await get_cookies_from_database("bili", account_id)
-                
-                if account_id:
-                    utils.logger.info(f"[BilibiliCrawler] 使用指定账号: {account_id}")
-                else:
-                    utils.logger.info(f"[BilibiliCrawler] 使用默认账号（最新登录）")
-                
-                login_obj = BilibiliLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # your mobile phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str
-                )
-                await login_obj.begin()
-                await self.bili_client.update_cookies(browser_context=self.browser_context)
-
+            
+            # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
+            utils.logger.info("[BilibiliCrawler] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[BilibiliCrawler] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[BilibiliCrawler] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("bili", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[BilibiliCrawler] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.bili_client.set_cookies_from_string(cookie_str)
+                    
+                    # 验证cookies是否有效
+                    if await self.bili_client.pong():
+                        utils.logger.info("[BilibiliCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                        # 更新cookies到客户端
+                        await self.bili_client.update_cookies(browser_context=self.browser_context)
+                    else:
+                        utils.logger.error("[BilibiliCrawler] ❌ 数据库中的cookies无效，无法继续")
+                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                except Exception as e:
+                    utils.logger.error(f"[BilibiliCrawler] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[BilibiliCrawler] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
-                # Search for video and retrieve their comment information.
+                # Search for notes and retrieve their comment information.
                 await self.search()
             elif config.CRAWLER_TYPE == "detail":
                 # Get the information and comments of the specified post
-                await self.get_specified_videos(config.BILI_SPECIFIED_ID_LIST)
+                await self.get_specified_notes()
             elif config.CRAWLER_TYPE == "creator":
-                if config.CREATOR_MODE:
-                    for creator_id in config.BILI_CREATOR_ID_LIST:
-                        await self.get_creator_videos(int(creator_id))
-                else:
-                    await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST)
-            else:
-                pass
-            utils.logger.info(
-                "[BilibiliCrawler.start] Bilibili Crawler finished ...")
+                # Get the information and comments of the specified creator
+                await self.get_creators_and_notes()
 
-    @staticmethod
-    async def get_pubtime_datetime(start: str = config.START_DAY, end: str = config.END_DAY) -> Tuple[str, str]:
-        """
-        获取 bilibili 作品发布日期起始时间戳 pubtime_begin_s 与发布日期结束时间戳 pubtime_end_s
-        ---
-        :param start: 发布日期起始时间，YYYY-MM-DD
-        :param end: 发布日期结束时间，YYYY-MM-DD
-        
-        Note
-        ---
-        - 搜索的时间范围为 start 至 end，包含 start 和 end
-        - 若要搜索同一天的内容，为了包含 start 当天的搜索内容，则 pubtime_end_s 的值应该为 pubtime_begin_s 的值加上一天再减去一秒，即 start 当天的最后一秒
-            - 如仅搜索 2024-01-05 的内容，pubtime_begin_s = 1704384000，pubtime_end_s = 1704470399
-              转换为可读的 datetime 对象：pubtime_begin_s = datetime.datetime(2024, 1, 5, 0, 0)，pubtime_end_s = datetime.datetime(2024, 1, 5, 23, 59, 59)
-        - 若要搜索 start 至 end 的内容，为了包含 end 当天的搜索内容，则 pubtime_end_s 的值应该为 pubtime_end_s 的值加上一天再减去一秒，即 end 当天的最后一秒
-            - 如搜索 2024-01-05 - 2024-01-06 的内容，pubtime_begin_s = 1704384000，pubtime_end_s = 1704556799
-              转换为可读的 datetime 对象：pubtime_begin_s = datetime.datetime(2024, 1, 5, 0, 0)，pubtime_end_s = datetime.datetime(2024, 1, 6, 23, 59, 59)
-        """
-        # 转换 start 与 end 为 datetime 对象
-        start_day: datetime = datetime.strptime(start, '%Y-%m-%d')
-        end_day: datetime = datetime.strptime(end, '%Y-%m-%d')
-        if start_day > end_day:
-            raise ValueError('Wrong time range, please check your start and end argument, to ensure that the start cannot exceed end')
-        elif start_day == end_day:  # 搜索同一天的内容
-            end_day = start_day + timedelta(days=1) - timedelta(seconds=1)  # 则将 end_day 设置为 start_day + 1 day - 1 second
-        else:  # 搜索 start 至 end
-            end_day = end_day + timedelta(days=1) - timedelta(seconds=1)  # 则将 end_day 设置为 end_day + 1 day - 1 second
-        # 将其重新转换为时间戳
-        return str(int(start_day.timestamp())), str(int(end_day.timestamp()))
+            utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
 
     async def search(self):
         """
@@ -748,6 +727,11 @@ class BilibiliCrawler(AbstractCrawler):
         try:
             utils.logger.info(f"[BilibiliCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
             
+            # 🆕 设置account_id到实例变量，供start方法使用
+            self.account_id = account_id
+            if account_id:
+                utils.logger.info(f"[BilibiliCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
+            
             # 设置配置
             import config
             config.KEYWORDS = keywords
@@ -759,10 +743,22 @@ class BilibiliCrawler(AbstractCrawler):
             # 启动爬虫
             await self.start()
             
-            # 获取存储的数据
+            # 由于Redis存储是通过回调函数处理的，我们需要从Redis中获取数据
+            # 或者直接返回爬取过程中收集的数据
             results = []
+            
+            # 如果使用了Redis存储，尝试从Redis获取数据
             if hasattr(self, 'bilibili_store') and hasattr(self.bilibili_store, 'get_all_content'):
                 results = await self.bilibili_store.get_all_content()
+            
+            # 如果Redis中没有数据，尝试从任务结果中获取
+            if not results and hasattr(self, 'task_id'):
+                from utils.redis_manager import redis_manager
+                try:
+                    task_videos = await redis_manager.get_task_videos(self.task_id, "bili")
+                    results = task_videos
+                except Exception as e:
+                    utils.logger.warning(f"[BilibiliCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
             
             utils.logger.info(f"[BilibiliCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results

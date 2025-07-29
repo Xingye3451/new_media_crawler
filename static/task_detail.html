@@ -474,8 +474,8 @@
                 <div class="header-actions">
                     <a href="/static/task_results.html" class="btn btn-white">← 返回列表</a>
                     <a href="/static/video_favorites.html" class="btn btn-white">📚 我的收藏</a>
+                    <a href="/static/creator_management.html" class="btn btn-white">👤 创作者管理</a>
                     <button class="btn btn-white" onclick="downloadAll()">批量下载</button>
-
                     <button class="btn btn-white" onclick="exportData()">导出数据</button>
                 </div>
             </div>
@@ -625,8 +625,8 @@
                     <span class="info-value">${stats.total_videos || 0}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-label">评论数量</span>
-                    <span class="info-value">${stats.total_comments || 0}</span>
+                    <span class="info-label">平均评论</span>
+                    <span class="info-value">${stats.avg_comments || 0}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">平均点赞</span>
@@ -717,6 +717,7 @@
                             <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
                             <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
                             <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
+                            <button class="btn btn-warning btn-sm" onclick="addCreatorToFavoritesFromVideo('${video.author_id || video.user_id}', '${video.nickname || video.user_name || video.author_name}')">👤 收藏创作者</button>
                         </div>
                     </div>
                 `;
@@ -759,6 +760,7 @@
                         <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
                         <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
                         <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
+                        <button class="btn btn-warning btn-sm" onclick="addCreatorToFavoritesFromVideo('${video.author_id || video.user_id}', '${video.nickname || video.user_name || video.author_name}')">👤 收藏创作者</button>
                     </div>
                 `;
                 list.appendChild(listItem);
@@ -1135,6 +1137,114 @@
                 console.error('收藏失败:', error);
                 alert('收藏失败，请稍后重试');
             }
+        }
+
+        // 收藏创作者
+        async function addCreatorToFavoritesFromVideo(creatorId, creatorName) {
+            try {
+                // 调试信息
+                console.log('收藏创作者参数:', { creatorId, creatorName });
+                console.log('当前任务信息:', taskInfo);
+                console.log('当前视频数据:', videos);
+
+                // 获取正确的平台信息
+                const correctPlatform = taskInfo.task_info?.platform || 'unknown';
+                
+                // 如果creatorId是undefined，尝试从视频数据中查找
+                let correctCreatorId = creatorId;
+                let correctCreatorName = creatorName;
+                
+                if (creatorId === 'undefined' || !creatorId) {
+                    // 从当前视频数据中查找匹配的创作者
+                    const currentVideo = videos.find(v => 
+                        (v.nickname || v.user_name || v.author_name) === creatorName
+                    );
+                    
+                    if (currentVideo) {
+                        correctCreatorId = currentVideo.author_id || currentVideo.user_id || currentVideo.uid || currentVideo.user_id;
+                        correctCreatorName = currentVideo.author_name || currentVideo.nickname || currentVideo.user_name || creatorName;
+                    }
+                }
+
+                if (!correctCreatorId || correctCreatorId === 'undefined') {
+                    alert('无法获取创作者ID，请稍后重试');
+                    return;
+                }
+
+                // 从当前视频数据中获取完整的创作者信息
+                const currentVideo = videos.find(v => 
+                    (v.author_id || v.user_id || v.uid) === correctCreatorId || 
+                    (v.nickname || v.user_name || v.author_name) === correctCreatorName
+                );
+
+                if (!currentVideo) {
+                    alert('无法获取创作者信息，请稍后重试');
+                    return;
+                }
+
+                // 构建完整的创作者数据
+                const creatorData = {
+                    creator_id: correctCreatorId,
+                    platform: correctPlatform,
+                    name: currentVideo.author_name || currentVideo.nickname || currentVideo.user_name || correctCreatorName,
+                    nickname: currentVideo.nickname || currentVideo.user_name || currentVideo.author_name || correctCreatorName,
+                    avatar: currentVideo.author_avatar || currentVideo.user_avatar || currentVideo.avatar || '',
+                    signature: currentVideo.author_signature || currentVideo.user_signature || currentVideo.signature || '',
+                    unique_id: currentVideo.author_unique_id || currentVideo.user_unique_id || currentVideo.unique_id || '',
+                    sec_uid: currentVideo.author_sec_uid || currentVideo.user_sec_uid || currentVideo.sec_uid || '',
+                    short_id: currentVideo.author_short_id || currentVideo.user_short_id || currentVideo.short_id || '',
+                    ip_location: currentVideo.ip_location || '',
+                    // 保存原始数据用于后续分析
+                    raw_data: {
+                        author_id: currentVideo.author_id,
+                        author_name: currentVideo.author_name,
+                        author_nickname: currentVideo.author_nickname,
+                        author_avatar: currentVideo.author_avatar,
+                        author_signature: currentVideo.author_signature,
+                        author_unique_id: currentVideo.author_unique_id,
+                        author_sec_uid: currentVideo.author_sec_uid,
+                        author_short_id: currentVideo.author_short_id,
+                        user_id: currentVideo.user_id,
+                        user_name: currentVideo.user_name,
+                        nickname: currentVideo.nickname,
+                        avatar: currentVideo.avatar,
+                        signature: currentVideo.signature,
+                        unique_id: currentVideo.unique_id,
+                        sec_uid: currentVideo.sec_uid,
+                        short_id: currentVideo.short_id,
+                        ip_location: currentVideo.ip_location
+                    },
+                    add_ts: Date.now(),
+                    last_modify_ts: Date.now()
+                };
+
+                console.log('发送的创作者数据:', creatorData);
+
+                // 调用创作者管理API
+                const response = await fetch('/api/v1/creators/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(creatorData)
+                });
+
+                const data = await response.json();
+                if (data.code === 200) {
+                    const platformText = getPlatformText(correctPlatform);
+                    alert(`✅ 创作者收藏成功！\n\n📝 创作者信息：\n• 名称：${creatorData.name}\n• 昵称：${creatorData.nickname}\n• 平台：${platformText}\n• 头像：${creatorData.avatar ? '已保存' : '无'}\n• 签名：${creatorData.signature || '无'}\n\n创作者已添加到创作者管理列表，可以在"创作者管理"页面查看和管理。`);
+                } else {
+                    alert('❌ 创作者收藏失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('收藏创作者失败:', error);
+                alert('收藏创作者失败，请稍后重试');
+            }
+        }
+
+        // 保留原来的函数以兼容其他调用
+        async function addCreatorToFavorites(creatorId, creatorName, platform) {
+            return addCreatorToFavoritesFromVideo(creatorId, creatorName);
         }
 
         function formatDate(dateString) {
