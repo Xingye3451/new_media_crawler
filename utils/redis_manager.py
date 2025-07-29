@@ -53,7 +53,9 @@ class TaskResultRedisManager:
         # TTL配置
         self.task_result_ttl = self.redis_config.task_result_ttl
         
-        utils.logger.info("✅ TaskResultRedisManager 初始化完成")
+        # 只在调试模式下输出初始化日志
+        if utils.logger.level <= 10:  # DEBUG级别
+            utils.logger.info("✅ TaskResultRedisManager 初始化完成")
     
     def _get_task_result_key(self, task_id: str) -> str:
         """获取任务结果key"""
@@ -79,7 +81,9 @@ class TaskResultRedisManager:
         """测试Redis连接"""
         try:
             result = self.redis_client.ping()
-            utils.logger.info("✅ Redis连接测试成功")
+            # 只在调试模式下输出成功日志
+            if utils.logger.level <= 10:  # DEBUG级别
+                utils.logger.info("✅ Redis连接测试成功")
             return True
         except Exception as e:
             utils.logger.error(f"❌ Redis连接测试失败: {e}")
@@ -682,10 +686,6 @@ class TaskResultRedisManager:
                 'page_size': page_size,
                 'total_pages': 0
             }
-
-
-# 全局Redis管理器实例
-redis_manager = TaskResultRedisManager()
 
 
 # 便捷函数

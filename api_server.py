@@ -86,26 +86,16 @@ async def startup_event():
         utils.logger.info("🚀 MediaCrawler API 服务启动中...")
         
         # 初始化数据库连接
-        utils.logger.info("📊 初始化数据库连接...")
         await db.init_db()
         utils.logger.info("✅ 数据库连接初始化完成")
         
         # 初始化Redis连接
-        utils.logger.info("📊 初始化Redis连接...")
         from utils.redis_manager import TaskResultRedisManager
         redis_manager = TaskResultRedisManager()
         await redis_manager.ping()
         utils.logger.info("✅ Redis连接初始化完成")
         
-        # 初始化文件管理服务 (已替换为视频收藏管理)
-        # utils.logger.info("📁 初始化文件管理服务...")
-        # from services.file_management_service import FileManagementService
-        # file_service = FileManagementService()
-        # await file_service.initialize()
-        # utils.logger.info("✅ 文件管理服务初始化完成")
-        
         # 加载配置
-        utils.logger.info("⚙️ 加载配置...")
         from config.env_config_loader import config_loader
         env = config_loader.get_environment()
         utils.logger.info(f"✅ 配置加载完成，环境: {env}")
@@ -124,12 +114,10 @@ async def shutdown_event():
         utils.logger.info("🛑 MediaCrawler API 服务关闭中...")
         
         # 关闭数据库连接
-        utils.logger.info("📊 关闭数据库连接...")
         await db.close()
         utils.logger.info("✅ 数据库连接已关闭")
         
         # 关闭Redis连接
-        utils.logger.info("📊 关闭Redis连接...")
         from utils.redis_manager import TaskResultRedisManager
         redis_manager = TaskResultRedisManager()
         await redis_manager.close()

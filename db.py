@@ -57,9 +57,8 @@ async def init_db():
     Returns:
 
     """
-    utils.logger.info("[init_db] start init mediacrawler db connect object")
     await init_mediacrawler_db()
-    utils.logger.info("[init_db] end init mediacrawler db connect object")
+    utils.logger.info("✅ 数据库连接池初始化完成")
 
 
 async def close():

@@ -172,17 +172,17 @@ class BilibiliCrawler(AbstractCrawler):
                         continue
 
                     try:
-                    utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, page: {page}")
-                    video_id_list: List[str] = []
-                    videos_res = await self.bili_client.search_video_by_keyword(
-                        keyword=keyword,
-                        page=page,
-                        page_size=bili_limit_count,
-                        order=SearchOrderType.DEFAULT,
-                        pubtime_begin_s=0,  # 作品发布日期起始时间戳
-                        pubtime_end_s=0  # 作品发布日期结束日期时间戳
-                    )
-                    video_list: List[Dict] = videos_res.get("result")
+                        utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, page: {page}")
+                        video_id_list: List[str] = []
+                        videos_res = await self.bili_client.search_video_by_keyword(
+                            keyword=keyword,
+                            page=page,
+                            page_size=bili_limit_count,
+                            order=SearchOrderType.DEFAULT,
+                            pubtime_begin_s=0,  # 作品发布日期起始时间戳
+                            pubtime_end_s=0  # 作品发布日期结束日期时间戳
+                        )
+                        video_list: List[Dict] = videos_res.get("result")
 
                         # 限制并发数量，避免资源耗尽
                         max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(video_list))
@@ -196,11 +196,11 @@ class BilibiliCrawler(AbstractCrawler):
                             batch_videos = video_list[i:i + batch_size]
                             utils.logger.info(f"[BilibiliCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_videos)}")
                             
-                    task_list = []
-                    try:
+                            task_list = []
+                            try:
                                 task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in batch_videos]
-                    except Exception as e:
-                        utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
+                            except Exception as e:
+                                utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
                                 continue
                             
                             try:
@@ -221,13 +221,13 @@ class BilibiliCrawler(AbstractCrawler):
                             await asyncio.sleep(1)
                         
                         # 处理视频详情
-                    for video_item in video_items:
-                        if video_item:
+                        for video_item in video_items:
+                            if video_item:
                                 try:
-                            video_id_list.append(video_item.get("View").get("aid"))
-                            await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
-                            await self.bilibili_store.update_up_info(video_item)
-                            await self.get_bilibili_video(video_item, semaphore)
+                                    video_id_list.append(video_item.get("View").get("aid"))
+                                    await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
+                                    await self.bilibili_store.update_up_info(video_item)
+                                    await self.get_bilibili_video(video_item, semaphore)
                                     processed_count += 1
                                 except Exception as e:
                                     utils.logger.error(f"[BilibiliCrawler.search] Failed to process video: {e}")
@@ -250,7 +250,7 @@ class BilibiliCrawler(AbstractCrawler):
                         
                     except Exception as e:
                         utils.logger.error(f"[BilibiliCrawler.search] Unexpected error during search: {e}")
-                    page += 1
+                        page += 1
                         continue
                         
             # 按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
@@ -313,10 +313,10 @@ class BilibiliCrawler(AbstractCrawler):
                             for video_item in video_items:
                                 if video_item:
                                     try:
-                                    video_id_list.append(video_item.get("View").get("aid"))
-                                    await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
-                                    await self.bilibili_store.update_up_info(video_item)
-                                    await self.get_bilibili_video(video_item, semaphore)
+                                        video_id_list.append(video_item.get("View").get("aid"))
+                                        await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
+                                        await self.bilibili_store.update_up_info(video_item)
+                                        await self.get_bilibili_video(video_item, semaphore)
                                         processed_count += 1
                                     except Exception as e:
                                         utils.logger.error(f"[BilibiliCrawler.search] Failed to process video: {e}")
@@ -358,11 +358,11 @@ class BilibiliCrawler(AbstractCrawler):
             
             utils.logger.info(f"[BilibiliCrawler.batch_get_video_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_videos)}")
             
-        task_list: List[Task] = []
+            task_list: List[Task] = []
             for video_id in batch_videos:
-            task = asyncio.create_task(self.get_comments(
-                video_id, semaphore), name=video_id)
-            task_list.append(task)
+                task = asyncio.create_task(self.get_comments(
+                    video_id, semaphore), name=video_id)
+                task_list.append(task)
             
             try:
                 # 添加超时控制

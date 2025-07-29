@@ -369,10 +369,18 @@ class TaskManagementService:
             
             platform_stats = await db.query(platform_stats_sql)
             
+            # 返回扁平化的数据结构，以便前端JavaScript能够正确读取
             return {
+                'total_tasks': task_stats.get('total_tasks', 0) if task_stats else 0,
+                'completed_tasks': task_stats.get('completed_tasks', 0) if task_stats else 0,
+                'running_tasks': task_stats.get('running_tasks', 0) if task_stats else 0,
+                'failed_tasks': task_stats.get('failed_tasks', 0) if task_stats else 0,
+                'total_videos': video_stats.get('total_videos', 0) if video_stats else 0,
+                'platform_stats': {row['platform']: row['count'] for row in platform_stats} if platform_stats else {},
+                # 保留原始嵌套结构以便其他API使用
                 'task_stats': task_stats,
                 'video_stats': video_stats,
-                'platform_stats': platform_stats
+                'platform_stats_list': platform_stats
             }
             
         except Exception as e:

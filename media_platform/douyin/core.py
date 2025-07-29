@@ -163,18 +163,18 @@ class DouYinCrawler(AbstractCrawler):
                     utils.logger.info(f"[DouYinCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_data)}")
                     
                     for post_item in batch_data:
-                    try:
-                        aweme_info: Dict = post_item.get("aweme_info") or \
-                                           post_item.get("aweme_mix_info", {}).get("mix_items")[0]
-                    except TypeError:
-                        continue
+                        try:
+                            aweme_info: Dict = post_item.get("aweme_info") or \
+                                               post_item.get("aweme_mix_info", {}).get("mix_items")[0]
+                        except TypeError:
+                            continue
                         
                         try:
-                    aweme_list.append(aweme_info.get("aweme_id", ""))
-                    # 添加关键词信息
-                    aweme_info["source_keyword"] = keyword
-                    # 使用Redis存储
-                    await self.douyin_store.store_content({**aweme_info, "task_id": self.task_id} if self.task_id else aweme_info)
+                            aweme_list.append(aweme_info.get("aweme_id", ""))
+                            # 添加关键词信息
+                            aweme_info["source_keyword"] = keyword
+                            # 使用Redis存储
+                            await self.douyin_store.store_content({**aweme_info, "task_id": self.task_id} if self.task_id else aweme_info)
                             processed_count += 1
                         except Exception as e:
                             utils.logger.error(f"[DouYinCrawler.search] Failed to process video: {e}")
@@ -191,10 +191,10 @@ class DouYinCrawler(AbstractCrawler):
             
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
             
-            # 获取评论（如果启用）
+                        # 获取评论（如果启用）
             if config.ENABLE_GET_COMMENTS and aweme_list:
                 try:
-            await self.batch_get_note_comments(aweme_list)
+                    await self.batch_get_note_comments(aweme_list)
                 except Exception as e:
                     utils.logger.error(f"[DouYinCrawler.search] Failed to get comments: {e}")
             
@@ -249,13 +249,13 @@ class DouYinCrawler(AbstractCrawler):
             
             utils.logger.info(f"[DouYinCrawler.batch_get_note_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_awemes)}")
 
-        task_list: List[Task] = []
+            task_list: List[Task] = []
             for aweme_id in batch_awemes:
-            task = asyncio.create_task(
-                self.get_comments(aweme_id, semaphore), name=aweme_id)
-            task_list.append(task)
+                task = asyncio.create_task(
+                    self.get_comments(aweme_id, semaphore), name=aweme_id)
+                task_list.append(task)
             
-        if len(task_list) > 0:
+            if len(task_list) > 0:
                 try:
                     # 添加超时控制
                     await asyncio.wait_for(

@@ -420,7 +420,9 @@
                     document.getElementById('totalTasks').textContent = stats.total_tasks || 0;
                     document.getElementById('successTasks').textContent = stats.completed_tasks || 0;
                     document.getElementById('totalVideos').textContent = stats.total_videos || 0;
-                    document.getElementById('storageUsed').textContent = formatBytes(stats.collected_videos * 1024 * 1024 || 0); // 估算存储大小
+                    // 使用total_videos来估算存储大小，每个视频假设平均10MB
+                    const estimatedStorage = (stats.total_videos || 0) * 10 * 1024 * 1024;
+                    document.getElementById('storageUsed').textContent = formatBytes(estimatedStorage);
                 }
             } catch (error) {
                 console.error('加载统计信息失败:', error);

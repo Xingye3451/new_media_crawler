@@ -35,8 +35,6 @@ class MinioClient:
             secure = storage_config.get('minio_secure', False)
             bucket = storage_config.get('minio_bucket', 'mediacrawler-videos')
             
-            self.bucket_name = bucket
-            
             self.client = Minio(
                 endpoint=endpoint,
                 access_key=access_key,
@@ -44,7 +42,11 @@ class MinioClient:
                 secure=secure
             )
             
-            logger.info(f"MinIO client initialized successfully: {endpoint}, bucket: {self.bucket_name}")
+            self.bucket_name = bucket
+            
+            # 只在调试模式下输出初始化日志
+            if logger.level <= 10:  # DEBUG级别
+                logger.info(f"MinIO client initialized successfully: {endpoint}, bucket: {self.bucket_name}")
             
         except Exception as e:
             logger.error(f"MinIO client initialization failed: {str(e)}")
@@ -57,7 +59,8 @@ class MinioClient:
                     secure=False
                 )
                 self.bucket_name = 'mediacrawler-videos'
-                logger.info("Using default MinIO configuration")
+                if logger.level <= 10:  # DEBUG级别
+                    logger.info("Using default MinIO configuration")
             except Exception as fallback_e:
                 logger.error(f"Default MinIO configuration also failed: {str(fallback_e)}")
             self.client = None

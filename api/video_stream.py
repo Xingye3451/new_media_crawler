@@ -14,7 +14,16 @@ from services.video_stream_service import VideoStreamService
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-stream_service = VideoStreamService()
+
+# 使用懒加载模式，避免在模块导入时就创建实例
+_stream_service = None
+
+def get_stream_service():
+    """获取视频流服务实例（懒加载）"""
+    global _stream_service
+    if _stream_service is None:
+        _stream_service = VideoStreamService()
+    return _stream_service
 
 @router.get("/stream/video", response_model=Dict[str, Any])
 async def get_stream_info(
@@ -24,7 +33,7 @@ async def get_stream_info(
 ):
     """获取视频流信息"""
     try:
-        result = await stream_service.stream_video(video_url, platform, content_id)
+        result = await get_stream_service().stream_video(video_url, platform, content_id)
         
         if result["success"]:
             return {
@@ -45,7 +54,7 @@ async def get_stream_info(
 async def stream_cache_video(cache_key: str):
     """流式播放缓存视频"""
     try:
-        cache_file = os.path.join(stream_service.cache_dir, f"{cache_key}.mp4")
+        cache_file = os.path.join(get_stream_service().cache_dir, f"{cache_key}.mp4")
         
         if not os.path.exists(cache_file):
             raise HTTPException(status_code=404, detail="缓存文件不存在")
@@ -71,10 +80,9 @@ async def stream_local_video(file_hash: str):
     """流式播放本地视频"""
     try:
         # 从数据库获取文件记录
-        from services.video_favorite_service import VideoFavoriteService
-        favorite_service = VideoFavoriteService()
+        from api.video_favorites import get_favorite_service
         
-        file_record = await favorite_service._get_file_by_hash(file_hash)
+        file_record = await get_favorite_service()._get_file_by_hash(file_hash)
         if not file_record:
             raise HTTPException(status_code=404, detail="文件记录不存在")
         
@@ -201,7 +209,7 @@ async def stream_direct_video(
 async def get_cache_info():
     """获取缓存信息"""
     try:
-        info = await stream_service.get_cache_info()
+        info = await get_stream_service().get_cache_info()
         return {
             "code": 200,
             "message": "获取成功",
@@ -215,7 +223,7 @@ async def get_cache_info():
 async def cleanup_cache():
     """清理过期缓存"""
     try:
-        await stream_service.cleanup_expired_cache()
+        await get_stream_service().cleanup_expired_cache()
         return {
             "code": 200,
             "message": "清理完成",

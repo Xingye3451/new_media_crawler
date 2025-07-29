@@ -14,7 +14,16 @@ from services.video_favorite_service import VideoFavoriteService
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-favorite_service = VideoFavoriteService()
+
+# 使用懒加载模式，避免在模块导入时就创建实例
+_favorite_service = None
+
+def get_favorite_service():
+    """获取视频收藏服务实例（懒加载）"""
+    global _favorite_service
+    if _favorite_service is None:
+        _favorite_service = VideoFavoriteService()
+    return _favorite_service
 
 class VideoFavoriteRequest(BaseModel):
     platform: str
@@ -34,7 +43,7 @@ class VideoDownloadRequest(BaseModel):
 async def add_favorite(request: VideoFavoriteRequest):
     """添加视频收藏"""
     try:
-        result = await favorite_service.add_favorite(request.dict())
+        result = await get_favorite_service().add_favorite(request.dict())
         
         if result["success"]:
             return {
@@ -55,7 +64,7 @@ async def add_favorite(request: VideoFavoriteRequest):
 async def download_favorite(request: VideoDownloadRequest):
     """下载收藏的视频"""
     try:
-        result = await favorite_service.download_and_store(
+        result = await get_favorite_service().download_and_store(
             file_hash=request.file_hash,
             storage_type=request.storage_type
         )
@@ -79,7 +88,7 @@ async def download_favorite(request: VideoDownloadRequest):
 async def get_favorites_statistics():
     """获取收藏统计信息"""
     try:
-        result = await favorite_service.get_favorites_statistics()
+        result = await get_favorite_service().get_favorites_statistics()
         
         if result["success"]:
             return {
@@ -104,7 +113,7 @@ async def get_favorites(
 ):
     """获取收藏列表"""
     try:
-        result = await favorite_service.get_favorites(
+        result = await get_favorite_service().get_favorites(
             platform=platform,
             page=page,
             page_size=page_size
@@ -129,7 +138,7 @@ async def get_favorites(
 async def remove_favorite(file_hash: str):
     """移除收藏"""
     try:
-        result = await favorite_service.remove_favorite(file_hash)
+        result = await get_favorite_service().remove_favorite(file_hash)
         
         if result["success"]:
             return {
@@ -150,8 +159,7 @@ async def remove_favorite(file_hash: str):
 async def get_favorite_detail(file_hash: str):
     """获取收藏详情"""
     try:
-        from services.video_favorite_service import VideoFavoriteService
-        service = VideoFavoriteService()
+        service = get_favorite_service()
         
         file_record = await service._get_file_by_hash(file_hash)
         if not file_record:
@@ -174,7 +182,7 @@ async def preview_favorite_video(file_hash: str):
     """预览收藏的视频（基于MinIO）"""
     try:
         # 获取收藏详情
-        file_record = await favorite_service._get_file_by_hash(file_hash)
+        file_record = await get_favorite_service()._get_file_by_hash(file_hash)
         if not file_record:
             raise HTTPException(status_code=404, detail="收藏记录不存在")
         
@@ -183,7 +191,7 @@ async def preview_favorite_video(file_hash: str):
             raise HTTPException(status_code=400, detail="视频未下载到MinIO存储")
         
         # 从MinIO获取预签名URL
-        minio_url = await favorite_service.minio_client.get_presigned_url(
+        minio_url = await get_favorite_service().minio_client.get_presigned_url(
             bucket_name=file_record["minio_bucket"],
             object_name=file_record["minio_object_key"],
             expires=3600  # 1小时有效期
@@ -213,7 +221,7 @@ async def download_favorite_video(file_hash: str):
     """下载收藏的视频（基于MinIO）"""
     try:
         # 获取收藏详情
-        file_record = await favorite_service._get_file_by_hash(file_hash)
+        file_record = await get_favorite_service()._get_file_by_hash(file_hash)
         if not file_record:
             raise HTTPException(status_code=404, detail="收藏记录不存在")
         
@@ -222,7 +230,7 @@ async def download_favorite_video(file_hash: str):
             raise HTTPException(status_code=400, detail="视频未下载到MinIO存储")
         
         # 从MinIO获取预签名URL用于下载
-        download_url = await favorite_service.minio_client.get_presigned_url(
+        download_url = await get_favorite_service().minio_client.get_presigned_url(
             bucket_name=file_record["minio_bucket"],
             object_name=file_record["minio_object_key"],
             expires=3600  # 1小时有效期

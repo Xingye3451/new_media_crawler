@@ -146,14 +146,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
             if not ping_success:
                 utils.logger.info("[XiaoHongShuCrawler] 需要重新登录")
                 try:
-                login_obj = XiaoHongShuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # input your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str,
-                )
-                await login_obj.begin()
+                    login_obj = XiaoHongShuLogin(
+                        login_type=config.LOGIN_TYPE,
+                        login_phone="",  # input your phone number
+                        browser_context=self.browser_context,
+                        context_page=self.context_page,
+                        cookie_str=cookie_str,
+                    )
+                    await login_obj.begin()
                     # 登录成功后更新客户端cookies
                     await self.xhs_client.update_cookies(browser_context=self.browser_context)
                     utils.logger.info("[XiaoHongShuCrawler] 登录成功，已更新cookies")
@@ -215,9 +215,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
             start_time = time.time()
             processed_count = 0
             
-            while (
-                page - start_page + 1
-            ) * xhs_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            # 修复循环条件，添加更清晰的退出逻辑
+            while True:
+                # 检查是否超过最大数量限制
+                current_total = (page - start_page + 1) * xhs_limit_count
+                if current_total > config.CRAWLER_MAX_NOTES_COUNT:
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] 已达到最大数量限制: {config.CRAWLER_MAX_NOTES_COUNT}, 当前预估总数: {current_total}")
+                    break
+                
                 if page < start_page:
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Skip page {page}")
                     page += 1
@@ -265,6 +270,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         filtered_items = video_items
                         utils.logger.info(f"[XiaoHongShuCrawler.search] After video filtering, {len(filtered_items)} video items remain")
                     
+                    # 如果没有有效内容，跳过这一页
+                    if not filtered_items:
+                        utils.logger.info(f"[XiaoHongShuCrawler.search] No valid items on page {page}, skipping")
+                        page += 1
+                        continue
+                    
                     # 限制并发数量，避免资源耗尽
                     max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(filtered_items))
                     semaphore = asyncio.Semaphore(max_concurrent)
@@ -277,13 +288,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         batch_items = filtered_items[i:i + batch_size]
                         utils.logger.info(f"[XiaoHongShuCrawler.search] Processing batch {i//batch_size + 1}, items: {len(batch_items)}")
                         
-                    task_list = [
-                        self.get_note_detail_async_task(
-                            note_id=post_item.get("id"),
-                            xsec_source=post_item.get("xsec_source"),
-                            xsec_token=post_item.get("xsec_token"),
-                            semaphore=semaphore,
-                        )
+                        task_list = [
+                            self.get_note_detail_async_task(
+                                note_id=post_item.get("id"),
+                                xsec_source=post_item.get("xsec_source"),
+                                xsec_token=post_item.get("xsec_token"),
+                                semaphore=semaphore,
+                            )
                             for post_item in batch_items
                         ]
                         
@@ -310,10 +321,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     for note_detail in note_details:
                         if note_detail:
                             try:
-                            await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
-                            await self.get_notice_media(note_detail)
-                            note_ids.append(note_detail.get("note_id"))
-                            xsec_tokens.append(note_detail.get("xsec_token"))
+                                await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
+                                await self.get_notice_media(note_detail)
+                                note_ids.append(note_detail.get("note_id"))
+                                xsec_tokens.append(note_detail.get("xsec_token"))
                                 successful_details += 1
                                 processed_count += 1
                             except Exception as e:
@@ -334,6 +345,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             await self.batch_get_note_comments(note_ids, xsec_tokens)
                         except Exception as e:
                             utils.logger.error(f"[XiaoHongShuCrawler.search] Failed to get comments: {e}")
+                    
+                    # 检查是否已达到目标数量
+                    if processed_count >= config.CRAWLER_MAX_NOTES_COUNT:
+                        utils.logger.info(f"[XiaoHongShuCrawler.search] 已达到目标数量: {config.CRAWLER_MAX_NOTES_COUNT}")
+                        break
                     
                     page += 1
                     
@@ -530,35 +546,35 @@ class XiaoHongShuCrawler(AbstractCrawler):
             
             utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Processing comment batch {i//batch_size + 1}, notes: {len(batch_notes)}")
             
-        task_list: List[Task] = []
+            task_list: List[Task] = []
             for index, note_id in enumerate(batch_notes):
-            task = asyncio.create_task(
-                self.get_comments(
-                        note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore
-                ),
-                name=note_id,
-            )
-            task_list.append(task)
-            
-            try:
-                # 添加超时控制
-                await asyncio.wait_for(
-                    asyncio.gather(*task_list, return_exceptions=True),
-                    timeout=120  # 2分钟超时
+                task = asyncio.create_task(
+                    self.get_comments(
+                            note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore
+                    ),
+                    name=note_id,
                 )
-                total_processed += len(batch_notes)
-                utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Completed batch {i//batch_size + 1}")
-            except asyncio.TimeoutError:
-                utils.logger.warning(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch timeout")
-                break
-            except Exception as e:
-                utils.logger.error(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch error: {e}")
-                continue
+                task_list.append(task)
+                
+                try:
+                    # 添加超时控制
+                    await asyncio.wait_for(
+                        asyncio.gather(*task_list, return_exceptions=True),
+                        timeout=120  # 2分钟超时
+                    )
+                    total_processed += len(batch_notes)
+                    utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Completed batch {i//batch_size + 1}")
+                except asyncio.TimeoutError:
+                    utils.logger.warning(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch timeout")
+                    break
+                except Exception as e:
+                    utils.logger.error(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment batch error: {e}")
+                    continue
+                
+                # 添加间隔，避免请求过于频繁
+                await asyncio.sleep(2)
             
-            # 添加间隔，避免请求过于频繁
-            await asyncio.sleep(2)
-        
-        utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment processing completed. Total processed: {total_processed}")
+            utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment processing completed. Total processed: {total_processed}")
 
     async def get_comments(
         self, note_id: str, xsec_token: str, semaphore: asyncio.Semaphore
