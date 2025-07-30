@@ -154,7 +154,12 @@ async def stream_direct_video(
         elif platform == "bili":
             headers.update({
                 "Referer": "https://www.bilibili.com/",
-                "Origin": "https://www.bilibili.com"
+                "Origin": "https://www.bilibili.com",
+                "Sec-Fetch-Dest": "video",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "cross-site",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache"
             })
             logger.info(f"识别为B站平台: {platform}")
         elif platform == "wb":
@@ -179,8 +184,22 @@ async def stream_direct_video(
         
         async def video_stream():
             """视频流生成器"""
+            # B站特殊处理：先尝试处理403错误
+            final_url = decoded_url
+            if platform == "bili" or 'bilibili' in decoded_url or 'bilivideo' in decoded_url:
+                try:
+                    from services.bilibili_video_service import bilibili_video_service
+                    processed_url = await bilibili_video_service.get_video_url_with_retry(decoded_url)
+                    if processed_url:
+                        final_url = processed_url
+                        logger.info(f"B站视频URL处理成功: {final_url[:100]}...")
+                    else:
+                        logger.warning(f"B站视频URL处理失败，使用原始URL")
+                except Exception as e:
+                    logger.warning(f"B站视频URL处理异常: {e}")
+            
             async with aiohttp.ClientSession() as session:
-                async with session.get(decoded_url, headers=headers) as response:
+                async with session.get(final_url, headers=headers) as response:
                     if response.status == 200:
                         logger.info(f"开始流式传输视频，状态码: {response.status}")
                         async for chunk in response.content.iter_chunked(8192):

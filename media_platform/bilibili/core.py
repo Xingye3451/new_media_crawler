@@ -203,7 +203,28 @@ class BilibiliCrawler(AbstractCrawler):
                         for video_item in video_items:
                             if video_item:
                                 try:
-                                    video_id_list.append(video_item.get("View").get("aid"))
+                                    import json
+                                    utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_item, ensure_ascii=False)}")
+                                    
+                                    # 获取视频播放地址
+                                    video_info = video_item.get("View", {})
+                                    aid = video_info.get("aid")
+                                    cid = video_info.get("cid")
+                                    
+                                    if aid and cid:
+                                        # 获取播放地址
+                                        utils.logger.info(f"[BilibiliCrawler] 开始获取播放地址 - aid: {aid}, cid: {cid}")
+                                        play_url_result = await self.get_video_play_url_task(aid, cid, semaphore)
+                                        if play_url_result:
+                                            # 将播放地址数据合并到视频信息中
+                                            video_item.update(play_url_result)
+                                            utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
+                                        else:
+                                            utils.logger.warning(f"[BilibiliCrawler] 获取播放地址失败 - aid: {aid}, cid: {cid}")
+                                    else:
+                                        utils.logger.warning(f"[BilibiliCrawler] 缺少aid或cid - aid: {aid}, cid: {cid}")
+                                    
+                                    video_id_list.append(aid)
                                     await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
                                     await self.bilibili_store.update_up_info(video_item)
                                     await self.get_bilibili_video(video_item, semaphore)
@@ -292,7 +313,26 @@ class BilibiliCrawler(AbstractCrawler):
                             for video_item in video_items:
                                 if video_item:
                                     try:
-                                        video_id_list.append(video_item.get("View").get("aid"))
+                                        import json
+                                        utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_item, ensure_ascii=False)}")
+                                        
+                                        # 获取视频播放地址
+                                        video_info = video_item.get("View", {})
+                                        aid = video_info.get("aid")
+                                        cid = video_info.get("cid")
+                                        
+                                        if aid and cid:
+                                            # 获取播放地址
+                                            utils.logger.info(f"[BilibiliCrawler] 开始获取播放地址 - aid: {aid}, cid: {cid}")
+                                            play_url_result = await self.get_video_play_url_task(aid, cid, semaphore)
+                                            if play_url_result:
+                                                # 将播放地址数据合并到视频信息中
+                                                video_item.update(play_url_result)
+                                                utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
+                                        else:
+                                            utils.logger.warning(f"[BilibiliCrawler] 缺少aid或cid - aid: {aid}, cid: {cid}")
+                                        
+                                        video_id_list.append(aid)
                                         await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
                                         await self.bilibili_store.update_up_info(video_item)
                                         await self.get_bilibili_video(video_item, semaphore)
@@ -421,8 +461,20 @@ class BilibiliCrawler(AbstractCrawler):
         video_aids_list = []
         for video_detail in video_details:
             if video_detail is not None:
+                import json
+                utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_detail, ensure_ascii=False)}")
                 video_item_view: Dict = video_detail.get("View")
                 video_aid: str = video_item_view.get("aid")
+                video_cid: str = video_item_view.get("cid")
+                
+                if video_aid and video_cid:
+                    # 获取播放地址
+                    play_url_result = await self.get_video_play_url_task(video_aid, video_cid, semaphore)
+                    if play_url_result:
+                        # 将播放地址数据合并到视频信息中
+                        video_detail.update(play_url_result)
+                        utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
+                
                 if video_aid:
                     video_aids_list.append(video_aid)
                 await self.bilibili_store.update_bilibili_video(video_detail, task_id=self.task_id)
@@ -824,3 +876,19 @@ class BilibiliCrawler(AbstractCrawler):
                     await self.close()
             except Exception as e:
                 utils.logger.warning(f"[BilibiliCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")
+
+    async def close(self):
+        """
+        安全关闭浏览器和相关资源
+        """
+        try:
+            if hasattr(self, 'browser_context') and self.browser_context:
+                await self.browser_context.close()
+                utils.logger.info("[BilibiliCrawler] 浏览器上下文已关闭")
+            
+            if hasattr(self, 'context_page') and self.context_page:
+                await self.context_page.close()
+                utils.logger.info("[BilibiliCrawler] 页面已关闭")
+                
+        except Exception as e:
+            utils.logger.warning(f"[BilibiliCrawler.close] 关闭资源时出现警告: {e}")

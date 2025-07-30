@@ -73,6 +73,14 @@ async def download_video(request: VideoDownloadRequest):
               'bilivideo' in video_url):
             headers['Referer'] = 'https://www.bilibili.com/'
             headers['Origin'] = 'https://www.bilibili.com'
+            # B站特殊处理：添加更多反爬虫请求头
+            headers.update({
+                'Sec-Fetch-Dest': 'video',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'cross-site',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            })
             logger.info(f"识别为B站平台: {platform}")
             
         elif (platform == "wb" or 
@@ -100,19 +108,34 @@ async def download_video(request: VideoDownloadRequest):
         
         async def video_stream():
             logger.info(f"开始下载视频: {request.video_url}, 平台: {request.platform}")
+            
+            # B站特殊处理：先尝试处理403错误
+            final_video_url = request.video_url
+            if platform == "bili" or 'bilibili' in video_url or 'bilivideo' in video_url:
+                try:
+                    from services.bilibili_video_service import bilibili_video_service
+                    processed_url = await bilibili_video_service.get_video_url_with_retry(request.video_url)
+                    if processed_url:
+                        final_video_url = processed_url
+                        logger.info(f"B站视频URL处理成功: {final_video_url[:100]}...")
+                    else:
+                        logger.warning(f"B站视频URL处理失败，使用原始URL")
+                except Exception as e:
+                    logger.warning(f"B站视频URL处理异常: {e}")
+            
             async with aiohttp.ClientSession() as session:
-                async with session.get(request.video_url, headers=headers) as response:
+                async with session.get(final_video_url, headers=headers) as response:
                     if response.status == 200:
-                        logger.info(f"视频下载成功，开始流式传输: {request.video_url}")
+                        logger.info(f"视频下载成功，开始流式传输: {final_video_url}")
                         # 流式传输视频数据
                         chunk_count = 0
                         async for chunk in response.content.iter_chunked(8192):
                             yield chunk
                             chunk_count += 1
-                        logger.info(f"视频流式传输完成，共传输 {chunk_count} 个数据块: {request.video_url}")
+                        logger.info(f"视频流式传输完成，共传输 {chunk_count} 个数据块: {final_video_url}")
                     else:
                         # 记录错误但不抛出异常
-                        logger.error(f"视频下载失败，状态码: {response.status}, URL: {request.video_url}")
+                        logger.error(f"视频下载失败，状态码: {response.status}, URL: {final_video_url}")
                         # 返回空内容，让前端处理
                         yield b""
         

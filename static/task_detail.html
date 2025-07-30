@@ -642,18 +642,23 @@
         // 加载视频列表
         async function loadVideos() {
             try {
+                console.log('🔍 开始加载视频列表，taskId:', taskId, 'page:', currentPage, 'pageSize:', pageSize);
                 const response = await fetch(`/api/v1/task-results/${taskId}/videos?page=${currentPage}&page_size=${pageSize}`);
                 const data = await response.json();
                 
+                console.log('📊 API返回数据:', data);
+                
                 if (data.code === 200) {
-                    videos = data.data.videos;
+                    videos = data.data.videos || [];
+                    console.log('✅ 加载到视频数量:', videos.length);
+                    console.log('📋 视频列表:', videos);
                     renderVideos();
-                    renderPagination(data.data.total_pages);
+                    renderPagination(data.data.total_pages || 1);
                 } else {
-                    console.error('加载视频列表失败');
+                    console.error('❌ 加载视频列表失败:', data.message);
                 }
             } catch (error) {
-                console.error('加载视频列表失败:', error);
+                console.error('❌ 加载视频列表失败:', error);
             }
         }
 
@@ -688,7 +693,7 @@
                 const videoCard = document.createElement('div');
                 videoCard.className = 'video-card';
                 videoCard.innerHTML = `
-                    <div class="video-thumbnail" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">
+                    <div class="video-thumbnail" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">
                         ${video.cover_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" onerror="handleThumbnailError(this)">` : ''}
                         <div class="play-icon">▶</div>
                     </div>
@@ -713,10 +718,10 @@
                             </div>
                         </div>
                         <div class="video-actions">
-                            <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">▶️ 预览</button>
-                            <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
-                            <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
-                            <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
+                            <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">▶️ 预览</button>
+                            <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">📥 下载</button>
+                            <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id || video.id}')">⭐ 收藏</button>
+                            <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id || video.id}')">💬 评论</button>
                             <button class="btn btn-warning btn-sm" onclick="addCreatorToFavoritesFromVideo('${video.author_id || video.user_id}', '${video.nickname || video.user_name || video.author_name}')">👤 收藏创作者</button>
                         </div>
                     </div>
@@ -756,10 +761,10 @@
                         </div>
                     </div>
                     <div class="list-actions">
-                        <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id}')">▶️ 预览</button>
-                        <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id}')">📥 下载</button>
-                        <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id}')">⭐ 收藏</button>
-                        <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id}')">💬 评论</button>
+                        <button class="btn btn-primary btn-sm" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">▶️ 预览</button>
+                        <button class="btn btn-success btn-sm" onclick="downloadVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">📥 下载</button>
+                        <button class="btn btn-info btn-sm" onclick="addToFavorites('${video.aweme_id || video.note_id || video.video_id || video.id}')">⭐ 收藏</button>
+                        <button class="btn btn-secondary btn-sm" onclick="viewComments('${video.aweme_id || video.note_id || video.video_id || video.id}')">💬 评论</button>
                         <button class="btn btn-warning btn-sm" onclick="addCreatorToFavoritesFromVideo('${video.author_id || video.user_id}', '${video.nickname || video.user_name || video.author_name}')">👤 收藏创作者</button>
                     </div>
                 `;
@@ -804,9 +809,20 @@
 
         // 预览视频
         async function previewVideo(videoId) {
+            console.log('🔍 开始预览视频，videoId:', videoId);
+            console.log('🔍 当前视频列表:', videos);
+            
             const video = videos.find(v => 
-                v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId
+                v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId || v.id === videoId
             );
+            
+            if (!video) {
+                console.error('❌ 未找到视频:', videoId);
+                alert('未找到视频信息');
+                return;
+            }
+            
+            console.log('✅ 找到视频:', video);
             
             if (!video) return;
 
@@ -814,34 +830,49 @@
             
             // 使用新的直接流式传输API播放视频
             let videoSrc = '';
-            if (video.video_url) {
-                const encodedUrl = encodeURIComponent(video.video_url);
+            if (video.video_url || video.video_play_url) {
+                // 优先使用video_play_url，如果没有则使用video_url
+                const videoUrl = video.video_play_url || video.video_url;
+                const encodedUrl = encodeURIComponent(videoUrl);
                 const platform = taskInfo.task_info?.platform || 'unknown';
-                const contentId = video.aweme_id || video.note_id || video.video_id;
+                const contentId = video.aweme_id || video.note_id || video.video_id || video.id;
                 
-                // 优先使用直接流式传输
-                try {
-                    // 先尝试获取流信息
-                    const streamResponse = await fetch(`/api/v1/stream/video?video_url=${encodedUrl}&platform=${platform}&content_id=${contentId}`);
-                    const streamData = await streamResponse.json();
-                    
-                    if (streamData.code === 200 && streamData.data.success) {
-                        // 如果支持直接流式传输，使用直接流URL
-                        if (streamData.data.direct_stream) {
-                            videoSrc = streamData.data.stream_url;
+                console.log('🔍 视频URL信息:', {
+                    video_url: video.video_url,
+                    video_play_url: video.video_play_url,
+                    platform: platform,
+                    contentId: contentId
+                });
+                
+                // B站特殊处理：优先使用直接流式传输
+                if (platform === 'bili' || platform === 'bilibili') {
+                    videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
+                    console.log('B站视频使用直接流式传输:', videoSrc);
+                } else {
+                    // 其他平台优先使用直接流式传输
+                    try {
+                        // 先尝试获取流信息
+                        const streamResponse = await fetch(`/api/v1/stream/video?video_url=${encodedUrl}&platform=${platform}&content_id=${contentId}`);
+                        const streamData = await streamResponse.json();
+                        
+                        if (streamData.code === 200 && streamData.data.success) {
+                            // 如果支持直接流式传输，使用直接流URL
+                            if (streamData.data.direct_stream) {
+                                videoSrc = streamData.data.stream_url;
+                            } else {
+                                // 否则使用缓存URL
+                                videoSrc = streamData.data.stream_url;
+                            }
                         } else {
-                            // 否则使用缓存URL
-                            videoSrc = streamData.data.stream_url;
+                            console.error('获取流信息失败:', streamData.message);
+                            // 降级到直接流式传输
+                            videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                         }
-                    } else {
-                        console.error('获取流信息失败:', streamData.message);
+                    } catch (error) {
+                        console.error('获取流信息失败:', error);
                         // 降级到直接流式传输
                         videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                     }
-                } catch (error) {
-                    console.error('获取流信息失败:', error);
-                    // 降级到直接流式传输
-                    videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                 }
             }
             
@@ -850,12 +881,16 @@
                     <h4>${video.desc || video.title || '无标题'}</h4>
                     <p style="color: #666; margin: 10px 0;">@${video.nickname || video.user_name || '未知用户'}</p>
                     ${videoSrc ? `
-                        <video controls style="max-width: 100%; max-height: 400px;">
+                        <video controls style="max-width: 100%; max-height: 400px;" onerror="handleVideoError(this)">
                             <source src="${videoSrc}" type="video/mp4">
                             您的浏览器不支持视频播放
                         </video>
                         <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
                             💡 使用直接流式传输，实时播放视频内容
+                            ${taskInfo.task_info?.platform === 'bili' || taskInfo.task_info?.platform === 'bilibili' ? '<br>🛡️ B站视频已启用反爬虫保护' : ''}
+                        </div>
+                        <div style="margin-top: 5px; font-size: 0.8em; color: #999;">
+                            调试信息: ${videoSrc}
                         </div>
                     ` : video.cover_url ? `
                         <div style="margin: 20px 0;">
@@ -879,7 +914,7 @@
         async function downloadVideo(videoId) {
             try {
                 const video = videos.find(v => 
-                    v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId
+                    v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId || v.id === videoId
                 );
                 
                 if (!video) {
@@ -1082,6 +1117,26 @@
                 icon.style.cssText = 'display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 2em; color: #ccc;';
                 parent.appendChild(icon);
             }
+        }
+        
+        // 处理视频播放错误
+        function handleVideoError(video) {
+            console.error('❌ 视频播放失败:', video.src);
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = `
+                <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <h5>❌ 视频播放失败</h5>
+                    <p style="color: #666; margin: 10px 0;">可能的原因：</p>
+                    <ul style="text-align: left; color: #666;">
+                        <li>视频链接已过期</li>
+                        <li>网络连接问题</li>
+                        <li>浏览器不支持该视频格式</li>
+                        <li>反爬虫保护机制</li>
+                    </ul>
+                    <p style="color: #999; font-size: 0.8em; margin-top: 10px;">视频URL: ${video.src}</p>
+                </div>
+            `;
+            video.parentElement.appendChild(errorDiv);
         }
 
         // 添加收藏功能

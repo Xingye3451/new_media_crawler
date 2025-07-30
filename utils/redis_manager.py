@@ -743,3 +743,9 @@ async def store_crawler_result(task_id: str, platform: str, account_id: str,
     except Exception as e:
         utils.logger.error(f"❌ 存储爬虫结果失败: {task_id}, 错误: {e}")
         raise 
+
+# 创建全局实例供其他模块使用
+redis_manager = TaskResultRedisManager()
+
+# 导出全局实例
+__all__ = ['TaskResultRedisManager', 'redis_manager', 'store_crawler_result'] 

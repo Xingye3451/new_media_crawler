@@ -206,7 +206,13 @@ async def get_task_videos(
         return {
             "code": 200,
             "message": "获取成功",
-            "data": result
+            "data": {
+                "videos": result.get("items", []),
+                "total": result.get("total", 0),
+                "page": result.get("page", 1),
+                "page_size": result.get("page_size", 20),
+                "total_pages": result.get("total_pages", 1)
+            }
         }
     except Exception as e:
         logger.error(f"获取任务视频列表失败 {task_id}: {str(e)}")
@@ -248,10 +254,25 @@ async def video_action(video_id: int, request: VideoActionRequest):
             if not download_url:
                 raise HTTPException(status_code=404, detail="视频下载链接不存在")
             
+            # B站特殊处理：先尝试处理403错误
+            final_download_url = download_url
+            platform = video.get('platform', 'unknown')
+            if platform == 'bilibili' or 'bilibili' in download_url or 'bilivideo' in download_url:
+                try:
+                    from services.bilibili_video_service import bilibili_video_service
+                    processed_url = await bilibili_video_service.get_video_url_with_retry(download_url)
+                    if processed_url:
+                        final_download_url = processed_url
+                        logger.info(f"B站视频URL处理成功: {final_download_url[:100]}...")
+                    else:
+                        logger.warning(f"B站视频URL处理失败，使用原始URL")
+                except Exception as e:
+                    logger.warning(f"B站视频URL处理异常: {e}")
+            
             minio_url = await minio_service.upload_video(
-                download_url, 
+                final_download_url, 
                 video['aweme_id'], 
-                'douyin'
+                platform
             )
             
             if not minio_url:

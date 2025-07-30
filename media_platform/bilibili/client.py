@@ -97,7 +97,19 @@ class BilibiliClient(AbstractApiClient):
         if isinstance(params, dict):
             final_uri = (f"{uri}?"
                          f"{urlencode(params)}")
-        return await self.request(method="GET", url=f"{self._host}{final_uri}", headers=self.headers)
+        
+        # 为播放地址请求添加特殊请求头
+        headers = self.headers.copy()
+        if "playurl" in uri:
+            headers.update({
+                "Referer": "https://www.bilibili.com/",
+                "Origin": "https://www.bilibili.com",
+                "Sec-Fetch-Dest": "video",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "cross-site"
+            })
+        
+        return await self.request(method="GET", url=f"{self._host}{final_uri}", headers=headers)
 
     async def post(self, uri: str, data: dict) -> Dict:
         data = await self.pre_request_data(data)
@@ -221,17 +233,41 @@ class BilibiliClient(AbstractApiClient):
         """
         if not aid or not cid or aid <= 0 or cid <= 0:
             raise ValueError("aid 和 cid 必须存在")
-        uri = "/x/player/wbi/playurl"
-        params = {
-            "avid": aid,
-            "cid": cid,
-            "qn": 80,
-            "fourk": 1,
-            "fnval": 1,
-            "platform": "pc",
-        }
-
-        return await self.get(uri, params, enable_params_sign=True)
+        
+        # 尝试多个API端点
+        endpoints = [
+            ("/x/player/wbi/playurl", True),   # 带WBI签名
+            ("/x/player/playurl", False),      # 不带WBI签名
+        ]
+        
+        for uri, enable_sign in endpoints:
+            try:
+                params = {
+                    "avid": aid,
+                    "cid": cid,
+                    "qn": 80,
+                    "fourk": 1,
+                    "fnval": 1,
+                    "platform": "pc",
+                    "high_quality": 1,  # 请求高质量视频
+                }
+                
+                utils.logger.info(f"[BilibiliClient] 尝试获取播放地址 - aid: {aid}, cid: {cid}, uri: {uri}")
+                result = await self.get(uri, params, enable_params_sign=enable_sign)
+                
+                # 检查返回结果是否包含视频URL
+                if result and (result.get("durl") or result.get("data", {}).get("durl")):
+                    utils.logger.info(f"[BilibiliClient] 成功获取播放地址 - aid: {aid}, cid: {cid}")
+                    return result
+                else:
+                    utils.logger.warning(f"[BilibiliClient] API返回结果不包含视频URL - aid: {aid}, cid: {cid}, uri: {uri}")
+                    
+            except Exception as e:
+                utils.logger.warning(f"[BilibiliClient] API调用失败 - aid: {aid}, cid: {cid}, uri: {uri}, error: {e}")
+                continue
+        
+        # 如果所有端点都失败，抛出异常
+        raise DataFetchError(f"无法获取视频播放地址 - aid: {aid}, cid: {cid}")
 
     async def get_video_media(self, url: str) -> Union[bytes, None]:
         async with httpx.AsyncClient(proxies=self.proxies) as client:

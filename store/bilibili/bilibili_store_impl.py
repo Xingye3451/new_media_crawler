@@ -144,6 +144,204 @@ class BilibiliDbStoreImplement(AbstractStore):
         """
         await self.unified_store.store_creator(creator_item)
 
+    async def update_bilibili_video(self, video_item: Dict, task_id: str = None):
+        """
+        B站视频内容更新（兼容旧接口）
+        Args:
+            video_item: 视频详情字典
+            task_id: 任务ID，可选
+        """
+        import json
+        from var import source_keyword_var
+        
+        # 提取视频基本信息 - 根据B站实际数据结构调整
+        video_info = video_item.get("View", video_item)  # 兼容两种数据结构
+        video_id = video_info.get("bvid") or video_info.get("aid")
+        if not video_id:
+            return
+        
+        # 提取UP主信息
+        owner_info = video_info.get("owner", {})
+        
+        # 提取统计信息
+        stat_info = video_info.get("stat", {})
+        
+        # 提取视频播放地址和下载地址
+        video_play_url = ""
+        video_download_url = ""
+        
+        # 从原始数据中提取播放地址（如果存在）
+        utils.logger.info(f"[BilibiliStore] 开始提取播放地址，原始数据键: {list(video_item.keys())}")
+        
+        # 检查多种可能的数据结构
+        durl_list = []
+        
+        # 1. 直接从video_item中获取durl
+        if "durl" in video_item:
+            durl_list = video_item.get("durl", [])
+            utils.logger.info(f"[BilibiliStore] 从video_item.durl获取到 {len(durl_list)} 个URL")
+        
+        # 2. 从data.durl中获取
+        elif "data" in video_item and "durl" in video_item["data"]:
+            durl_list = video_item["data"].get("durl", [])
+            utils.logger.info(f"[BilibiliStore] 从video_item.data.durl获取到 {len(durl_list)} 个URL")
+        
+        # 3. 从result.durl中获取
+        elif "result" in video_item and "durl" in video_item["result"]:
+            durl_list = video_item["result"].get("durl", [])
+            utils.logger.info(f"[BilibiliStore] 从video_item.result.durl获取到 {len(durl_list)} 个URL")
+        
+        if durl_list:
+            # 选择最大尺寸的视频URL
+            max_size = -1
+            best_url = ""
+            
+            for durl in durl_list:
+                size = durl.get("size", 0)
+                url = durl.get("url", "")
+                utils.logger.info(f"[BilibiliStore] 检查URL: size={size}, url={url[:50]}...")
+                
+                if size > max_size and url:
+                    max_size = size
+                    best_url = url
+            
+            if best_url:
+                video_download_url = best_url
+                video_play_url = best_url
+                utils.logger.info(f"[BilibiliStore] 选择最佳URL: size={max_size}, url={best_url[:50]}...")
+                
+                # 如果获取到了视频URL，尝试处理403问题
+                try:
+                    from services.bilibili_video_service import bilibili_video_service
+                    processed_url = await bilibili_video_service.get_video_url_with_retry(best_url)
+                    if processed_url:
+                        video_download_url = processed_url
+                        video_play_url = processed_url
+                        utils.logger.info(f"[BilibiliStore] 成功处理视频URL，避免403错误")
+                except Exception as e:
+                    utils.logger.warning(f"[BilibiliStore] 处理视频URL失败: {e}")
+            else:
+                utils.logger.warning(f"[BilibiliStore] 未找到有效的视频URL")
+        else:
+            utils.logger.warning(f"[BilibiliStore] 未找到durl数据")
+        
+        # 构建存储数据
+        save_content_item = {
+            "video_id": video_id,
+            "video_type": "video",
+            "title": video_info.get("title", "")[:500],
+            "desc": video_info.get("desc", ""),
+            "user_id": owner_info.get("mid"),
+            "nickname": owner_info.get("name"),
+            "avatar": owner_info.get("face"),
+            "liked_count": stat_info.get("like", 0),
+            "comment_count": stat_info.get("reply", 0),
+            "share_count": stat_info.get("share", 0),
+            "collect_count": stat_info.get("favorite", 0),
+            "viewd_count": stat_info.get("view", 0),
+            "video_cover_url": video_info.get("pic"),
+            "video_url": f"https://www.bilibili.com/video/{video_id}",
+            "video_play_url": video_play_url,
+            "video_download_url": video_download_url,
+            "create_time": video_info.get("ctime"),
+            "last_modify_ts": video_info.get("ctime"),
+            "raw_data": json.dumps(video_item, ensure_ascii=False),
+            # 新增字段
+            "author_signature": owner_info.get("sign"),
+            "author_unique_id": owner_info.get("mid"),
+            "author_sec_uid": owner_info.get("sec_uid"),
+            "author_short_id": owner_info.get("short_id"),
+            "video_share_url": f"https://www.bilibili.com/video/{video_id}",
+            "image_urls": json.dumps([video_info.get("pic")] if video_info.get("pic") else [], ensure_ascii=False),
+            "audio_url": video_info.get("audio_url", ""),
+            "file_urls": json.dumps([video_download_url] if video_download_url else [], ensure_ascii=False),
+            "ip_location": video_info.get("location", ""),
+            "location": video_info.get("location", ""),
+            "tags": json.dumps(video_info.get("tags", []), ensure_ascii=False),
+            "categories": json.dumps([video_info.get("tname")] if video_info.get("tname") else [], ensure_ascii=False),
+            "topics": json.dumps(video_info.get("topics", []), ensure_ascii=False),
+            "is_favorite": 1 if video_info.get("is_favorite") else 0,
+            "is_deleted": 1 if video_info.get("is_deleted") else 0,
+            "is_private": 1 if video_info.get("is_private") else 0,
+            "is_original": 1 if video_info.get("is_original") else 0,
+            "minio_url": video_info.get("minio_url", ""),
+            "local_path": video_info.get("local_path", ""),
+            # 添加必需字段
+            "source_keyword": source_keyword_var.get(),
+            "platform": "bilibili",
+            "task_id": task_id,
+        }
+        
+        utils.logger.info(f"[BilibiliStore] 处理视频: {video_id}, 标题: {save_content_item['title'][:50]}...")
+        
+        await self.unified_store.store_content(save_content_item)
+
+    async def update_up_info(self, up_info: Dict, task_id: str = None):
+        """
+        B站UP主信息更新
+        Args:
+            up_info: UP主信息字典
+            task_id: 任务ID，可选
+        """
+        import json
+        from var import source_keyword_var
+        
+        # 提取UP主基本信息
+        mid = up_info.get("mid")
+        if not mid:
+            return
+        
+        # 构建存储数据
+        save_content_item = {
+            "video_id": f"up_{mid}",  # 使用特殊前缀标识UP主信息
+            "video_type": "creator",
+            "title": up_info.get("name", "")[:500],
+            "desc": up_info.get("sign", ""),
+            "user_id": mid,
+            "nickname": up_info.get("name"),
+            "avatar": up_info.get("face"),
+            "liked_count": up_info.get("follower", 0),
+            "comment_count": 0,  # UP主信息没有评论数
+            "share_count": 0,
+            "collect_count": 0,
+            "viewd_count": 0,
+            "video_cover_url": up_info.get("face"),
+            "video_url": f"https://space.bilibili.com/{mid}",
+            "video_play_url": "",
+            "video_download_url": "",
+            "create_time": up_info.get("ctime", 0),
+            "last_modify_ts": up_info.get("ctime", 0),
+            "raw_data": json.dumps(up_info, ensure_ascii=False),
+            # 新增字段
+            "author_signature": up_info.get("sign"),
+            "author_unique_id": mid,
+            "author_sec_uid": up_info.get("sec_uid"),
+            "author_short_id": up_info.get("short_id"),
+            "video_share_url": f"https://space.bilibili.com/{mid}",
+            "image_urls": json.dumps([up_info.get("face")] if up_info.get("face") else [], ensure_ascii=False),
+            "audio_url": "",
+            "file_urls": json.dumps([], ensure_ascii=False),
+            "ip_location": "",
+            "location": "",
+            "tags": json.dumps([], ensure_ascii=False),
+            "categories": json.dumps([], ensure_ascii=False),
+            "topics": json.dumps([], ensure_ascii=False),
+            "is_favorite": 0,
+            "is_deleted": 0,
+            "is_private": 0,
+            "is_original": 0,
+            "minio_url": "",
+            "local_path": "",
+            # 添加必需字段
+            "source_keyword": source_keyword_var.get(),
+            "platform": "bilibili",
+            "task_id": task_id,
+        }
+        
+        utils.logger.info(f"[BilibiliStore] 处理UP主信息: {mid}, 昵称: {save_content_item['nickname']}")
+        
+        await self.unified_store.store_content(save_content_item)
+
     async def get_all_content(self) -> List[Dict]:
         """
         获取所有存储的内容

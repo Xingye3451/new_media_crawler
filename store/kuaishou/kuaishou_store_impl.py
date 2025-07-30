@@ -19,14 +19,14 @@ import csv
 import json
 import os
 import pathlib
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import aiofiles
 
 import config
 from base.base_crawler import AbstractStore
 from tools import utils, words
-from var import crawler_type_var
+from var import crawler_type_var, source_keyword_var
 from store.unified_store_impl import UnifiedStoreImplement
 
 
@@ -152,6 +152,94 @@ class KuaishouDbStoreImplement(AbstractStore):
         """
         return await self.unified_store.get_all_content()
 
+    async def update_kuaishou_video(self, video_item: Dict, task_id: str = None):
+        """
+        快手视频内容更新（兼容旧接口）
+        Args:
+            video_item: 视频详情字典
+            task_id: 任务ID，可选
+        """
+        photo_info: Dict = video_item.get("photo", {})
+        video_id = photo_info.get("id")
+        if not video_id:
+            return
+        user_info = video_item.get("author", {})
+        save_content_item = {
+            "video_id": video_id,
+            "video_type": str(video_item.get("type")),
+            "title": photo_info.get("caption", "")[:500],
+            "desc": photo_info.get("caption", ""),
+            "user_id": user_info.get("id"),
+            "nickname": user_info.get("name"),
+            "avatar": user_info.get("headerUrl"),
+            "liked_count": photo_info.get("likeCount", 0),
+            "comment_count": photo_info.get("commentCount", 0),
+            "share_count": photo_info.get("shareCount", 0),
+            "collect_count": photo_info.get("collectCount", 0),
+            "viewd_count": photo_info.get("viewCount", 0),
+            "video_cover_url": photo_info.get("coverUrl"),  # 封面图片
+            "video_url": photo_info.get("photoUrl"),  # 视频播放链接
+            "video_play_url": photo_info.get("photoUrl"),  # 视频播放链接
+            "video_download_url": photo_info.get("photoUrl"),  # 视频下载链接（初始值）
+            "create_time": photo_info.get("timestamp"),
+            "last_modify_ts": photo_info.get("timestamp"),
+            "raw_data": json.dumps(video_item, ensure_ascii=False),
+            # 🆕 新增字段
+            "author_signature": user_info.get("signature"),
+            "author_unique_id": user_info.get("id"),
+            "author_sec_uid": user_info.get("secUid"),
+            "author_short_id": user_info.get("shortId"),
+            "video_share_url": photo_info.get("shareUrl"),
+            "image_urls": json.dumps(photo_info.get("coverUrls", []), ensure_ascii=False),
+            "audio_url": photo_info.get("audioUrl"),
+            "file_urls": json.dumps(photo_info.get("fileUrls", []), ensure_ascii=False),
+            "ip_location": photo_info.get("ipLocation"),
+            "location": photo_info.get("location"),
+            "tags": json.dumps(photo_info.get("tags", []), ensure_ascii=False),
+            "categories": json.dumps(photo_info.get("categories", []), ensure_ascii=False),
+            "topics": json.dumps(photo_info.get("topics", []), ensure_ascii=False),
+            "is_favorite": 1 if photo_info.get("isFavorite") else 0,
+            "is_deleted": 1 if photo_info.get("isDeleted") else 0,
+            "is_private": 1 if photo_info.get("isPrivate") else 0,
+            "is_original": 1 if photo_info.get("isOriginal") else 0,
+            "minio_url": photo_info.get("minioUrl"),
+            "local_path": photo_info.get("localPath"),
+            # 添加必需字段
+            "source_keyword": source_keyword_var.get(),
+            "platform": "kuaishou",
+            "task_id": task_id,
+        }
+        
+        # 🆕 优先使用高清视频下载链接
+        if "manifest" in photo_info:
+            manifest = photo_info.get("manifest", {})
+            if "adaptationSet" in manifest and manifest["adaptationSet"]:
+                adaptation_set = manifest["adaptationSet"][0]
+                if "representation" in adaptation_set and adaptation_set["representation"]:
+                    representation = adaptation_set["representation"][0]
+                    hd_video_url = representation.get("url")
+                    if hd_video_url:
+                        save_content_item["video_download_url"] = hd_video_url
+                        utils.logger.info(f"[KuaishouStore] 使用高清视频下载链接: {hd_video_url[:100]}...")
+        
+        # 备用：使用videoResource中的H264链接
+        if "videoResource" in photo_info:
+            video_resource = photo_info.get("videoResource", {})
+            if "h264" in video_resource:
+                h264 = video_resource.get("h264", {})
+                if "adaptationSet" in h264 and h264["adaptationSet"]:
+                    adaptation_set = h264["adaptationSet"][0]
+                    if "representation" in adaptation_set and adaptation_set["representation"]:
+                        representation = adaptation_set["representation"][0]
+                        h264_video_url = representation.get("url")
+                        if h264_video_url and save_content_item["video_download_url"] == photo_info.get("photoUrl"):
+                            save_content_item["video_download_url"] = h264_video_url
+                            utils.logger.info(f"[KuaishouStore] 使用H264视频下载链接: {h264_video_url[:100]}...")
+        
+        utils.logger.info(f"[KuaishouStore] 最终视频下载链接: {save_content_item['video_download_url'][:100]}...")
+        
+        await self.unified_store.store_content(save_content_item)
+
 
 class KuaishouJsonStoreImplement(AbstractStore):
     json_store_path: str = "data/kuaishou/json"
@@ -161,7 +249,7 @@ class KuaishouJsonStoreImplement(AbstractStore):
     file_count: int = calculate_number_of_files(json_store_path)
     WordCloud = words.AsyncWordCloudGenerator()
 
-    def make_save_file_name(self, store_type: str) -> (str,str):
+    def make_save_file_name(self, store_type: str) -> Tuple[str, str]:
         """
         make save file name by store type
         Args:

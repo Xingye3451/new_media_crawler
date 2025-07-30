@@ -105,13 +105,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     await self.xhs_client.set_cookies_from_string(cookie_str)
                     
                     # 验证cookies是否有效
-                    if await self.xhs_client.pong():
-                        utils.logger.info("[XiaoHongShuCrawler] ✅ 数据库中的cookies有效，开始爬取")
-                        # 更新cookies到客户端
-                        await self.xhs_client.update_cookies(browser_context=self.browser_context)
-                    else:
-                        utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中的cookies无效，无法继续")
-                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                    # if await self.xhs_client.pong():
+                    #     utils.logger.info("[XiaoHongShuCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                    #     # 更新cookies到客户端
+                    #     await self.xhs_client.update_cookies(browser_context=self.browser_context)
+                    # else:
+                    #     utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中的cookies无效，无法继续")
+                    #     raise Exception("数据库中的登录凭证无效，请重新登录")
                 except Exception as e:
                     utils.logger.error(f"[XiaoHongShuCrawler] 使用数据库cookies失败: {e}")
                     raise Exception(f"使用数据库登录凭证失败: {str(e)}")

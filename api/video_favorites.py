@@ -252,8 +252,42 @@ async def download_favorite_video(file_hash: str):
         
         # 流式下载
         async def video_stream():
+            # B站特殊处理：先尝试处理403错误
+            final_download_url = download_url
+            if file_record.get("platform") == "bilibili" or 'bilibili' in download_url or 'bilivideo' in download_url:
+                try:
+                    from services.bilibili_video_service import bilibili_video_service
+                    processed_url = await bilibili_video_service.get_video_url_with_retry(download_url)
+                    if processed_url:
+                        final_download_url = processed_url
+                        logger.info(f"B站视频URL处理成功: {final_download_url[:100]}...")
+                    else:
+                        logger.warning(f"B站视频URL处理失败，使用原始URL")
+                except Exception as e:
+                    logger.warning(f"B站视频URL处理异常: {e}")
+            
+            # 设置B站特殊请求头
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive"
+            }
+            
+            if file_record.get("platform") == "bilibili":
+                headers.update({
+                    "Referer": "https://www.bilibili.com/",
+                    "Origin": "https://www.bilibili.com",
+                    "Sec-Fetch-Dest": "video",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Site": "cross-site",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache"
+                })
+            
             async with aiohttp.ClientSession() as session:
-                async with session.get(download_url) as response:
+                async with session.get(final_download_url, headers=headers) as response:
                     if response.status == 200:
                         async for chunk in response.content.iter_chunked(8192):
                             yield chunk

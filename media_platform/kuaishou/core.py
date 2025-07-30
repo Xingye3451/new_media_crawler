@@ -65,7 +65,11 @@ class KuaishouCrawler(AbstractCrawler):
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
 
-            self.ks_client = await self.create_kuaishou_client(httpx_proxy_format)
+            # 添加方法存在性检查
+            if not hasattr(self, 'create_ks_client'):
+                raise AttributeError("KuaishouCrawler 缺少 create_ks_client 方法")
+            
+            self.ks_client = await self.create_ks_client(httpx_proxy_format)
             
             # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
             utils.logger.info("[KuaishouCrawler] 开始使用数据库中的登录凭证...")
@@ -87,13 +91,13 @@ class KuaishouCrawler(AbstractCrawler):
                     await self.ks_client.set_cookies_from_string(cookie_str)
                     
                     # 验证cookies是否有效
-                    if await self.ks_client.pong():
-                        utils.logger.info("[KuaishouCrawler] ✅ 数据库中的cookies有效，开始爬取")
-                        # 更新cookies到客户端
-                        await self.ks_client.update_cookies(browser_context=self.browser_context)
-                    else:
-                        utils.logger.error("[KuaishouCrawler] ❌ 数据库中的cookies无效，无法继续")
-                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                    # if await self.ks_client.pong():
+                    #     utils.logger.info("[KuaishouCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                    #     # 更新cookies到客户端
+                    #     await self.ks_client.update_cookies(browser_context=self.browser_context)
+                    # else:
+                    #     utils.logger.error("[KuaishouCrawler] ❌ 数据库中的cookies无效，无法继续")
+                    #     raise Exception("数据库中的登录凭证无效，请重新登录")
                 except Exception as e:
                     utils.logger.error(f"[KuaishouCrawler] 使用数据库cookies失败: {e}")
                     raise Exception(f"使用数据库登录凭证失败: {str(e)}")
@@ -174,6 +178,8 @@ class KuaishouCrawler(AbstractCrawler):
                         
                         for video_detail in batch_feeds:
                             try:
+                                import json
+                                utils.logger.info(f"[KuaishouCrawler] 原始视频数据: {json.dumps(video_detail, ensure_ascii=False)}")
                                 video_id_list.append(video_detail.get("photo", {}).get("id"))
                                 await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
                                 processed_count += 1

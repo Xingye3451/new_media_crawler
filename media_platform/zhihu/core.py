@@ -79,25 +79,25 @@ class ZhihuCrawler(AbstractCrawler):
 
             # Create a client to interact with the zhihu website.
             self.zhihu_client = await self.create_zhihu_client(httpx_proxy_format)
-            if not await self.zhihu_client.pong():
-                # 从数据库读取cookies，支持账号选择
-                account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-                cookie_str = await get_cookies_from_database("zhihu", account_id)
-                
-                if account_id:
-                    utils.logger.info(f"[ZhiHuCrawler] 使用指定账号: {account_id}")
-                else:
-                    utils.logger.info(f"[ZhiHuCrawler] 使用默认账号（最新登录）")
-                
-                login_obj = ZhiHuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str
-                )
-                await login_obj.begin()
-                await self.zhihu_client.update_cookies(browser_context=self.browser_context)
+            # if not await self.zhihu_client.pong():
+            #     # 从数据库读取cookies，支持账号选择
+            #     account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
+            #     cookie_str = await get_cookies_from_database("zhihu", account_id)
+            #     
+            #     if account_id:
+            #         utils.logger.info(f"[ZhiHuCrawler] 使用指定账号: {account_id}")
+            #     else:
+            #         utils.logger.info(f"[ZhiHuCrawler] 使用默认账号（最新登录）")
+            #     
+            #     login_obj = ZhiHuLogin(
+            #         login_type=config.LOGIN_TYPE,
+            #         login_phone="",  # your phone number
+            #         browser_context=self.browser_context,
+            #         context_page=self.context_page,
+            #         cookie_str=cookie_str
+            #     )
+            #     await login_obj.begin()
+            #     await self.zhihu_client.update_cookies(browser_context=self.browser_context)
 
             # 知乎的搜索接口需要打开搜索页面之后cookies才能访问API，单独的首页不行
             utils.logger.info("[ZhihuCrawler.start] Zhihu跳转到搜索页面获取搜索页面的Cookies，该过程需要5秒左右")

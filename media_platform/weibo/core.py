@@ -77,25 +77,25 @@ class WeiboCrawler(AbstractCrawler):
 
             # Create a client to interact with the xiaohongshu website.
             self.wb_client = await self.create_weibo_client(httpx_proxy_format)
-            if not await self.wb_client.pong():
-                # 从数据库读取cookies，支持账号选择
-                account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-                cookie_str = await get_cookies_from_database("wb", account_id)
-                
-                if account_id:
-                    utils.logger.info(f"[WeiboCrawler] 使用指定账号: {account_id}")
-                else:
-                    utils.logger.info(f"[WeiboCrawler] 使用默认账号（最新登录）")
-                
-                login_obj = WeiboLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=cookie_str
-                )
-                await login_obj.begin()
-                await self.wb_client.update_cookies(browser_context=self.browser_context)
+            # if not await self.wb_client.pong():
+            #     # 从数据库读取cookies，支持账号选择
+            #     account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
+            #     cookie_str = await get_cookies_from_database("wb", account_id)
+            #     
+            #     if account_id:
+            #         utils.logger.info(f"[WeiboCrawler] 使用指定账号: {account_id}")
+            #     else:
+            #         utils.logger.info(f"[WeiboCrawler] 使用默认账号（最新登录）")
+            #     
+            #     login_obj = WeiboLogin(
+            #         login_type=config.LOGIN_TYPE,
+            #         login_phone="",  # your phone number
+            #         browser_context=self.browser_context,
+            #         context_page=self.context_page,
+            #         cookie_str=cookie_str
+            #     )
+            #     await login_obj.begin()
+            #     await self.wb_client.update_cookies(browser_context=self.browser_context)
 
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":

@@ -981,7 +981,7 @@
                     return;
                 }
                 
-                if (response.ok && result.status === 'started') {
+                if (response.ok && (result.status === 'started' || result.status === 'pending')) {
                     showToast('爬虫任务启动成功', 'success');
                     
                     updateStatus('single-platform-result', 
@@ -990,7 +990,9 @@
                         `平台: ${getPlatformName(selectedPlatform)}\n` +
                         `关键词: ${keywords}\n` +
                         `最大数量: ${maxCount}\n` +
-                        `账号ID: ${selectedAccountId}\n\n` +
+                        `账号ID: ${selectedAccountId}\n` +
+                        `任务状态: ${result.status}\n` +
+                        `消息: ${result.message}\n\n` +
                         `任务正在后台运行，请查看任务结果页面`
                     );
                     
@@ -998,11 +1000,18 @@
                     clearSinglePlatformForm();
                     
                 } else {
+                    // 显示详细的调试信息
+                    console.log('爬虫任务响应详情:', result);
+                    
                     showToast(`启动失败: ${result.message || '未知错误'}`, 'error');
                     
                     updateStatus('single-platform-result', 
                         `❌ 爬虫任务启动失败\n\n` +
-                        `错误信息: ${result.message || '未知错误'}\n\n` +
+                        `HTTP状态: ${response.status}\n` +
+                        `响应状态: ${result.status}\n` +
+                        `错误信息: ${result.message || '未知错误'}\n` +
+                        `任务ID: ${result.task_id || '无'}\n\n` +
+                        `完整响应:\n${JSON.stringify(result, null, 2)}\n\n` +
                         `请检查配置或重试`
                     );
                 }
@@ -1094,7 +1103,7 @@
                     return;
                 }
                 
-                if (response.ok && result.status === 'started') {
+                if (response.ok && (result.status === 'started' || result.status === 'pending')) {
                     showToast('多平台爬虫任务启动成功', 'success');
                     
                     let accountInfo = '';
@@ -1107,6 +1116,8 @@
                         `任务ID: ${result.task_id}\n` +
                         `关键词: ${keywords}\n` +
                         `最大数量: ${maxCount}\n` +
+                        `任务状态: ${result.status}\n` +
+                        `消息: ${result.message}\n` +
                         `平台账号:\n${accountInfo}\n` +
                         `任务正在后台运行，请查看任务结果页面`
                     );
@@ -1115,11 +1126,18 @@
                     clearMultiPlatformForm();
                     
                 } else {
+                    // 显示详细的调试信息
+                    console.log('多平台爬虫任务响应详情:', result);
+                    
                     showToast(`启动失败: ${result.message || '未知错误'}`, 'error');
                     
                     updateStatus('multi-platform-result', 
                         `❌ 多平台爬虫任务启动失败\n\n` +
-                        `错误信息: ${result.message || '未知错误'}\n\n` +
+                        `HTTP状态: ${response.status}\n` +
+                        `响应状态: ${result.status}\n` +
+                        `错误信息: ${result.message || '未知错误'}\n` +
+                        `任务ID: ${result.task_id || '无'}\n\n` +
+                        `完整响应:\n${JSON.stringify(result, null, 2)}\n\n` +
                         `请检查配置或重试`
                     );
                 }
