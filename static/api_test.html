@@ -121,6 +121,15 @@
         .checkbox-group input[type="checkbox"] {
             width: auto;
         }
+        
+        .checkbox-group input[type="checkbox"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .checkbox-group input[type="checkbox"]:disabled + label {
+            cursor: not-allowed;
+        }
 
         .platform-selector {
             display: grid;
@@ -362,6 +371,149 @@
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             }
         }
+        
+        /* 创作者选择样式 */
+        .creator-selection-container {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: white;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .creator-selection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .creator-selection-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .creator-selection-count {
+            font-size: 0.85em;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        
+        .creator-selection-list {
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 0;
+        }
+        
+        .creator-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.15s;
+            gap: 10px;
+            min-height: 40px;
+            width: 100%;
+        }
+        
+        .creator-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .creator-item:last-child {
+            border-bottom: none;
+        }
+        
+        .creator-checkbox {
+            transform: scale(0.9);
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            padding: 0;
+            border: none;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        .creator-avatar-small {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            color: #6c757d;
+            flex-shrink: 0;
+        }
+        
+        .creator-avatar-small img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        
+        .creator-info-small {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow: hidden;
+        }
+        
+        .creator-name-small {
+            font-weight: 600;
+            font-size: 0.9em;
+            color: #333;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+        
+        .creator-stats-small {
+            font-size: 0.75em;
+            color: #6c757d;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .creator-stat {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            white-space: nowrap;
+        }
+        
+        .loading-creators {
+            text-align: center;
+            padding: 30px 20px;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        
+        .no-creators {
+            text-align: center;
+            padding: 30px 20px;
+            color: #6c757d;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+        
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.8em;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -388,7 +540,9 @@
                 <div class="info-box">
                     <h4>🎬 短视频优先模式</h4>
                     <p>✅ 当前支持：小红书、抖音、快手、B站 (专注视频内容)</p>
+                    <p>✅ 创作者主页：支持从数据库获取创作者列表进行爬取</p>
                     <p>⏳ 即将支持：微博、贴吧、知乎 (暂时禁用，专注短视频优化)</p>
+                    <p>🚧 开发中：指定内容详情、评论获取功能 (敬请期待)</p>
                 </div>
 
                 <div class="platform-selector">
@@ -438,22 +592,11 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="single-keywords">🔍 搜索关键词</label>
-                        <input type="text" id="single-keywords" placeholder="例如：编程副业" value="编程副业">
-                    </div>
-                    <div class="form-group">
-                        <label for="single-max-count">📊 最大爬取数量</label>
-                        <input type="number" id="single-max-count" min="1" max="500" value="20">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="single-crawler-type">🎯 爬取类型</label>
+                        <label for="single-crawler-type">🎯 爬取类型 <span style="color: #007bff; font-size: 0.8em;">(选择后会影响下方配置)</span></label>
                         <select id="single-crawler-type">
                             <option value="search">关键词搜索</option>
-                            <option value="detail">指定内容详情</option>
                             <option value="creator">创作者主页</option>
+                            <option value="detail" disabled>指定内容详情 (待开发)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -464,6 +607,53 @@
                         <select id="single-account-select" class="form-control">
                             <option value="">加载中...</option>
                         </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="single-keywords">🔍 搜索关键词</label>
+                        <input type="text" id="single-keywords" placeholder="例如：编程副业" value="编程副业">
+                    </div>
+                    <div class="form-group">
+                        <label for="single-max-count">📊 最大爬取数量</label>
+                        <input type="number" id="single-max-count" min="1" max="500" value="20">
+                    </div>
+                </div>
+                
+                <div class="form-row" id="creator-info-row" style="display: none;">
+                    <div class="form-group">
+                        <div class="info-box" style="margin: 0; background: #e8f5e8; border-left-color: #28a745;">
+                            <h4 style="color: #28a745; margin-bottom: 10px;">👤 创作者主页爬取说明</h4>
+                            <p>✅ 请选择要爬取的创作者（默认全选）</p>
+                            <p>✅ 按最后修改时间排序，优先爬取最近添加的创作者</p>
+                            <p>✅ 每个创作者的内容将单独处理和存储</p>
+                            <p>💡 提示：请先在创作者管理页面添加目标创作者</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row" id="creator-selection-row" style="display: none;">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>🎯 选择创作者</label>
+                        <div class="creator-selection-container">
+                            <div class="creator-selection-header">
+                                <div class="creator-selection-controls">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="selectAllCreators()">全选</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="deselectAllCreators()">取消全选</button>
+                                    <button type="button" class="btn btn-sm btn-info" onclick="refreshCreatorList()">🔄 刷新</button>
+                                </div>
+                                <div class="creator-selection-count">
+                                    <span id="selected-creators-count">已选择: 0</span>
+                                </div>
+                            </div>
+                            <div class="creator-selection-list" id="creator-selection-list">
+                                <div class="loading-creators">
+                                    <div class="spinner" style="margin-bottom: 8px;"></div>
+                                    <div>正在加载创作者列表...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -491,8 +681,8 @@
                 <div class="form-row">
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <input type="checkbox" id="single-get-comments" checked>
-                            <label for="single-get-comments">💬 获取评论</label>
+                            <input type="checkbox" id="single-get-comments" disabled>
+                            <label for="single-get-comments" style="color: #999;">💬 获取评论 (待开发)</label>
                         </div>
                     </div>
                     <div class="form-group">
@@ -527,6 +717,7 @@
                     <p>✅ 支持多个平台同时爬取，提高效率</p>
                     <p>🔄 统一结果格式，便于分析对比</p>
                     <p>🎯 智能账号分配，降低风险</p>
+                    <p>🚧 开发中：评论获取功能 (敬请期待)</p>
                 </div>
 
                 <div class="form-group">
@@ -593,8 +784,8 @@
                 <div class="form-row">
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <input type="checkbox" id="multi-get-comments">
-                            <label for="multi-get-comments">💬 获取评论</label>
+                            <input type="checkbox" id="multi-get-comments" disabled>
+                            <label for="multi-get-comments" style="color: #999;">💬 获取评论 (待开发)</label>
                         </div>
                     </div>
                     <div class="form-group">
@@ -627,6 +818,8 @@
         let selectedPlatform = 'xhs';
         let selectedMultiPlatforms = new Set();
         let currentTaskId = null;
+        let availableCreators = []; // 当前平台可用的创作者列表
+        let selectedCreators = new Set(); // 已选择的创作者ID集合
 
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -635,6 +828,9 @@
             
             // 预检查所有平台的登录状态
             checkAllPlatformsLoginStatus();
+            
+            // 监听爬取类型变化
+            document.getElementById('single-crawler-type').addEventListener('change', handleCrawlerTypeChange);
         });
 
         // 切换标签页
@@ -741,6 +937,12 @@
                 
                 // 加载该平台的账号列表
                 loadPlatformAccounts(platform);
+                
+                // 如果当前是创作者模式，重新加载创作者列表
+                const crawlerType = document.getElementById('single-crawler-type').value;
+                if (crawlerType === 'creator') {
+                    loadCreatorsForPlatform(platform);
+                }
             }
         }
 
@@ -930,27 +1132,33 @@
             }
             
             const keywords = document.getElementById('single-keywords').value.trim();
-            if (!keywords) {
+            if (crawlType === 'search' && !keywords) {
                 showToast('请输入搜索关键词', 'warning');
+                return;
+            }
+            
+            if (crawlType === 'creator' && selectedCreators.size === 0) {
+                showToast('请至少选择一个创作者', 'warning');
                 return;
             }
             
             const maxCount = document.getElementById('single-max-count').value;
             const crawlType = document.getElementById('single-crawler-type').value;
             const proxyStrategy = document.getElementById('single-proxy-strategy').value;
-            const getComments = document.getElementById('single-get-comments').checked;
+            const getComments = false; // 固定为false，因为评论功能待开发
             const videoPriority = document.getElementById('single-video-priority').checked;
 
             const requestData = {
                 platform: selectedPlatform,
-                keywords: keywords,
+                keywords: crawlType === 'search' ? keywords : '', // 创作者模式不需要关键词
                 max_notes_count: parseInt(maxCount),
                 crawler_type: crawlType,
                 proxy_strategy: proxyStrategy,
                 get_comments: getComments,
                 video_priority: videoPriority,
                 save_data_option: "db",  // 固定为数据库存储
-                account_id: parseInt(selectedAccountId) // 使用选中的账号ID
+                account_id: parseInt(selectedAccountId), // 使用选中的账号ID
+                selected_creators: crawlType === 'creator' ? Array.from(selectedCreators) : [] // 传递选中的创作者ID列表
             };
             
             try {
@@ -984,7 +1192,17 @@
                 if (response.ok && (result.status === 'started' || result.status === 'pending')) {
                     showToast('爬虫任务启动成功', 'success');
                     
-                    updateStatus('single-platform-result', 
+                    const resultMessage = crawlType === 'creator' ? 
+                        `✅ 爬虫任务启动成功\n\n` +
+                        `任务ID: ${result.task_id}\n` +
+                        `平台: ${getPlatformName(selectedPlatform)}\n` +
+                        `爬取类型: 创作者主页\n` +
+                        `选中创作者: ${selectedCreators.size} 个\n` +
+                        `最大数量: ${maxCount}\n` +
+                        `账号ID: ${selectedAccountId}\n` +
+                        `任务状态: ${result.status}\n` +
+                        `消息: ${result.message}\n\n` +
+                        `任务正在后台运行，请查看任务结果页面` :
                         `✅ 爬虫任务启动成功\n\n` +
                         `任务ID: ${result.task_id}\n` +
                         `平台: ${getPlatformName(selectedPlatform)}\n` +
@@ -993,8 +1211,9 @@
                         `账号ID: ${selectedAccountId}\n` +
                         `任务状态: ${result.status}\n` +
                         `消息: ${result.message}\n\n` +
-                        `任务正在后台运行，请查看任务结果页面`
-                    );
+                        `任务正在后台运行，请查看任务结果页面`;
+                    
+                    updateStatus('single-platform-result', resultMessage);
                     
                     // 清空表单
                     clearSinglePlatformForm();
@@ -1221,20 +1440,199 @@
             return platforms[platform] || platform;
         }
 
+        // 加载指定平台的创作者列表
+        async function loadCreatorsForPlatform(platform) {
+            try {
+                const response = await fetch(`/api/v1/creators?platform=${platform}&page_size=100`);
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    availableCreators = data.data.creators || [];
+                    selectedCreators.clear(); // 清空之前的选择
+                    
+                    // 默认全选
+                    availableCreators.forEach(creator => {
+                        selectedCreators.add(creator.creator_id);
+                    });
+                    
+                    renderCreatorSelectionList();
+                    updateSelectedCreatorsCount();
+                } else {
+                    console.error('加载创作者列表失败:', data.message);
+                    showEmptyCreatorList('加载失败，请稍后重试');
+                }
+            } catch (error) {
+                console.error('加载创作者列表失败:', error);
+                showEmptyCreatorList('网络错误，请稍后重试');
+            }
+        }
+
+        // 渲染创作者选择列表
+        function renderCreatorSelectionList() {
+            const container = document.getElementById('creator-selection-list');
+            
+            if (availableCreators.length === 0) {
+                showEmptyCreatorList('该平台暂无创作者，请先在创作者管理页面添加');
+                return;
+            }
+
+            container.innerHTML = availableCreators.map(creator => `
+                <div class="creator-item">
+                    <div style="flex-shrink: 0;">
+                        <input type="checkbox" 
+                               class="creator-checkbox" 
+                               id="creator-${creator.creator_id}"
+                               value="${creator.creator_id}"
+                               ${selectedCreators.has(creator.creator_id) ? 'checked' : ''}
+                               onchange="toggleCreatorSelection('${creator.creator_id}')">
+                    </div>
+                    <div class="creator-avatar-small">
+                        ${creator.avatar ? `<img src="${creator.avatar}" alt="${creator.name}" onerror="this.style.display='none'">` : '👤'}
+                    </div>
+                    <div class="creator-info-small">
+                        <div class="creator-name-small">${creator.name || creator.nickname || '未知创作者'}</div>
+                        <div class="creator-stats-small">
+                            ${creator.fans_count ? `<span class="creator-stat">👥 ${formatNumber(creator.fans_count)}</span>` : ''}
+                            ${creator.follow_count ? `<span class="creator-stat">👁️ ${formatNumber(creator.follow_count)}</span>` : ''}
+                            ${creator.like_count ? `<span class="creator-stat">❤️ ${formatNumber(creator.like_count)}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 显示空创作者列表
+        function showEmptyCreatorList(message) {
+            const container = document.getElementById('creator-selection-list');
+            container.innerHTML = `
+                <div class="no-creators">
+                    <div style="font-size: 2em; margin-bottom: 8px;">👤</div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">暂无创作者</div>
+                    <div style="margin-bottom: 12px;">${message}</div>
+                    <button class="btn btn-sm btn-primary" onclick="window.open('/static/creator_management.html', '_blank')">
+                        ➕ 前往添加创作者
+                    </button>
+                </div>
+            `;
+        }
+
+        // 切换创作者选择状态
+        function toggleCreatorSelection(creatorId) {
+            if (selectedCreators.has(creatorId)) {
+                selectedCreators.delete(creatorId);
+            } else {
+                selectedCreators.add(creatorId);
+            }
+            updateSelectedCreatorsCount();
+        }
+
+        // 全选创作者
+        function selectAllCreators() {
+            availableCreators.forEach(creator => {
+                selectedCreators.add(creator.creator_id);
+                const checkbox = document.getElementById(`creator-${creator.creator_id}`);
+                if (checkbox) checkbox.checked = true;
+            });
+            updateSelectedCreatorsCount();
+        }
+
+        // 取消全选创作者
+        function deselectAllCreators() {
+            selectedCreators.clear();
+            availableCreators.forEach(creator => {
+                const checkbox = document.getElementById(`creator-${creator.creator_id}`);
+                if (checkbox) checkbox.checked = false;
+            });
+            updateSelectedCreatorsCount();
+        }
+
+        // 刷新创作者列表
+        function refreshCreatorList() {
+            loadCreatorsForPlatform(selectedPlatform);
+        }
+
+        // 更新已选择创作者数量
+        function updateSelectedCreatorsCount() {
+            const countElement = document.getElementById('selected-creators-count');
+            countElement.textContent = `已选择: ${selectedCreators.size} / ${availableCreators.length}`;
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            if (!num) return '0';
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(1) + '亿';
+            } else if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            } else {
+                return num.toString();
+            }
+        }
+
+        // 处理爬取类型变化
+        function handleCrawlerTypeChange() {
+            const crawlerType = document.getElementById('single-crawler-type').value;
+            const keywordsRow = document.querySelector('.form-row:has(#single-keywords)');
+            const creatorInfoRow = document.getElementById('creator-info-row');
+            const creatorSelectionRow = document.getElementById('creator-selection-row');
+            
+            // 添加视觉反馈
+            showToast(`已切换到${crawlerType === 'creator' ? '创作者主页' : '关键词搜索'}模式`, 'info');
+            
+            if (crawlerType === 'creator') {
+                // 创作者主页模式
+                if (keywordsRow) {
+                    keywordsRow.style.display = 'none';
+                }
+                creatorInfoRow.style.display = 'block';
+                creatorSelectionRow.style.display = 'block';
+                
+                // 加载当前平台的创作者列表
+                loadCreatorsForPlatform(selectedPlatform);
+                
+                // 更新状态显示
+                updateStatus('single-platform-result', 
+                    `🎯 创作者主页爬取模式\n\n` +
+                    `请选择要爬取的创作者（默认全选）\n` +
+                    `系统将按最后修改时间排序，优先爬取最近添加的创作者\n\n` +
+                    `可以开始爬取任务`
+                );
+            } else {
+                // 关键词搜索模式
+                if (keywordsRow) {
+                    keywordsRow.style.display = 'flex';
+                }
+                creatorInfoRow.style.display = 'none';
+                creatorSelectionRow.style.display = 'none';
+                
+                // 恢复默认状态
+                updateStatus('single-platform-result', '等待开始爬取任务...');
+            }
+        }
+
         function clearSinglePlatformForm() {
             document.getElementById('single-keywords').value = '';
             document.getElementById('single-max-count').value = '20';
             document.getElementById('single-account-select').value = '';
             document.getElementById('single-proxy-strategy').value = 'disabled';
-            document.getElementById('single-get-comments').checked = true;
+            document.getElementById('single-get-comments').checked = false; // 保持禁用状态
             document.getElementById('single-video-priority').checked = true;
+            
+            // 重置爬取类型为搜索
+            document.getElementById('single-crawler-type').value = 'search';
+            handleCrawlerTypeChange(); // 触发类型变化处理
+            
+            // 清空创作者选择
+            availableCreators = [];
+            selectedCreators.clear();
+            
             updateStatus('single-platform-result', '表单已清空，等待开始爬取任务...');
         }
 
         function clearMultiPlatformForm() {
             document.getElementById('multi-keywords').value = '';
             document.getElementById('multi-max-count').value = '15';
-            document.getElementById('multi-get-comments').checked = false;
+            document.getElementById('multi-get-comments').checked = false; // 保持禁用状态
             document.getElementById('multi-enable-images').checked = false;
             selectedMultiPlatforms.clear();
             const multiCards = document.querySelectorAll('#multi-platform .platform-card');

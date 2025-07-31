@@ -304,9 +304,41 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                     use_proxy=request.use_proxy,
                     proxy_strategy=request.proxy_strategy
                 )
-            elif request.crawler_type == "user":
-                results = await crawler.get_user_notes(
-                    user_id=request.keywords,  # 这里keywords实际上是user_id
+            elif request.crawler_type == "creator":
+                # 从数据库获取创作者列表
+                db = await get_db_connection()
+                if not db:
+                    raise Exception("数据库连接失败")
+                
+                # 获取指定平台的创作者列表
+                if hasattr(request, 'selected_creators') and request.selected_creators:
+                    # 使用用户选择的创作者
+                    creators_query = """
+                        SELECT creator_id, platform, name, nickname 
+                        FROM unified_creator 
+                        WHERE platform = %s AND creator_id IN ({})
+                        ORDER BY last_modify_ts DESC
+                    """.format(','.join(['%s'] * len(request.selected_creators)))
+                    creators = await db.query(creators_query, request.platform, *request.selected_creators)
+                    utils.logger.info(f"[TASK_{task_id}] 用户选择了 {len(creators)} 个创作者")
+                else:
+                    # 获取所有创作者（按最大数量限制）
+                    creators_query = """
+                        SELECT creator_id, platform, name, nickname 
+                        FROM unified_creator 
+                        WHERE platform = %s AND is_deleted = 0
+                        ORDER BY last_modify_ts DESC
+                        LIMIT %s
+                    """
+                    creators = await db.query(creators_query, request.platform, request.max_notes_count)
+                    utils.logger.info(f"[TASK_{task_id}] 找到 {len(creators)} 个创作者（自动选择）")
+                
+                if not creators:
+                    raise Exception(f"平台 {request.platform} 没有找到可用的创作者")
+                
+                # 调用创作者爬取方法
+                results = await crawler.get_creators_and_notes_from_db(
+                    creators=creators,
                     max_count=request.max_notes_count,
                     account_id=request.account_id,
                     session_id=request.session_id,

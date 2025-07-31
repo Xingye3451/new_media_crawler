@@ -327,6 +327,75 @@ class DouYinCrawler(AbstractCrawler):
             video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
             await self.batch_get_note_comments(video_ids)
 
+    async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
+                                           account_id: str = None, session_id: str = None,
+                                           login_type: str = "qrcode", get_comments: bool = False,
+                                           save_data_option: str = "db", use_proxy: bool = False,
+                                           proxy_strategy: str = "disabled") -> List[Dict]:
+        """
+        从数据库获取创作者列表进行爬取
+        Args:
+            creators: 创作者列表，包含creator_id, platform, name, nickname
+            max_count: 最大爬取数量
+            account_id: 账号ID
+            session_id: 会话ID
+            login_type: 登录类型
+            get_comments: 是否获取评论
+            save_data_option: 数据保存方式
+            use_proxy: 是否使用代理
+            proxy_strategy: 代理策略
+        Returns:
+            List[Dict]: 爬取结果列表
+        """
+        try:
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            
+            all_results = []
+            
+            for creator in creators:
+                user_id = creator.get("creator_id")
+                creator_name = creator.get("name") or creator.get("nickname") or "未知创作者"
+                
+                utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取创作者: {creator_name} (ID: {user_id})")
+                
+                try:
+                    # 获取创作者详细信息
+                    creator_info: Dict = await self.dy_client.get_user_info(user_id)
+                    if creator_info:
+                        # 更新创作者信息到数据库
+                        await self.douyin_store.save_creator(user_id, creator=creator_info)
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                    
+                    # 获取创作者的所有视频
+                    all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                        sec_user_id=user_id,
+                        callback=self.fetch_creator_video_detail
+                    )
+                    
+                    if all_video_list:
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
+                        
+                        # 获取评论
+                        if get_comments:
+                            video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
+                            await self.batch_get_note_comments(video_ids)
+                        
+                        # 收集结果
+                        all_results.extend(all_video_list)
+                    else:
+                        utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到视频")
+                
+                except Exception as e:
+                    utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
+                    continue
+            
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            return all_results
+            
+        except Exception as e:
+            utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取失败: {e}")
+            raise
+
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """
         Concurrently obtain the specified post list and save the data
