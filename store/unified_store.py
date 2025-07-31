@@ -422,6 +422,15 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
                             mapped_data[unified_field] = 0
                     except (ValueError, TypeError):
                         mapped_data[unified_field] = 0
+                    
+                    # 特殊处理B站时间戳：10位转13位
+                    if platform == "bilibili" and unified_field in ["create_time", "publish_time", "update_time"]:
+                        if mapped_data[unified_field] > 0:
+                            # 检查是否为10位时间戳（秒）
+                            timestamp = mapped_data[unified_field]
+                            if timestamp < 10000000000:  # 10位时间戳
+                                mapped_data[unified_field] = timestamp * 1000  # 转换为13位时间戳
+                                utils.logger.info(f"[map_platform_fields] B站时间戳转换: {timestamp} -> {mapped_data[unified_field]}")
                 else:
                     mapped_data[unified_field] = value
     
@@ -459,14 +468,19 @@ async def query_content_by_content_id(platform: str, content_id: str) -> Dict:
 async def add_new_content(platform: str, content_item: Dict, task_id: str = None) -> int:
     """新增内容记录"""
     try:
+        utils.logger.info(f"[add_new_content] 开始新增内容: {platform}/{content_item.get('content_id', 'unknown')}")
+        
         async_db_conn: AsyncMysqlDB = await _get_db_connection()
+        utils.logger.info(f"[add_new_content] 数据库连接获取成功")
         
         # 映射字段
         mapped_data = map_platform_fields(platform, content_item)
+        utils.logger.info(f"[add_new_content] 字段映射完成，映射后字段数: {len(mapped_data)}")
         
         # 添加任务ID
         if task_id:
             mapped_data["task_id"] = task_id
+            utils.logger.info(f"[add_new_content] 添加任务ID: {task_id}")
         
         # 添加时间戳
         now_ts = int(time.time() * 1000)
@@ -474,19 +488,27 @@ async def add_new_content(platform: str, content_item: Dict, task_id: str = None
             mapped_data["add_ts"] = now_ts
         if "last_modify_ts" not in mapped_data:
             mapped_data["last_modify_ts"] = now_ts
+        utils.logger.info(f"[add_new_content] 添加时间戳: {now_ts}")
         
         # 序列化数据
         safe_item = serialize_for_db(mapped_data)
+        utils.logger.info(f"[add_new_content] 数据序列化完成，字段数: {len(safe_item)}")
         
         # 过滤字段
         safe_item = filter_fields_for_table(safe_item, UNIFIED_CONTENT_FIELDS)
+        utils.logger.info(f"[add_new_content] 字段过滤完成，最终字段数: {len(safe_item)}")
         
         # 插入数据库
+        utils.logger.info(f"[add_new_content] 开始插入数据库，表名: unified_content")
         last_row_id: int = await async_db_conn.item_to_table("unified_content", safe_item)
+        utils.logger.info(f"[add_new_content] 数据库插入成功，返回ID: {last_row_id}")
+        
         return last_row_id
         
     except Exception as e:
         utils.logger.error(f"新增内容失败: {platform}/{content_item.get('content_id', 'unknown')}, 错误: {e}")
+        import traceback
+        utils.logger.error(f"[add_new_content] 错误堆栈: {traceback.format_exc()}")
         raise
 
 
@@ -500,6 +522,11 @@ async def update_content_by_content_id(platform: str, content_id: str, content_i
         
         # 更新时间戳
         mapped_data["last_modify_ts"] = int(time.time() * 1000)
+        
+        # 确保任务ID也被更新（如果存在）
+        if "task_id" in content_item:
+            mapped_data["task_id"] = content_item["task_id"]
+            utils.logger.info(f"[update_content_by_content_id] 更新任务ID: {content_item['task_id']}")
         
         # 序列化数据
         safe_item = serialize_for_db(mapped_data)
@@ -520,11 +547,17 @@ async def update_content_by_content_id(platform: str, content_id: str, content_i
         set_clause = ", ".join(set_clauses)
         sql = f"UPDATE unified_content SET {set_clause} WHERE {where_condition}"
         
+        utils.logger.info(f"[update_content_by_content_id] 执行更新SQL: {sql}")
+        utils.logger.info(f"[update_content_by_content_id] 更新字段: {list(safe_item.keys())}")
+        
         result = await async_db_conn.execute(sql, *values)
+        utils.logger.info(f"[update_content_by_content_id] 更新成功，影响行数: {result}")
         return result
         
     except Exception as e:
         utils.logger.error(f"更新内容失败: {platform}/{content_id}, 错误: {e}")
+        import traceback
+        utils.logger.error(f"[update_content_by_content_id] 错误堆栈: {traceback.format_exc()}")
         raise
 
 

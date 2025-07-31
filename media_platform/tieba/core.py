@@ -269,7 +269,7 @@ class TieBaCrawler(AbstractCrawler):
                     f"[WeiboCrawler.get_creators_and_notes] get creator info error, creator_url:{creator_url}")
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
-                                           account_id: str = None, session_id: str = None,
+                                           keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
                                            proxy_strategy: str = "disabled") -> List[Dict]:
@@ -289,9 +289,10 @@ class TieBaCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[TieBaCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[TieBaCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者，最大数量限制: {max_count}")
             
             all_results = []
+            total_processed = 0
             
             for creator in creators:
                 user_id = creator.get("creator_id")
@@ -320,6 +321,8 @@ class TieBaCrawler(AbstractCrawler):
                         
                         if all_notes_list:
                             utils.logger.info(f"[TieBaCrawler.get_creators_and_notes_from_db] 获取到 {len(all_notes_list)} 条帖子")
+                        # 使用原生搜索API
+
                             
                             # 获取评论
                             if get_comments:
@@ -336,7 +339,7 @@ class TieBaCrawler(AbstractCrawler):
                     utils.logger.error(f"[TieBaCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[TieBaCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            utils.logger.info(f"[TieBaCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据 (限制: {max_count})")
             return all_results
             
         except Exception as e:

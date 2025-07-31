@@ -404,3 +404,71 @@ async def list_videos(
     except Exception as e:
         logger.error(f"获取视频列表失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取视频列表失败: {str(e)}") 
+
+# 在文件末尾添加示例API
+@router.get("/tasks/{task_id}/content-with-creators")
+async def get_task_content_with_creators(task_id: str, page: int = 1, page_size: int = 20):
+    """
+    获取任务内容并关联创作者信息
+    """
+    try:
+        # 获取任务内容
+        content_query = """
+            SELECT c.*, 
+                   cr.creator_id, cr.creator_name, cr.creator_nickname, 
+                   cr.creator_avatar, cr.creator_signature, cr.follower_count,
+                   cr.following_count, cr.video_count, cr.like_count
+            FROM unified_content c
+            LEFT JOIN unified_creator cr ON c.creator_ref_id = cr.creator_id
+            WHERE c.task_id = %s
+            ORDER BY c.add_ts DESC
+            LIMIT %s OFFSET %s
+        """
+        
+        offset = (page - 1) * page_size
+        
+        async with AsyncMysqlDB() as db:
+            # 获取总数
+            count_query = "SELECT COUNT(*) as total FROM unified_content WHERE task_id = %s"
+            count_result = await db.fetch_one(count_query, (task_id,))
+            total = count_result['total'] if count_result else 0
+            
+            # 获取内容列表
+            content_result = await db.fetch_all(content_query, (task_id, page_size, offset))
+            
+            # 格式化数据
+            content_list = []
+            for row in content_result:
+                content_item = dict(row)
+                
+                # 如果是创作者爬取类型，添加创作者信息
+                if content_item.get('crawler_type') == 'creator' and content_item.get('creator_name'):
+                    content_item['creator_info'] = {
+                        'creator_id': content_item.get('creator_id'),
+                        'creator_name': content_item.get('creator_name'),
+                        'creator_nickname': content_item.get('creator_nickname'),
+                        'creator_avatar': content_item.get('creator_avatar'),
+                        'creator_signature': content_item.get('creator_signature'),
+                        'follower_count': content_item.get('follower_count'),
+                        'following_count': content_item.get('following_count'),
+                        'video_count': content_item.get('video_count'),
+                        'like_count': content_item.get('like_count')
+                    }
+                
+                content_list.append(content_item)
+            
+            return {
+                "code": 200,
+                "message": "获取成功",
+                "data": {
+                    "items": content_list,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size
+                }
+            }
+            
+    except Exception as e:
+        utils.logger.error(f"获取任务内容失败: {e}")
+        return {"code": 500, "message": f"获取失败: {str(e)}"} 

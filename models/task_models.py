@@ -57,6 +57,8 @@ class CrawlerTask(Base):
     id = Column(String(36), primary_key=True, comment='任务ID')
     platform = Column(String(20), nullable=False, comment='平台名称')
     task_type = Column(String(20), nullable=False, comment='任务类型')
+    crawler_type = Column(String(20), default='search', comment='爬取类型：search(关键词搜索)、detail(指定内容)、creator(创作者主页)')
+    creator_ref_id = Column(String(100), comment='创作者引用ID（当crawler_type为creator时，关联unified_creator表）')
     keywords = Column(Text, comment='关键词')
     status = Column(String(20), nullable=False, default='pending', comment='任务状态')
     progress = Column(Float, default=0, comment='进度')
@@ -83,6 +85,8 @@ class CrawlerTask(Base):
             'id': self.id,
             'platform': self.platform,
             'task_type': self.task_type,
+            'crawler_type': self.crawler_type,
+            'creator_ref_id': self.creator_ref_id,
             'keywords': self.keywords,
             'status': self.status,
             'progress': self.progress,
@@ -243,6 +247,8 @@ class TaskCreateRequest(BaseModel):
     """创建任务请求"""
     platform: str = Field(..., description="平台名称")
     task_type: str = Field(..., description="任务类型")
+    crawler_type: str = Field(default="search", description="爬取类型：search(关键词搜索)、detail(指定内容)、creator(创作者主页)")
+    creator_ref_id: Optional[str] = Field(None, description="创作者引用ID（当crawler_type为creator时，关联unified_creator表）")
     keywords: str = Field(..., description="关键词")
     user_id: Optional[str] = Field(None, description="用户ID")
     params: Optional[Dict] = Field(None, description="任务参数")
@@ -282,6 +288,8 @@ class TaskResponse(BaseModel):
     id: str
     platform: str
     task_type: str
+    crawler_type: str
+    creator_ref_id: Optional[str]
     keywords: Optional[str]
     status: str
     progress: float

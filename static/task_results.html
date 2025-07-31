@@ -181,6 +181,40 @@
             color: #721c24;
         }
 
+        .crawler-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .crawler-type-search {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .crawler-type-detail {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .crawler-type-creator {
+            background: #e8f5e8;
+            color: #388e3c;
+        }
+
+        .crawler-type-search {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .crawler-type-detail {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
         .task-meta {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -373,6 +407,12 @@
                     <option value="running">运行中</option>
                     <option value="failed">失败</option>
                 </select>
+                <select id="crawlerTypeFilter">
+                    <option value="">所有爬取类型</option>
+                    <option value="search">关键词搜索</option>
+                    <option value="detail">指定内容</option>
+                    <option value="creator">创作者主页</option>
+                </select>
                 <button class="btn btn-primary" onclick="searchTasks()">搜索</button>
                 <button class="btn btn-secondary" onclick="refreshTasks()">刷新</button>
             </div>
@@ -484,8 +524,9 @@
                 taskItem.innerHTML = `
                     <div class="task-header">
                         <div class="task-title">
-                            ${task.is_pinned ? '📌 ' : ''}${task.keywords || task.id}
+                            ${task.is_pinned ? '📌 ' : ''}${getTaskTitle(task)}
                             ${task.is_favorite ? '⭐' : ''}
+                            <span class="crawler-type-badge crawler-type-${task.crawler_type || 'search'}">${getCrawlerTypeText(task.crawler_type)}</span>
                         </div>
                         <div class="task-status status-${task.status || 'completed'}">${getStatusText(task.status)}</div>
                     </div>
@@ -494,10 +535,12 @@
                             <span class="icon">📱</span>
                             <span>${getPlatformText(task.platform)}</span>
                         </div>
+
                         <div class="meta-item">
                             <span class="icon">📹</span>
-                            <span>${task.result_count || 0} 个视频</span>
+                            <span>${task.statistics?.total_videos || task.result_count || 0} 个视频</span>
                         </div>
+
                         <div class="meta-item">
                             <span class="icon">📊</span>
                             <span>${Math.round(task.progress || 0)}% 进度</span>
@@ -730,6 +773,34 @@
                 'pending': '等待中'
             };
             return statusTexts[status] || '未知';
+        }
+
+        function getTaskTitle(task) {
+            if (task.keywords) {
+                return `关键词: ${task.keywords}`;
+            } else {
+                return task.id;
+            }
+        }
+
+        function getCrawlerTypeText(crawlerType) {
+            const crawlerTypeTexts = {
+                'search': '🔍 关键词搜索',
+                'detail': '📋 指定内容',
+                'creator': '👤 创作者主页'
+            };
+            return crawlerTypeTexts[crawlerType] || '未知类型';
+        }
+
+        function formatNumber(num) {
+            if (!num) return '0';
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(1) + '亿';
+            } else if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            } else {
+                return num.toString();
+            }
         }
     </script>
 </body>

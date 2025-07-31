@@ -27,10 +27,14 @@ class TaskResultService:
             # 从Redis获取任务结果
             results = await self.redis_manager.get_task_results(page=page, page_size=page_size)
             
-            # 补充统计信息
+            # 补充统计信息（使用数据库中的实际统计）
             for result in results.get('results', []):
                 if 'task_id' in result:
+                    # 优先使用数据库中的实际统计，如果Redis没有则从数据库获取
                     stats = await self.redis_manager.get_task_statistics(result['task_id'])
+                    if not stats or stats.get('total_videos', 0) == 0:
+                        # 如果Redis中没有统计信息或视频数为0，从数据库获取最新统计
+                        stats = await self._get_task_statistics_from_database(result['task_id'])
                     result['statistics'] = stats
             
             return results
@@ -350,7 +354,9 @@ class TaskResultService:
                     'result_count': result.get('result_count'),
                     'error_message': result.get('error_message'),
                     'user_id': result.get('user_id'),
-                    'task_type': result.get('task_type')
+                    'task_type': result.get('task_type'),
+                    'crawler_type': result.get('crawler_type', 'search'),  # 添加爬取类型字段
+                    'creator_ref_id': result.get('creator_ref_id')  # 添加创作者引用ID字段
                 }
             
             return None

@@ -328,7 +328,7 @@ class DouYinCrawler(AbstractCrawler):
             await self.batch_get_note_comments(video_ids)
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
-                                           account_id: str = None, session_id: str = None,
+                                           keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
                                            proxy_strategy: str = "disabled") -> List[Dict]:
@@ -348,9 +348,15 @@ class DouYinCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者，最大数量限制: {max_count}")
+            
+            # 确保客户端已初始化
+            if not hasattr(self, 'dy_client') or self.dy_client is None:
+                utils.logger.error("[DouYinCrawler.get_creators_and_notes_from_db] dy_client 未初始化")
+                raise Exception("抖音客户端未初始化，请先调用start()方法")
             
             all_results = []
+            total_processed = 0
             
             for creator in creators:
                 user_id = creator.get("creator_id")
@@ -366,22 +372,50 @@ class DouYinCrawler(AbstractCrawler):
                         await self.douyin_store.save_creator(user_id, creator=creator_info)
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
                     
-                    # 获取创作者的所有视频
-                    all_video_list = await self.dy_client.get_all_user_aweme_posts(
-                        sec_user_id=user_id,
-                        callback=self.fetch_creator_video_detail
-                    )
+                    # 根据是否有关键词选择不同的获取方式
+                    if keywords and keywords.strip():
+                        # 使用关键词搜索获取视频
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的视频")
+                        all_video_list = await self.dy_client.search_user_videos(user_id, keywords, max_count)
+                    else:
+                        # 获取创作者的所有视频
+                        all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                            sec_user_id=user_id,
+                            callback=self.fetch_creator_video_detail
+                        )
                     
                     if all_video_list:
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
                         
-                        # 获取评论
-                        if get_comments:
-                            video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
-                            await self.batch_get_note_comments(video_ids)
+                        # 计算当前创作者可处理的最大数量
+                        remaining_count = max_count - total_processed
+                        if remaining_count <= 0:
+                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，跳过剩余创作者")
+                            break
                         
-                        # 收集结果
-                        all_results.extend(all_video_list)
+                        # 应用数量限制
+                        limited_list = all_video_list[:remaining_count]
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 应用数量限制，处理前 {len(limited_list)} 个内容 (剩余限制: {remaining_count})")
+                        
+                        # 处理每个内容
+                        for item in limited_list:
+                            try:
+                                # 处理内容...
+                                all_results.append(item)
+                                total_processed += 1
+                                
+                                # 检查是否达到总数量限制
+                                if total_processed >= max_count:
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，停止处理")
+                                    break
+                            
+                            except Exception as e:
+                                utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 处理内容失败: {e}")
+                                continue
+                        
+                        # 如果已达到总数量限制，跳出创作者循环
+                        if total_processed >= max_count:
+                            break
                     else:
                         utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到视频")
                 
@@ -389,7 +423,7 @@ class DouYinCrawler(AbstractCrawler):
                     utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据 (限制: {max_count})")
             return all_results
             
         except Exception as e:

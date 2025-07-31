@@ -46,6 +46,8 @@ class UnifiedStoreImplement(AbstractStore):
         self.platform = platform
         self.redis_callback = redis_callback
         self.collected_data = []  # 收集爬取到的数据
+        # 添加存储锁，确保串行化存储操作，避免数据库连接竞争
+        self._storage_lock = asyncio.Lock()
         
     def set_redis_callback(self, callback):
         """设置Redis回调函数"""
@@ -58,35 +60,39 @@ class UnifiedStoreImplement(AbstractStore):
         Args:
             content_item: 内容字典
         """
-        try:
-            # 获取内容ID
-            content_id = self._get_content_id(content_item)
-            if not content_id:
-                utils.logger.error(f"[UnifiedStore] 无法获取内容ID: {content_item}")
-                return
-            
-            # 检查是否已存在
-            existing_content = await query_content_by_content_id(self.platform, content_id)
-            
-            if not existing_content:
-                # 新增内容
-                task_id = content_item.get("task_id")
-                await add_new_content(self.platform, content_item, task_id)
-                utils.logger.info(f"✅ [UnifiedStore] 新增内容成功: {self.platform}/{content_id}")
-            else:
-                # 更新内容
-                await update_content_by_content_id(self.platform, content_id, content_item)
-                utils.logger.info(f"✅ [UnifiedStore] 更新内容成功: {self.platform}/{content_id}")
-            
-            # 收集数据用于返回
-            self.collected_data.append(content_item)
-            
-            # 存储到Redis
-            if self.redis_callback:
-                await self.redis_callback(self.platform, content_item, "content")
+        # 使用锁确保串行化存储，避免数据库连接竞争
+        async with self._storage_lock:
+            try:
+                # 获取内容ID
+                content_id = self._get_content_id(content_item)
+                if not content_id:
+                    utils.logger.error(f"[UnifiedStore] 无法获取内容ID: {content_item}")
+                    return
                 
-        except Exception as e:
-            utils.logger.error(f"❌ [UnifiedStore] 存储内容失败: {self.platform}/{content_item.get('content_id', 'unknown')}, 错误: {e}")
+                # 检查是否已存在
+                existing_content = await query_content_by_content_id(self.platform, content_id)
+                
+                if not existing_content:
+                    # 新增内容
+                    task_id = content_item.get("task_id")
+                    await add_new_content(self.platform, content_item, task_id)
+                    utils.logger.info(f"✅ [UnifiedStore] 新增内容成功: {self.platform}/{content_id}")
+                else:
+                    # 更新内容
+                    await update_content_by_content_id(self.platform, content_id, content_item)
+                    utils.logger.info(f"✅ [UnifiedStore] 更新内容成功: {self.platform}/{content_id}")
+                
+                # 收集数据用于返回
+                self.collected_data.append(content_item)
+                
+                # 存储到Redis
+                if self.redis_callback:
+                    await self.redis_callback(self.platform, content_item, "content")
+                    
+            except Exception as e:
+                utils.logger.error(f"❌ [UnifiedStore] 存储内容失败: {self.platform}/{content_item.get('content_id', 'unknown')}, 错误: {e}")
+                import traceback
+                utils.logger.error(f"[UnifiedStore] 错误堆栈: {traceback.format_exc()}")
     
     async def store_comment(self, comment_item: Dict):
         """

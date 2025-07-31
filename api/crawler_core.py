@@ -124,6 +124,8 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
             'id': task_id,
             'platform': request.platform,
             'task_type': 'single_platform',
+            'crawler_type': request.crawler_type,  # 添加爬取类型
+            'creator_ref_id': request.creator_ref_id if request.creator_ref_id else None,  # 添加创作者引用ID
             'keywords': request.keywords,
             'status': 'pending',
             'progress': 0.0,
@@ -181,6 +183,28 @@ async def update_task_progress(task_id: str, progress: float, status: str = None
     except Exception as e:
         utils.logger.error(f"[TASK_PROGRESS] 更新任务进度失败: {e}")
 
+async def update_task_creator_ref_id(task_id: str, creator_ref_id: str):
+    """更新任务的creator_ref_id字段"""
+    try:
+        async_db_obj = await get_db_connection()
+        if not async_db_obj:
+            utils.logger.error("[TASK_CREATOR_REF] 无法获取数据库连接")
+            return
+        
+        # 构建更新数据字典
+        update_data = {
+            'creator_ref_id': creator_ref_id,
+            'updated_at': datetime.now()
+        }
+        
+        # 使用update_table方法
+        await async_db_obj.update_table('crawler_tasks', update_data, 'id', task_id)
+        
+        utils.logger.info(f"[TASK_CREATOR_REF] 任务creator_ref_id更新: {task_id}, creator_ref_id: {creator_ref_id}")
+        
+    except Exception as e:
+        utils.logger.error(f"[TASK_CREATOR_REF] 更新任务creator_ref_id失败: {e}")
+
 async def log_task_step(task_id: str, platform: str, step: str, message: str, log_level: str = "INFO", progress: int = None):
     """记录任务步骤日志"""
     try:
@@ -225,7 +249,8 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ get_comments: {request.get_comments}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ save_data_option: {request.save_data_option}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
-        utils.logger.info(f"[TASK_{task_id}]   └─ proxy_strategy: {request.proxy_strategy}")
+        utils.logger.info(f"[TASK_{task_id}]   ├─ proxy_strategy: {request.proxy_strategy}")
+        utils.logger.info(f"[TASK_{task_id}]   └─ selected_creators: {getattr(request, 'selected_creators', None)}")
         
         # 🆕 初始化数据库连接（确保上下文变量可用）
         utils.logger.info(f"[TASK_{task_id}] 📊 初始化数据库连接...")
@@ -311,8 +336,13 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                     raise Exception("数据库连接失败")
                 
                 # 获取指定平台的创作者列表
+                utils.logger.info(f"[TASK_{task_id}] 检查用户选择的创作者...")
+                utils.logger.info(f"[TASK_{task_id}] selected_creators 属性存在: {hasattr(request, 'selected_creators')}")
+                utils.logger.info(f"[TASK_{task_id}] selected_creators 值: {getattr(request, 'selected_creators', None)}")
+                
                 if hasattr(request, 'selected_creators') and request.selected_creators:
                     # 使用用户选择的创作者
+                    utils.logger.info(f"[TASK_{task_id}] 使用用户选择的创作者，数量: {len(request.selected_creators)}")
                     creators_query = """
                         SELECT creator_id, platform, name, nickname 
                         FROM unified_creator 
@@ -321,8 +351,10 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                     """.format(','.join(['%s'] * len(request.selected_creators)))
                     creators = await db.query(creators_query, request.platform, *request.selected_creators)
                     utils.logger.info(f"[TASK_{task_id}] 用户选择了 {len(creators)} 个创作者")
+                    utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
                 else:
                     # 获取所有创作者（按最大数量限制）
+                    utils.logger.info(f"[TASK_{task_id}] 未选择特定创作者，获取所有创作者")
                     creators_query = """
                         SELECT creator_id, platform, name, nickname 
                         FROM unified_creator 
@@ -332,14 +364,19 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                     """
                     creators = await db.query(creators_query, request.platform, request.max_notes_count)
                     utils.logger.info(f"[TASK_{task_id}] 找到 {len(creators)} 个创作者（自动选择）")
+                    utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
                 
                 if not creators:
                     raise Exception(f"平台 {request.platform} 没有找到可用的创作者")
+                
+                # 先初始化爬虫（创建客户端等）
+                await crawler.start()
                 
                 # 调用创作者爬取方法
                 results = await crawler.get_creators_and_notes_from_db(
                     creators=creators,
                     max_count=request.max_notes_count,
+                    keywords=request.keywords,  # 添加关键词参数
                     account_id=request.account_id,
                     session_id=request.session_id,
                     login_type=request.login_type,
@@ -370,6 +407,14 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
             await update_task_progress(task_id, 0.0, "failed")
             await log_task_step(task_id, request.platform, "crawling_failed", f"爬取失败: {str(e)}", "ERROR", 0)
             raise
+        finally:
+            # 安全关闭爬虫资源
+            try:
+                if hasattr(crawler, 'close'):
+                    await crawler.close()
+                    utils.logger.info(f"[TASK_{task_id}] 爬虫资源已关闭")
+            except Exception as e:
+                utils.logger.warning(f"[TASK_{task_id}] 关闭爬虫资源时出现警告: {e}")
         
     except Exception as e:
         utils.logger.error("█" * 100)

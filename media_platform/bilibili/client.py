@@ -206,6 +206,52 @@ class BilibiliClient(AbstractApiClient):
         }
         return await self.get(uri, post_data)
 
+    async def search_up_videos(self, creator_id: int, keywords: str, page: int = 1, page_size: int = 20) -> Dict:
+        """
+        搜索指定UP主的视频（使用通用搜索API）
+        :param creator_id: UP主ID
+        :param keywords: 搜索关键词
+        :param page: 分页参数具体第几页
+        :param page_size: 每一页参数的数量
+        :return: 搜索结果
+        """
+        uri = "/x/web-interface/wbi/search/type"
+        post_data = {
+            "search_type": "video",
+            "keyword": f"uid:{creator_id} {keywords}",  # 使用uid:前缀限制搜索范围
+            "page": page,
+            "page_size": page_size,
+            "order": SearchOrderType.LAST_PUBLISH.value,  # 按发布时间排序
+        }
+        return await self.get(uri, post_data)
+
+    async def search_creator_videos(self, creator_id: int, keywords: str, page: int = 1, page_size: int = 20) -> Dict:
+        """
+        搜索指定UP主的视频（使用创作者主页专用搜索API）
+        :param creator_id: UP主ID
+        :param keywords: 搜索关键词
+        :param page: 分页参数具体第几页
+        :param page_size: 每一页参数的数量
+        :return: 搜索结果
+        """
+        # 使用创作者主页的专用搜索API
+        uri = "/x/space/wbi/arc/search"
+        params = {
+            "pn": page,
+            "ps": page_size,
+            "tid": 0,
+            "special_type": "",
+            "order": "pubdate",  # 按发布时间排序
+            "mid": creator_id,
+            "index": 0,
+            "keyword": keywords,  # 搜索关键词
+            "order_avoided": "true",
+            "platform": "web",
+            "web_location": "333.1387"
+        }
+        # 使用WBI签名，因为这是需要认证的API
+        return await self.get(uri, params, enable_params_sign=True)
+
     async def get_video_info(self, aid: Union[int, None] = None, bvid: Union[str, None] = None) -> Dict:
         """
         Bilibli web video detail api, aid 和 bvid任选一个参数

@@ -88,6 +88,7 @@
 
         .form-group {
             margin-bottom: 20px;
+            position: relative;
         }
 
         .form-group label {
@@ -198,6 +199,9 @@
             display: inline-block;
             margin-right: 10px;
             margin-bottom: 10px;
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
         }
 
         .btn-primary {
@@ -610,14 +614,23 @@
                     </div>
                 </div>
 
-                <div class="form-row">
+                <div class="form-row" id="keywords-row">
                     <div class="form-group">
-                        <label for="single-keywords">🔍 搜索关键词</label>
-                        <input type="text" id="single-keywords" placeholder="例如：编程副业" value="编程副业">
+                        <label for="single-keywords">🔍 搜索关键词 <span style="color: #007bff; font-size: 0.8em;">(创作者模式下使用原生搜索，留空则获取所有内容)</span></label>
+                        <input type="text" id="single-keywords" placeholder="例如：编程副业 (创作者模式下使用原生搜索)" value="编程副业">
                     </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label for="single-max-count">📊 最大爬取数量</label>
                         <input type="number" id="single-max-count" min="1" max="500" value="20">
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <div style="padding-top: 5px; color: #666; font-size: 0.9em;">
+                            💡 创作者模式下：每个创作者最多爬取此数量
+                        </div>
                     </div>
                 </div>
                 
@@ -694,12 +707,13 @@
                 </div>
 
                 <div class="form-group">
-                    <button class="btn btn-primary" onclick="startSinglePlatformCrawler()">
+                    <button class="btn btn-primary" onclick="startSinglePlatformCrawler()" id="start-single-crawler-btn">
                         🚀 开始单平台爬取
                     </button>
                     <button class="btn btn-secondary" onclick="clearSinglePlatformForm()">
                         🔄 清空表单
                     </button>
+
                 </div>
 
                 <div class="status-display" id="single-platform-status">
@@ -831,6 +845,15 @@
             
             // 监听爬取类型变化
             document.getElementById('single-crawler-type').addEventListener('change', handleCrawlerTypeChange);
+            
+            // 初始化爬取类型状态
+            handleCrawlerTypeChange();
+            
+            // 调试：检查按钮是否存在
+            const startBtn = document.getElementById('start-single-crawler-btn');
+            if (startBtn) {
+                console.log('开始按钮已加载');
+            }
         });
 
         // 切换标签页
@@ -1132,6 +1155,8 @@
             }
             
             const keywords = document.getElementById('single-keywords').value.trim();
+            const crawlType = document.getElementById('single-crawler-type').value;
+            
             if (crawlType === 'search' && !keywords) {
                 showToast('请输入搜索关键词', 'warning');
                 return;
@@ -1143,14 +1168,13 @@
             }
             
             const maxCount = document.getElementById('single-max-count').value;
-            const crawlType = document.getElementById('single-crawler-type').value;
             const proxyStrategy = document.getElementById('single-proxy-strategy').value;
             const getComments = false; // 固定为false，因为评论功能待开发
             const videoPriority = document.getElementById('single-video-priority').checked;
 
             const requestData = {
                 platform: selectedPlatform,
-                keywords: crawlType === 'search' ? keywords : '', // 创作者模式不需要关键词
+                keywords: keywords, // 始终传递关键词，让后端决定是否使用
                 max_notes_count: parseInt(maxCount),
                 crawler_type: crawlType,
                 proxy_strategy: proxyStrategy,
@@ -1158,7 +1182,8 @@
                 video_priority: videoPriority,
                 save_data_option: "db",  // 固定为数据库存储
                 account_id: parseInt(selectedAccountId), // 使用选中的账号ID
-                selected_creators: crawlType === 'creator' ? Array.from(selectedCreators) : [] // 传递选中的创作者ID列表
+                selected_creators: crawlType === 'creator' ? Array.from(selectedCreators) : [], // 传递选中的创作者ID列表
+                creator_ref_id: crawlType === 'creator' && selectedCreators.size > 0 ? Array.from(selectedCreators)[0] : null // 传递第一个选中的创作者ID作为引用ID
             };
             
             try {
@@ -1572,7 +1597,7 @@
         // 处理爬取类型变化
         function handleCrawlerTypeChange() {
             const crawlerType = document.getElementById('single-crawler-type').value;
-            const keywordsRow = document.querySelector('.form-row:has(#single-keywords)');
+            const keywordsRow = document.getElementById('keywords-row');
             const creatorInfoRow = document.getElementById('creator-info-row');
             const creatorSelectionRow = document.getElementById('creator-selection-row');
             
@@ -1580,9 +1605,14 @@
             showToast(`已切换到${crawlerType === 'creator' ? '创作者主页' : '关键词搜索'}模式`, 'info');
             
             if (crawlerType === 'creator') {
-                // 创作者主页模式
+                // 创作者主页模式：显示关键词字段，但标记为可选
                 if (keywordsRow) {
-                    keywordsRow.style.display = 'none';
+                    keywordsRow.style.display = 'flex';
+                                                // 更新关键词字段的样式，表示它是可选的
+                            const keywordsField = document.getElementById('single-keywords');
+                            if (keywordsField) {
+                                keywordsField.placeholder = "例如：编程副业 (使用原生搜索)";
+                            }
                 }
                 creatorInfoRow.style.display = 'block';
                 creatorSelectionRow.style.display = 'block';
@@ -1594,6 +1624,7 @@
                 updateStatus('single-platform-result', 
                     `🎯 创作者主页爬取模式\n\n` +
                     `请选择要爬取的创作者（默认全选）\n` +
+                    `关键词搜索：可选，使用B站原生搜索API，留空则获取创作者所有内容\n` +
                     `系统将按最后修改时间排序，优先爬取最近添加的创作者\n\n` +
                     `可以开始爬取任务`
                 );
@@ -1601,6 +1632,11 @@
                 // 关键词搜索模式
                 if (keywordsRow) {
                     keywordsRow.style.display = 'flex';
+                    // 恢复关键词字段的样式
+                    const keywordsField = document.getElementById('single-keywords');
+                    if (keywordsField) {
+                        keywordsField.placeholder = "例如：编程副业";
+                    }
                 }
                 creatorInfoRow.style.display = 'none';
                 creatorSelectionRow.style.display = 'none';

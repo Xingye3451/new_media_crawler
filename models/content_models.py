@@ -118,6 +118,10 @@ class CrawlerRequest(BaseModel):
     use_proxy: Optional[bool] = Field(default=False, description="是否使用代理", example=False)
     proxy_strategy: Optional[str] = Field(default="disabled", description="代理策略", example="disabled")
     
+    # 创作者主页模式参数
+    selected_creators: Optional[List[str]] = Field(default=None, description="选中的创作者ID列表（创作者主页模式使用）", example=["creator_1", "creator_2"])
+    creator_ref_id: Optional[str] = Field(default=None, description="创作者引用ID（当crawler_type为creator时，关联unified_creator表）", example="creator_123")
+    
     # 短视频优先参数
     video_priority: Optional[bool] = Field(default=True, description="短视频优先模式（如小红书优先搜索视频内容）", example=True)
     video_only: Optional[bool] = Field(default=False, description="仅爬取视频内容", example=False)

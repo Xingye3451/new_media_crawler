@@ -143,7 +143,40 @@ class BilibiliDbStoreImplement(AbstractStore):
         Returns:
 
         """
-        await self.unified_store.store_creator(creator_item)
+        try:
+            utils.logger.info(f"[BilibiliStore] 开始存储创作者数据: {creator_item}")
+            
+            # 提取创作者信息 - B站API返回格式: {"code": 0, "data": {...}}
+            creator_data = creator_item.get("data", creator_item)
+            if not creator_data:
+                utils.logger.warning("[BilibiliStore] 创作者数据为空")
+                return
+            
+            # 构建统一存储格式的创作者数据
+            unified_creator_data = {
+                "creator_id": str(creator_data.get("mid", "")),
+                "platform": "bilibili",
+                "creator_name": creator_data.get("name", ""),
+                "creator_nickname": creator_data.get("name", ""),
+                "creator_avatar": creator_data.get("face", ""),
+                "creator_signature": creator_data.get("sign", ""),
+                "follower_count": creator_data.get("follower", 0),
+                "following_count": creator_data.get("following", 0),
+                "video_count": creator_data.get("video_count", 0),
+                "like_count": creator_data.get("like_count", 0),
+                "raw_data": json.dumps(creator_item, ensure_ascii=False),
+                "add_ts": int(time.time()),
+                "last_modify_ts": int(time.time())
+            }
+            
+            # 暂时只调用统一存储的store_creator方法
+            await self.unified_store.store_creator(unified_creator_data)
+            utils.logger.info(f"✅ [BilibiliStore] 创作者存储成功: {unified_creator_data.get('creator_name')}")
+            
+        except Exception as e:
+            utils.logger.error(f"❌ [BilibiliStore] 创作者存储失败: {e}")
+            # 不抛出异常，避免影响爬取流程
+            utils.logger.warning(f"[BilibiliStore] 创作者存储失败，但继续执行: {e}")
 
     async def update_bilibili_video(self, video_item: Dict, task_id: str = None):
         """

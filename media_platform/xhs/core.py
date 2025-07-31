@@ -58,79 +58,70 @@ class XiaoHongShuCrawler(AbstractCrawler):
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
-        async with async_playwright() as playwright:
-            # Launch a browser context.
-            chromium = playwright.chromium
-            self.browser_context = await self.launch_browser(
-                chromium, playwright_proxy_format, self.user_agent, config.HEADLESS
-            )
-            # stealth.min.js is a js script to prevent the website from detecting the crawler.
-            await self.browser_context.add_init_script(
-                path="libs/stealth.min.js"
-            )
-            # add a cookie attribute webId to avoid the appearance of a sliding captcha on the webpage
-            await self.browser_context.add_cookies(
-                [
-                    {
-                        "name": "webId",
-                        "value": "xxx123",
-                        "domain": ".xiaohongshu.com",
-                        "path": "/",
-                    }
-                ]
-            )
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+        # 创建playwright实例，但不使用async with，让它在整个爬取过程中保持打开
+        self.playwright = await async_playwright().start()
+        
+        # Launch a browser context.
+        chromium = self.playwright.chromium
+        self.browser_context = await self.launch_browser(
+            chromium, playwright_proxy_format, self.user_agent, config.HEADLESS
+        )
+        # stealth.min.js is a js script to prevent the website from detecting the crawler.
+        await self.browser_context.add_init_script(
+            path="libs/stealth.min.js"
+        )
+        # add a cookie attribute webId to avoid the appearance of a sliding captcha on the webpage
+        await self.browser_context.add_cookies(
+            [
+                {
+                    "name": "webId",
+                    "value": "xxx123",
+                    "domain": ".xiaohongshu.com",
+                    "path": "/",
+                }
+            ]
+        )
+        self.context_page = await self.browser_context.new_page()
+        await self.context_page.goto(self.index_url)
 
-            # Create a client to interact with the xiaohongshu website.
-            self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
-            
-            # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
-            utils.logger.info("[XiaoHongShuCrawler] 开始使用数据库中的登录凭证...")
-            
-            # 从传入的参数中获取account_id
-            account_id = getattr(self, 'account_id', None)
-            if account_id:
-                utils.logger.info(f"[XiaoHongShuCrawler] 使用指定账号: {account_id}")
-            else:
-                utils.logger.info(f"[XiaoHongShuCrawler] 使用默认账号（最新登录）")
-            
-            # 从数据库获取cookies
-            cookie_str = await get_cookies_from_database("xhs", account_id)
-            
-            if cookie_str:
-                utils.logger.info("[XiaoHongShuCrawler] 发现数据库中的cookies，直接使用...")
-                try:
-                    # 设置cookies到浏览器
-                    await self.xhs_client.set_cookies_from_string(cookie_str)
-                    
-                    # 验证cookies是否有效
-                    # if await self.xhs_client.pong():
-                    #     utils.logger.info("[XiaoHongShuCrawler] ✅ 数据库中的cookies有效，开始爬取")
-                    #     # 更新cookies到客户端
-                    #     await self.xhs_client.update_cookies(browser_context=self.browser_context)
-                    # else:
-                    #     utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中的cookies无效，无法继续")
-                    #     raise Exception("数据库中的登录凭证无效，请重新登录")
-                except Exception as e:
-                    utils.logger.error(f"[XiaoHongShuCrawler] 使用数据库cookies失败: {e}")
-                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
-            else:
-                utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中没有找到有效的登录凭证")
-                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
-            
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
-                await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_notes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get the information and comments of the specified creator
-                await self.get_creators_and_notes()
-
-            utils.logger.info("[XiaoHongShuCrawler.start] Xiaohongshu Crawler finished ...")
+        # Create a client to interact with the xiaohongshu website.
+        self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
+        
+                # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
+        utils.logger.info("[XiaoHongShuCrawler] 开始使用数据库中的登录凭证...")
+        
+        # 从传入的参数中获取account_id
+        account_id = getattr(self, 'account_id', None)
+        if account_id:
+            utils.logger.info(f"[XiaoHongShuCrawler] 使用指定账号: {account_id}")
+        else:
+            utils.logger.info(f"[XiaoHongShuCrawler] 使用默认账号（最新登录）")
+        
+        # 从数据库获取cookies
+        cookie_str = await get_cookies_from_database("xhs", account_id)
+        
+        if cookie_str:
+            utils.logger.info("[XiaoHongShuCrawler] 发现数据库中的cookies，直接使用...")
+            try:
+                # 设置cookies到浏览器
+                await self.xhs_client.set_cookies_from_string(cookie_str)
+                
+                # 验证cookies是否有效
+                # if await self.xhs_client.pong():
+                #     utils.logger.info("[XiaoHongShuCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                #     # 更新cookies到客户端
+                #     await self.xhs_client.update_cookies(browser_context=self.browser_context)
+                # else:
+                #     utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中的cookies无效，无法继续")
+                #     raise Exception("数据库中的登录凭证无效，请重新登录")
+            except Exception as e:
+                utils.logger.error(f"[XiaoHongShuCrawler] 使用数据库cookies失败: {e}")
+                raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+        else:
+            utils.logger.error("[XiaoHongShuCrawler] ❌ 数据库中没有找到有效的登录凭证")
+            raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+        
+        utils.logger.info("[XiaoHongShuCrawler.start] 爬虫初始化完成，浏览器上下文已创建")
 
     async def search(self) -> None:
         """Search for notes and retrieve their comment information."""
@@ -255,7 +246,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             await self.batch_get_note_comments(note_ids, xsec_tokens)
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
-                                           account_id: str = None, session_id: str = None,
+                                           keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
                                            proxy_strategy: str = "disabled") -> List[Dict]:
@@ -275,9 +266,15 @@ class XiaoHongShuCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者，最大数量限制: {max_count}")
+            
+            # 确保客户端已初始化
+            if not hasattr(self, 'xhs_client') or self.xhs_client is None:
+                utils.logger.error("[XiaoHongShuCrawler.get_creators_and_notes_from_db] xhs_client 未初始化")
+                raise Exception("小红书客户端未初始化，请先调用start()方法")
             
             all_results = []
+            total_processed = 0
             
             for creator in creators:
                 user_id = creator.get("creator_id")
@@ -300,28 +297,57 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         crawl_interval = random.uniform(1, config.CRAWLER_MAX_SLEEP_SEC)
                     
                     # 获取创作者的所有笔记
-                    all_notes_list = await self.xhs_client.get_all_notes_by_creator(
-                        user_id=user_id,
-                        crawl_interval=crawl_interval,
-                        callback=self.fetch_creator_notes_detail,
-                    )
+                    # 根据是否有关键词选择不同的获取方式
+                    if keywords and keywords.strip():
+                        # 使用关键词搜索获取笔记
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的笔记")
+                        all_notes_list = await self.xhs_client.search_user_notes(user_id, keywords, max_count)
+                    else:
+                        # 获取创作者的所有笔记
+                        all_notes_list = await self.xhs_client.get_all_notes_by_creator(
+                            user_id=user_id,
+                            crawl_interval=crawl_interval,
+                            callback=self.fetch_creator_notes_detail,
+                        )
                     
                     if all_notes_list:
                         utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取到 {len(all_notes_list)} 条笔记")
                         
+                        # 使用原生搜索API
+                        
+                        # 计算当前创作者可处理的最大数量
+                        remaining_count = max_count - total_processed
+                        if remaining_count <= 0:
+                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，跳过剩余创作者")
+                            break
+                        
+                        # 应用数量限制
+                        limited_notes_list = all_notes_list[:remaining_count]
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 应用数量限制，处理前 {len(limited_notes_list)} 条笔记 (剩余限制: {remaining_count})")
+                        
                         # 处理笔记详情
                         note_ids = []
                         xsec_tokens = []
-                        for note_item in all_notes_list:
+                        for note_item in limited_notes_list:
                             note_ids.append(note_item.get("note_id"))
                             xsec_tokens.append(note_item.get("xsec_token"))
+                            all_results.append(note_item)
+                            total_processed += 1
+                            
+                            # 检查是否达到总数量限制
+                            if total_processed >= max_count:
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，停止处理")
+                                break
+                        
+                        # 如果已达到总数量限制，跳出创作者循环
+                        if total_processed >= max_count:
+                            break
                         
                         # 获取评论
-                        if get_comments:
-                            await self.batch_get_note_comments(note_ids, xsec_tokens)
-                        
-                        # 收集结果
-                        all_results.extend(all_notes_list)
+                        if get_comments and total_processed < max_count:
+                            if note_ids:
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 为 {len(note_ids)} 条笔记获取评论")
+                                await self.batch_get_note_comments(note_ids, xsec_tokens)
                     else:
                         utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到笔记")
                 
@@ -329,7 +355,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据 (限制: {max_count})")
             return all_results
             
         except Exception as e:
@@ -604,9 +630,22 @@ class XiaoHongShuCrawler(AbstractCrawler):
             return browser_context
 
     async def close(self):
-        """Close browser context"""
-        await self.browser_context.close()
-        utils.logger.info("[XiaoHongShuCrawler.close] Browser context closed ...")
+        """安全关闭浏览器和相关资源"""
+        try:
+            if hasattr(self, 'browser_context') and self.browser_context:
+                await self.browser_context.close()
+                utils.logger.info("[XiaoHongShuCrawler] 浏览器上下文已关闭")
+            
+            if hasattr(self, 'context_page') and self.context_page:
+                await self.context_page.close()
+                utils.logger.info("[XiaoHongShuCrawler] 页面已关闭")
+            
+            if hasattr(self, 'playwright') and self.playwright:
+                await self.playwright.stop()
+                utils.logger.info("[XiaoHongShuCrawler] Playwright实例已关闭")
+                
+        except Exception as e:
+            utils.logger.warning(f"[XiaoHongShuCrawler.close] 关闭资源时出现警告: {e}")
 
     async def get_notice_media(self, note_detail: Dict):
         if not config.ENABLE_GET_IMAGES:

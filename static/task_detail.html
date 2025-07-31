@@ -307,6 +307,35 @@
             background: #138496;
         }
 
+        /* 爬取类型徽章样式 */
+        .crawler-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .crawler-type-search {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+
+        .crawler-type-detail {
+            background: #f3e5f5;
+            color: #7b1fa2;
+            border: 1px solid #e1bee7;
+        }
+
+        .crawler-type-creator {
+            background: #e8f5e8;
+            color: #388e3c;
+            border: 1px solid #c8e6c9;
+        }
+
         .video-list-item {
             padding: 20px;
             border-bottom: 1px solid #eee;
@@ -428,6 +457,122 @@
             color: #666;
         }
 
+        /* 创作者信息样式 */
+        .creator-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 20px;
+            color: white;
+            margin-top: 10px;
+        }
+
+        .creator-profile {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        .creator-avatar {
+            flex-shrink: 0;
+        }
+
+        .avatar-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            object-fit: cover;
+        }
+
+        .avatar-placeholder {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .creator-details {
+            flex: 1;
+        }
+
+        .creator-name {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .creator-signature {
+            margin: 0 0 16px 0;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+
+        .creator-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .stat-item {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .creator-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .platform-badge, .verified-badge, .level-badge, .id-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .platform-badge {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .verified-badge {
+            background: #28a745;
+        }
+
+        .level-badge {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .id-badge {
+            background: rgba(255, 255, 255, 0.15);
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        /* 响应式设计 */
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -459,6 +604,14 @@
             .video-list-item {
                 flex-direction: column;
                 text-align: center;
+            }
+            .creator-profile {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .creator-stats {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -492,6 +645,15 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- 创作者信息 (仅在创作者主页模式下显示) -->
+            <div id="creatorInfoSection" class="info-card" style="display: none;">
+                <h3>👤 创作者信息</h3>
+                <div id="creatorInfo" class="creator-info">
+                    <!-- 动态加载 -->
+                </div>
+            </div>
+            
             <div class="info-card">
                 <h3>📊 统计信息</h3>
                 <div id="statisticsInfo">
@@ -526,17 +688,17 @@
 
         <!-- 分页 -->
         <div class="pagination" id="pagination"></div>
-    </div>
 
-    <!-- 视频预览模态框 -->
-    <div class="modal" id="videoModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>视频预览</h3>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
-            </div>
-            <div id="modalContent">
-                <!-- 动态内容 -->
+        <!-- 视频预览模态框 -->
+        <div class="modal" id="videoModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>视频预览</h3>
+                    <button class="close-btn" onclick="closeModal()">&times;</button>
+                </div>
+                <div id="modalContent">
+                    <!-- 动态内容 -->
+                </div>
             </div>
         </div>
     </div>
@@ -587,7 +749,9 @@
         // 渲染任务信息
         function renderTaskInfo() {
             // 更新标题
-            document.getElementById('taskTitle').textContent = taskInfo.task_info?.keywords || taskId;
+            const taskTitle = taskInfo.task_info?.keywords || taskId;
+            const crawlerTypeText = getCrawlerTypeText(taskInfo.task_info?.crawler_type);
+            document.getElementById('taskTitle').textContent = `${taskTitle} ${taskInfo.task_info?.crawler_type ? `[${crawlerTypeText}]` : ''}`;
             document.getElementById('taskDescription').textContent = 
                 `${getPlatformText(taskInfo.task_info?.platform)} 爬取任务 - ${formatDate(taskInfo.task_info?.created_at)}`;
 
@@ -607,6 +771,20 @@
                     <span class="info-value">${getPlatformText(taskInfo.task_info?.platform)}</span>
                 </div>
                 <div class="info-item">
+                    <span class="info-label">爬取类型</span>
+                    <span class="info-value">
+                        <span class="crawler-type-badge crawler-type-${taskInfo.task_info?.crawler_type || 'search'}">
+                            ${getCrawlerTypeText(taskInfo.task_info?.crawler_type)}
+                        </span>
+                        ${taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_id ? 
+                            `<br><span style="color: #667eea; font-size: 0.9em; margin-top: 5px; display: inline-block;">👤 创作者ID: ${taskInfo.task_info.creator_ref_id}</span>` : ''}
+                        ${taskInfo.task_info?.crawler_type === 'search' && taskInfo.task_info?.keywords ? 
+                            `<br><span style="color: #1976d2; font-size: 0.9em; margin-top: 5px; display: inline-block;">🔍 搜索关键词: ${taskInfo.task_info.keywords}</span>` : ''}
+                        ${taskInfo.task_info?.crawler_type === 'detail' ? 
+                            `<br><span style="color: #7b1fa2; font-size: 0.9em; margin-top: 5px; display: inline-block;">📋 指定内容模式</span>` : ''}
+                    </span>
+                </div>
+                <div class="info-item">
                     <span class="info-label">创建时间</span>
                     <span class="info-value">${formatDate(taskInfo.task_info?.created_at)}</span>
                 </div>
@@ -615,6 +793,17 @@
                     <span class="info-value">${getStatusText(taskInfo.task_info?.status)}</span>
                 </div>
             `;
+
+            // 如果是创作者主页模式，加载创作者信息
+            if (taskInfo.task_info?.crawler_type === 'creator') {
+                if (taskInfo.task_info?.creator_ref_id) {
+                    // 如果有creator_ref_id，使用API获取
+                    loadCreatorDetail(taskInfo.task_info.creator_ref_id);
+                } else if (taskInfo.recent_videos && taskInfo.recent_videos.length > 0) {
+                    // 如果没有creator_ref_id，从视频数据中提取创作者信息
+                    loadCreatorFromVideos(taskInfo.recent_videos);
+                }
+            }
 
             // 统计信息
             const statisticsInfo = document.getElementById('statisticsInfo');
@@ -637,6 +826,13 @@
                     <span class="info-value">${formatBytes(stats.total_size || 0)}</span>
                 </div>
             `;
+
+            // 异步加载创作者详细信息
+            if (taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_id) {
+                setTimeout(() => {
+                    loadCreatorInfo(taskInfo.task_info.creator_ref_id);
+                }, 1000); // 延迟1秒加载，避免阻塞页面渲染
+            }
         }
 
         // 加载视频列表
@@ -1345,6 +1541,138 @@
                 'pending': '等待中'
             };
             return statusTexts[status] || '未知';
+        }
+
+        function getCrawlerTypeText(crawlerType) {
+            const crawlerTypeTexts = {
+                'search': '🔍 关键词搜索',
+                'detail': '📋 指定内容',
+                'creator': '👤 创作者主页'
+            };
+            return crawlerTypeTexts[crawlerType] || '未知类型';
+        }
+
+        // 获取创作者信息
+        async function getCreatorInfo(creatorRefId) {
+            if (!creatorRefId) return '未知';
+            
+            try {
+                const response = await fetch(`/api/v1/creators/${creatorRefId}`);
+                const data = await response.json();
+                
+                if (data.code === 200 && data.data) {
+                    const creator = data.data;
+                    return `${creator.name || creator.nickname || '未知'} (${getPlatformText(creator.platform || '未知平台')})`;
+                } else {
+                    return '信息获取中...';
+                }
+            } catch (error) {
+                console.error('获取创作者信息失败:', error);
+                return '信息获取失败';
+            }
+        }
+
+        // 异步加载创作者详细信息
+        async function loadCreatorDetail(creatorRefId) {
+            if (!creatorRefId) return;
+            
+            try {
+                const platform = taskInfo.task_info?.platform || 'bili';
+                const response = await fetch(`/api/v1/creators/${creatorRefId}/detail?platform=${platform}`);
+                const data = await response.json();
+                
+                if (data.code === 200 && data.data) {
+                    const creatorInfo = data.data.creator_info;
+                    const contentStats = data.data.content_stats;
+                    const platformInfo = data.data.platform_info;
+                    
+                    const creatorInfoSection = document.getElementById('creatorInfoSection');
+                    const creatorInfoElement = document.getElementById('creatorInfo');
+                    
+                    if (creatorInfoElement && creatorInfo) {
+                        creatorInfoElement.innerHTML = `
+                            <div class="creator-profile">
+                                <div class="creator-avatar">
+                                    ${creatorInfo.avatar ? `<img src="${creatorInfo.avatar}" alt="${creatorInfo.nickname || creatorInfo.name}" class="avatar-img">` : '<div class="avatar-placeholder">👤</div>'}
+                                </div>
+                                <div class="creator-details">
+                                    <h4 class="creator-name">${creatorInfo.name || creatorInfo.nickname || '未知创作者'}</h4>
+                                    <p class="creator-signature">${creatorInfo.signature || creatorInfo.description || '暂无签名'}</p>
+                                    <div class="creator-stats">
+                                        <div class="stat-item">
+                                            <span class="stat-label">👥 粉丝</span>
+                                            <span class="stat-value">${formatNumber(creatorInfo.fans_count)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">❤️ 获赞</span>
+                                            <span class="stat-value">${formatNumber(creatorInfo.like_count)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">📹 内容</span>
+                                            <span class="stat-value">${formatNumber(creatorInfo.content_count)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">👀 关注</span>
+                                            <span class="stat-value">${formatNumber(creatorInfo.follow_count)}</span>
+                                        </div>
+                                    </div>
+                                    <div class="creator-meta">
+                                        <span class="platform-badge">${getPlatformText(creatorInfo.platform)}</span>
+                                        ${creatorInfo.verified ? '<span class="verified-badge">✓ 已认证</span>' : ''}
+                                        ${creatorInfo.level ? `<span class="level-badge">Lv.${creatorInfo.level}</span>` : ''}
+                                        ${creatorInfo.unique_id ? `<span class="id-badge">ID: ${creatorInfo.unique_id}</span>` : ''}
+                                    </div>
+                                    ${platformInfo && platformInfo.creator_url ? `
+                                        <div class="creator-links" style="margin-top: 12px;">
+                                            <a href="${platformInfo.creator_url}" target="_blank" class="btn btn-white btn-sm" style="text-decoration: none; font-size: 0.8em;">
+                                                🔗 查看主页
+                                            </a>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                        creatorInfoSection.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('获取创作者信息失败:', error);
+                const creatorInfoSection = document.getElementById('creatorInfoSection');
+                if (creatorInfoSection) {
+                    creatorInfoSection.style.display = 'none';
+                }
+            }
+        }
+
+        // 从视频数据中提取创作者信息并加载
+        async function loadCreatorFromVideos(videosData) {
+            if (!videosData || videosData.length === 0) {
+                alert('未找到视频数据，无法提取创作者信息。');
+                return;
+            }
+
+            const firstVideo = videosData[0];
+            const creatorId = firstVideo.author_id || firstVideo.user_id || firstVideo.uid || firstVideo.user_id;
+            const creatorName = firstVideo.author_name || firstVideo.nickname || firstVideo.user_name || '未知创作者';
+
+            if (!creatorId || creatorId === 'undefined') {
+                alert('无法从视频数据中提取创作者ID，请手动输入或稍后重试。');
+                return;
+            }
+
+            await loadCreatorDetail(creatorId);
+        }
+
+        // 格式化数字显示
+        function formatNumber(num) {
+            if (!num || num === 0) return '0';
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(1) + '亿';
+            } else if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            } else {
+                return num.toString();
+            }
         }
 
         // 点击模态框外部关闭

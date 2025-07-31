@@ -17,6 +17,7 @@
 import asyncio
 import os
 import random
+import json
 from asyncio import Task
 from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
@@ -53,75 +54,121 @@ class BilibiliCrawler(AbstractCrawler):
         self.task_id = task_id
 
     async def start(self) -> None:
+        """初始化爬虫，创建浏览器上下文和客户端"""
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
             ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
-        async with async_playwright() as playwright:
-            # Launch a browser context.
-            chromium = playwright.chromium
-            self.browser_context = await self.launch_browser(
-                chromium,
-                None,
-                self.user_agent,
-                headless=config.HEADLESS
-            )
-            # stealth.min.js is a js script to prevent the website from detecting the crawler.
-            await self.browser_context.add_init_script(path="libs/stealth.min.js")
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+        # 创建playwright实例，但不使用async with，让它在整个爬取过程中保持打开
+        self.playwright = await async_playwright().start()
+        
+        # Launch a browser context.
+        chromium = self.playwright.chromium
+        self.browser_context = await self.launch_browser(
+            chromium,
+            None,
+            self.user_agent,
+            headless=config.HEADLESS
+        )
+        # stealth.min.js is a js script to prevent the website from detecting the crawler.
+        await self.browser_context.add_init_script(path="libs/stealth.min.js")
+        self.context_page = await self.browser_context.new_page()
+        await self.context_page.goto(self.index_url)
 
-            # Create a client to interact with the xiaohongshu website.
-            self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
-            
-            # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
-            utils.logger.info("[BilibiliCrawler] 开始使用数据库中的登录凭证...")
-            
-            # 从传入的参数中获取account_id
-            account_id = getattr(self, 'account_id', None)
-            if account_id:
-                utils.logger.info(f"[BilibiliCrawler] 使用指定账号: {account_id}")
-            else:
-                utils.logger.info(f"[BilibiliCrawler] 使用默认账号（最新登录）")
-            
-            # 从数据库获取cookies
-            cookie_str = await get_cookies_from_database("bili", account_id)
-            
-            if cookie_str:
-                utils.logger.info("[BilibiliCrawler] 发现数据库中的cookies，直接使用...")
-                try:
-                    # 设置cookies到浏览器
-                    await self.bili_client.set_cookies_from_string(cookie_str)
-                    
-                    # 验证cookies是否有效
-                    if await self.bili_client.pong():
-                        utils.logger.info("[BilibiliCrawler] ✅ 数据库中的cookies有效，开始爬取")
-                        # 更新cookies到客户端
-                        await self.bili_client.update_cookies(browser_context=self.browser_context)
-                    else:
-                        utils.logger.error("[BilibiliCrawler] ❌ 数据库中的cookies无效，无法继续")
-                        raise Exception("数据库中的登录凭证无效，请重新登录")
-                except Exception as e:
-                    utils.logger.error(f"[BilibiliCrawler] 使用数据库cookies失败: {e}")
-                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
-            else:
-                utils.logger.error("[BilibiliCrawler] ❌ 数据库中没有找到有效的登录凭证")
-                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
-            
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
-                await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_notes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get the information and comments of the specified creator
-                await self.get_creators_and_notes()
+        # Create a client to interact with the bilibili website.
+        self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
+        
+        # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
+        utils.logger.info("[BilibiliCrawler] 开始使用数据库中的登录凭证...")
+        
+        # 从传入的参数中获取account_id
+        account_id = getattr(self, 'account_id', None)
+        if account_id:
+            utils.logger.info(f"[BilibiliCrawler] 使用指定账号: {account_id}")
+        else:
+            utils.logger.info(f"[BilibiliCrawler] 使用默认账号（最新登录）")
+        
+        # 从数据库获取cookies
+        cookie_str = await get_cookies_from_database("bili", account_id)
+        
+        if cookie_str:
+            utils.logger.info("[BilibiliCrawler] 发现数据库中的cookies，直接使用...")
+            try:
+                # 设置cookies到浏览器
+                await self.bili_client.set_cookies_from_string(cookie_str)
+                
+                # 验证cookies是否有效
+                if await self.bili_client.pong():
+                    utils.logger.info("[BilibiliCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                    # 更新cookies到客户端
+                    await self.bili_client.update_cookies(browser_context=self.browser_context)
+                else:
+                    utils.logger.error("[BilibiliCrawler] ❌ 数据库中的cookies无效，无法继续")
+                    raise Exception("数据库中的登录凭证无效，请重新登录")
+            except Exception as e:
+                utils.logger.error(f"[BilibiliCrawler] 使用数据库cookies失败: {e}")
+                raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+        else:
+            utils.logger.error("[BilibiliCrawler] ❌ 数据库中没有找到有效的登录凭证")
+            raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+        
+        utils.logger.info("[BilibiliCrawler.start] 爬虫初始化完成，浏览器上下文已创建")
 
-            utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
+    async def get_creators_and_notes(self) -> None:
+        """Get creator's videos and retrieve their comment information."""
+        utils.logger.info(
+            "[BilibiliCrawler.get_creators_and_notes] Begin get bilibili creators"
+        )
+        for creator_id in config.BILI_CREATOR_ID_LIST:
+            # get creator detail info
+            creator_info: Dict = await self.bili_client.get_creator_info(creator_id=int(creator_id))
+            if creator_info:
+                await self.bilibili_store.store_creator(creator_info)
+                utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes] creator info: {creator_info}")
+
+            # Get all video information of the creator
+            all_video_list = await self.get_creator_videos(creator_id=int(creator_id))
+            if all_video_list:
+                utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes] got creator_id:{creator_id} videos len : {len(all_video_list)}")
+                
+                # 处理每个视频，获取详细信息和播放地址
+                for video_item in all_video_list:
+                    try:
+                        # 获取视频详细信息
+                        video_detail = await self.get_video_info_task(
+                            aid=video_item.get("aid", 0), 
+                            bvid=video_item.get("bvid", ""), 
+                            semaphore=asyncio.Semaphore(5)
+                        )
+                        
+                        if video_detail:
+                            # 获取播放地址
+                            video_aid = video_detail.get("View", {}).get("aid")
+                            video_cid = video_detail.get("View", {}).get("cid")
+                            
+                            if video_aid and video_cid:
+                                play_url_result = await self.get_video_play_url_task(
+                                    video_aid, video_cid, asyncio.Semaphore(5)
+                                )
+                                if play_url_result:
+                                    video_detail.update(play_url_result)
+                            
+                            # 保存到数据库
+                            await self.bilibili_store.update_bilibili_video(video_detail, task_id=self.task_id)
+                            await self.bilibili_store.update_up_info(video_detail)
+                            await self.get_bilibili_video(video_detail, asyncio.Semaphore(5))
+                        
+                    except Exception as e:
+                        utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes] 处理视频失败: {e}")
+                        continue
+                
+                # Get comments for all videos
+                video_ids = [video_item.get("bvid") for video_item in all_video_list if video_item.get("bvid")]
+                await self.batch_get_video_comments(video_ids)
+            else:
+                utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes] creator_id:{creator_id} not found")
 
     async def search(self):
         """
@@ -429,23 +476,250 @@ class BilibiliCrawler(AbstractCrawler):
                 utils.logger.error(
                     f"[BilibiliCrawler.get_comments] may be been blocked, err:{e}")
 
-    async def get_creator_videos(self, creator_id: int):
+    async def get_creator_videos(self, creator_id: int, max_count: int = None):
         """
         get videos for a creator
-        :return:
+        :param creator_id: 创作者ID
+        :param max_count: 最大获取数量，None表示获取所有
+        :return: List[Dict] 创作者视频列表
         """
         ps = 30
         pn = 1
+        max_pages = 10  # 最大获取10页，避免无限循环
         video_bvids_list = []
-        while True:
-            result = await self.bili_client.get_creator_videos(creator_id, pn, ps)
-            for video in result["list"]["vlist"]:
-                video_bvids_list.append(video["bvid"])
-            if (int(result["page"]["count"]) <= pn * ps):
-                break
-            await asyncio.sleep(random.random())
-            pn += 1
-        await self.get_specified_videos(video_bvids_list)
+        all_video_list = []
+        
+        try:
+            while True:
+                result = await self.bili_client.get_creator_videos(creator_id, pn, ps)
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 获取创作者 {creator_id} 第 {pn} 页视频列表")
+                
+                # 添加调试日志，查看API返回的数据结构
+                import json
+                utils.logger.debug(f"[BilibiliCrawler.get_creator_videos] API返回数据结构: {json.dumps(result, ensure_ascii=False)[:500]}...")
+                
+                if not result:
+                    utils.logger.warning(f"[BilibiliCrawler.get_creator_videos] 获取创作者视频列表失败: 结果为空")
+                    break
+                
+                if "list" not in result:
+                    utils.logger.warning(f"[BilibiliCrawler.get_creator_videos] 获取创作者视频列表失败: 缺少list字段, {result}")
+                    break
+                
+                if "vlist" not in result["list"]:
+                    utils.logger.warning(f"[BilibiliCrawler.get_creator_videos] 获取创作者视频列表失败: 缺少vlist字段, {result['list']}")
+                    break
+                
+                video_list = result["list"]["vlist"]
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 第 {pn} 页获取到 {len(video_list)} 个视频")
+                
+                for video in video_list:
+                    # 检查是否达到最大数量限制
+                    if max_count is not None and len(all_video_list) >= max_count:
+                        utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 已达到最大数量限制 {max_count}，停止获取")
+                        break
+                    
+                    bvid = video.get("bvid", "")
+                    if bvid:
+                        video_bvids_list.append(bvid)
+                    # 构建基础视频信息 - 使用安全的字段访问
+                    video_info = {
+                        "bvid": video.get("bvid", ""),
+                        "aid": video.get("aid", 0),
+                        "title": video.get("title", ""),
+                        "desc": video.get("description", ""),
+                        "duration": video.get("duration", 0),
+                        "pic": video.get("pic", ""),
+                        "owner": {
+                            "mid": video.get("owner", {}).get("mid", 0),
+                            "name": video.get("owner", {}).get("name", ""),
+                            "face": video.get("owner", {}).get("face", "")
+                        },
+                        "stat": {
+                            "view": video.get("stat", {}).get("view", 0),
+                            "danmaku": video.get("stat", {}).get("danmaku", 0),
+                            "reply": video.get("stat", {}).get("reply", 0),
+                            "favorite": video.get("stat", {}).get("favorite", 0),
+                            "coin": video.get("stat", {}).get("coin", 0),
+                            "share": video.get("stat", {}).get("share", 0),
+                            "like": video.get("stat", {}).get("like", 0)
+                        },
+                        "pubdate": video.get("pubdate", 0),
+                        "ctime": video.get("ctime", 0)
+                    }
+                    all_video_list.append(video_info)
+                
+                # 如果已达到最大数量限制，跳出分页循环
+                if max_count is not None and len(all_video_list) >= max_count:
+                    break
+                
+                # 检查是否还有更多页
+                page_info = result.get("page", {})
+                total_count = page_info.get("count", 0)
+                current_count = pn * ps
+                
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 总视频数: {total_count}, 当前已获取: {current_count}")
+                
+                if total_count <= current_count:
+                    utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 已获取所有视频，停止分页")
+                    break
+                
+                if pn >= max_pages:
+                    utils.logger.warning(f"[BilibiliCrawler.get_creator_videos] 已达到最大页数限制 {max_pages}，停止获取")
+                    break
+                
+                await asyncio.sleep(random.random())
+                pn += 1
+            
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos] 获取到 {len(all_video_list)} 个视频")
+            return all_video_list
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliCrawler.get_creator_videos] 获取创作者视频失败: {e}")
+            import traceback
+            utils.logger.error(f"[BilibiliCrawler.get_creator_videos] 错误堆栈: {traceback.format_exc()}")
+            return []
+
+    async def get_creator_videos_by_keywords(self, creator_id: int, keywords: str, max_count: int = None):
+        """
+        使用关键词搜索获取创作者的视频
+        :param creator_id: 创作者ID
+        :param keywords: 搜索关键词
+        :param max_count: 最大获取数量，None表示获取所有
+        :return: List[Dict] 匹配关键词的视频列表
+        """
+        try:
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 开始关键词搜索")
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 创作者ID: {creator_id}")
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 搜索关键词: '{keywords}'")
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 最大数量限制: {max_count}")
+            
+            # 使用B站创作者主页专用搜索API
+            search_result = await self.bili_client.search_creator_videos(creator_id, keywords)
+            
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 搜索API返回结果: {search_result}")
+            
+            # 检查返回的数据结构 - 根据真实API返回的数据结构
+            if not search_result or "list" not in search_result:
+                utils.logger.warning(f"[BilibiliCrawler.get_creator_videos_by_keywords] 搜索失败或无结果")
+                return []
+            
+            # 检查返回的数据结构
+            if "vlist" not in search_result["list"]:
+                utils.logger.warning(f"[BilibiliCrawler.get_creator_videos_by_keywords] 搜索返回数据结构异常: {search_result}")
+                return []
+            
+            video_list = search_result["list"]["vlist"]
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 搜索到 {len(video_list)} 个匹配的视频")
+            
+            # 构建标准化的视频信息
+            all_video_list = []
+            for video in video_list:
+                # 构建基础视频信息 - 使用安全的字段访问
+                # 保留原始字段，确保后续处理能正常工作
+                video_info = {
+                    # 核心字段 - 用于后续获取详细信息
+                    "bvid": video.get("bvid", ""),
+                    "aid": video.get("aid", 0),
+                    "title": video.get("title", ""),
+                    "description": video.get("description", ""),  # 真实API中是"description"
+                    "content": video.get("description", ""),  # 内容使用描述
+                    "content_type": "video",  # 固定值
+                    "content_id": video.get("bvid", ""),  # 使用bvid作为content_id
+                    "author_id": video.get("mid", 0),  # 真实API中是"mid"
+                    "author_name": video.get("author", ""),  # 真实API中是"author"
+                    "author_nickname": video.get("author", ""),  # 真实API中是"author"
+                    "author_avatar": "",  # 真实API中没有直接的avatar字段
+                    "author_signature": "",  # 真实API中没有signature字段
+                    "author_unique_id": "",  # 真实API中没有unique_id字段
+                    "author_sec_uid": "",  # 真实API中没有sec_uid字段
+                    "author_short_id": "",  # 真实API中没有short_id字段
+                    "like_count": 0,  # 真实API中没有like字段
+                    "comment_count": video.get("comment", 0),  # 真实API中是"comment"
+                    "share_count": 0,  # 真实API中没有share字段
+                    "collect_count": 0,  # 真实API中没有collect字段
+                    "view_count": video.get("play", 0),  # 真实API中是"play"
+                    "cover_url": video.get("pic", ""),  # 真实API中是"pic"
+                    "video_url": f"https://www.bilibili.com/video/{video.get('bvid', '')}",  # 构建播放页链接
+                    "video_play_url": f"https://www.bilibili.com/video/{video.get('bvid', '')}",  # 播放页链接
+                    "video_download_url": "",  # 需要单独获取
+                    "video_share_url": f"https://www.bilibili.com/video/{video.get('bvid', '')}",  # 分享链接
+                    "image_urls": [],  # 真实API中没有image_urls字段
+                    "audio_url": "",  # 真实API中没有audio_url字段
+                    "file_urls": [],  # 真实API中没有file_urls字段
+                    "ip_location": "",  # 真实API中没有ip_location字段
+                    "location": "",  # 真实API中没有location字段
+                    "tags": "",  # 真实API中没有tags字段
+                    "categories": "",  # 真实API中没有categories字段
+                    "topics": "",  # 真实API中没有topics字段
+                    "is_favorite": False,  # 真实API中没有is_favorite字段
+                    "is_deleted": False,  # 真实API中没有is_deleted字段
+                    "is_private": False,  # 真实API中没有is_private字段
+                    "is_original": True,  # 假设为原创
+                    "minio_url": "",  # 需要后续处理
+                    "local_path": "",  # 需要后续处理
+                    "file_size": 0,  # 真实API中没有file_size字段
+                    "storage_type": "",  # 真实API中没有storage_type字段
+                    "metadata": json.dumps(video.get("meta", {}), ensure_ascii=False),  # 序列化meta数据
+                    "raw_data": json.dumps(video, ensure_ascii=False),  # 原始数据
+                    "extra_info": json.dumps({
+                        "typeid": video.get("typeid", 0),
+                        "copyright": video.get("copyright", "1"),
+                        "review": video.get("review", 0),
+                        "hide_click": video.get("hide_click", False),
+                        "is_pay": video.get("is_pay", 0),
+                        "is_union_video": video.get("is_union_video", 0),
+                        "is_steins_gate": video.get("is_steins_gate", 0),
+                        "is_live_playback": video.get("is_live_playback", 0),
+                        "is_lesson_video": video.get("is_lesson_video", 0),
+                        "is_lesson_finished": video.get("is_lesson_finished", 0),
+                        "is_charging_arc": video.get("is_charging_arc", False),
+                        "elec_arc_type": video.get("elec_arc_type", 0),
+                        "elec_arc_badge": video.get("elec_arc_badge", ""),
+                        "season_id": video.get("season_id", 0),
+                        "attribute": video.get("attribute", 0),
+                        "subtitle": video.get("subtitle", ""),
+                        "jump_url": video.get("jump_url", ""),
+                        "length": video.get("length", ""),
+                        "video_review": video.get("video_review", 0)
+                    }, ensure_ascii=False),
+                    "create_time": video.get("created", 0),  # 真实API中是"created"
+                    "publish_time": video.get("created", 0),  # 真实API中是"created"
+                    "update_time": video.get("created", 0),  # 真实API中是"created"
+                    "add_ts": int(time.time()),  # 当前时间戳
+                    "last_modify_ts": int(time.time()),  # 当前时间戳
+                    "source_keyword": keywords if keywords else "",  # 搜索关键词
+                    # 保留原始字段用于兼容性
+                    "stat": {
+                        "view": video.get("play", 0),
+                        "danmaku": video.get("video_review", 0),
+                        "reply": video.get("comment", 0),
+                        "favorite": 0,
+                        "coin": 0,
+                        "share": 0,
+                        "like": 0
+                    },
+                    "pubdate": video.get("created", 0),
+                    "ctime": video.get("created", 0),
+                    # 添加原始数据，确保后续处理能获取到完整信息
+                    "original_data": video
+                }
+                all_video_list.append(video_info)
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 匹配视频: {video_info.get('title', '无标题')}")
+            
+            # 应用数量限制
+            if max_count is not None and len(all_video_list) > max_count:
+                all_video_list = all_video_list[:max_count]
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 应用数量限制，保留前 {len(all_video_list)} 个视频")
+            
+            utils.logger.info(f"[BilibiliCrawler.get_creator_videos_by_keywords] 最终返回 {len(all_video_list)} 个视频")
+            return all_video_list
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliCrawler.get_creator_videos_by_keywords] 关键词搜索失败: {e}")
+            import traceback
+            utils.logger.error(f"[BilibiliCrawler.get_creator_videos_by_keywords] 错误堆栈: {traceback.format_exc()}")
+            return []
 
     async def get_specified_videos(self, bvids_list: List[str]):
         """
@@ -640,7 +914,7 @@ class BilibiliCrawler(AbstractCrawler):
         await self.bilibili_store.store_video(aid, content, extension_file_name)
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
-                                           account_id: str = None, session_id: str = None,
+                                           keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
                                            proxy_strategy: str = "disabled") -> List[Dict]:
@@ -649,6 +923,7 @@ class BilibiliCrawler(AbstractCrawler):
         Args:
             creators: 创作者列表，包含creator_id, platform, name, nickname
             max_count: 最大爬取数量
+            keywords: 关键词（可选，用于筛选创作者内容）
             account_id: 账号ID
             session_id: 会话ID
             login_type: 登录类型
@@ -661,6 +936,14 @@ class BilibiliCrawler(AbstractCrawler):
         """
         try:
             utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
+            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
+            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+            
+            # 确保客户端已初始化
+            if not hasattr(self, 'bili_client') or self.bili_client is None:
+                utils.logger.error("[BilibiliCrawler.get_creators_and_notes_from_db] bili_client 未初始化")
+                raise Exception("B站客户端未初始化，请先调用start()方法")
             
             all_results = []
             
@@ -675,22 +958,105 @@ class BilibiliCrawler(AbstractCrawler):
                     creator_info: Dict = await self.bili_client.get_creator_info(int(user_id))
                     if creator_info:
                         # 更新创作者信息到数据库
-                        await self.bilibili_store.save_creator(user_id, creator=creator_info)
+                        await self.bilibili_store.store_creator(creator_info)
                         utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                        
+                        # 更新任务的creator_ref_id字段
+                        try:
+                            from api.crawler_core import update_task_creator_ref_id
+                            await update_task_creator_ref_id(self.task_id, str(user_id))
+                            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 任务creator_ref_id已更新: {user_id}")
+                        except Exception as e:
+                            utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_id失败: {e}")
                     
-                    # 获取创作者的所有视频
-                    all_video_list = await self.get_creator_videos(int(user_id))
+                    # 根据是否有关键词选择不同的获取方式
+                    if keywords and keywords.strip():
+                        # 使用关键词搜索获取视频
+                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的视频")
+                        all_video_list = await self.get_creator_videos_by_keywords(int(user_id), keywords, max_count)
+                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
+                    else:
+                        # 获取创作者的所有视频（应用数量限制）
+                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
+                        all_video_list = await self.get_creator_videos(int(user_id), max_count)
+                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                     
                     if all_video_list:
                         utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
                         
+                        # 处理每个视频，获取详细信息
+                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 开始处理 {len(all_video_list)} 个视频")
+                        
+                        for i, video_item in enumerate(all_video_list):
+                            try:
+                                utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 个视频: {video_item.get('title', '无标题')}")
+                                utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频信息: aid={video_item.get('aid')}, bvid={video_item.get('bvid')}")
+                                
+                                # 获取视频详细信息
+                                video_detail = await self.get_video_info_task(
+                                    aid=video_item.get("aid", 0), 
+                                    bvid=video_item.get("bvid", ""), 
+                                    semaphore=asyncio.Semaphore(5)
+                                )
+                                
+                                if video_detail:
+                                    utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 成功获取视频详细信息")
+                                    
+                                    # 获取播放地址
+                                    video_aid = video_detail.get("View", {}).get("aid")
+                                    video_cid = video_detail.get("View", {}).get("cid")
+                                    
+                                    if video_aid and video_cid:
+                                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取播放地址: aid={video_aid}, cid={video_cid}")
+                                        play_url_result = await self.get_video_play_url_task(
+                                            video_aid, video_cid, asyncio.Semaphore(5)
+                                        )
+                                        if play_url_result:
+                                            video_detail.update(play_url_result)
+                                            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 成功获取播放地址")
+                                        else:
+                                            utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取播放地址失败")
+                                    else:
+                                        utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes_from_db] 缺少aid或cid: aid={video_aid}, cid={video_cid}")
+                                    
+                                    # 保存到数据库
+                                    utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
+                                    try:
+                                        await self.bilibili_store.update_bilibili_video(video_detail, task_id=self.task_id)
+                                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
+                                    except Exception as e:
+                                        utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频数据保存失败: {e}")
+                                    
+                                    try:
+                                        await self.bilibili_store.update_up_info(video_detail)
+                                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] UP主信息更新成功")
+                                    except Exception as e:
+                                        utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] UP主信息更新失败: {e}")
+                                    
+                                    try:
+                                        await self.get_bilibili_video(video_detail, asyncio.Semaphore(5))
+                                        utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频下载处理成功")
+                                    except Exception as e:
+                                        utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频下载处理失败: {e}")
+                                    
+                                    # 添加到结果列表
+                                    all_results.append(video_detail)
+                                    utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 视频处理完成，已添加到结果列表")
+                                else:
+                                    utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes_from_db] 获取视频详细信息失败")
+                                
+                            except Exception as e:
+                                utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 处理视频失败: {e}")
+                                import traceback
+                                utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 错误堆栈: {traceback.format_exc()}")
+                                continue
+                        
                         # 获取评论
                         if get_comments:
-                            video_ids = [video_item.get("bvid") for video_item in all_video_list if video_item.get("bvid")]
-                            await self.batch_get_video_comments(video_ids)
-                        
-                        # 收集结果
-                        all_results.extend(all_video_list)
+                            video_ids = [video_item.get("bvid") for video_item in all_results if video_item.get("bvid")]
+                            if video_ids:
+                                utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 为 {len(video_ids)} 个视频获取评论")
+                                await self.batch_get_video_comments(video_ids)
                     else:
                         utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到视频")
                 
@@ -698,7 +1064,7 @@ class BilibiliCrawler(AbstractCrawler):
                     utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据 (限制: {max_count})")
             return all_results
             
         except Exception as e:
@@ -955,6 +1321,10 @@ class BilibiliCrawler(AbstractCrawler):
             if hasattr(self, 'context_page') and self.context_page:
                 await self.context_page.close()
                 utils.logger.info("[BilibiliCrawler] 页面已关闭")
+            
+            if hasattr(self, 'playwright') and self.playwright:
+                await self.playwright.stop()
+                utils.logger.info("[BilibiliCrawler] Playwright实例已关闭")
                 
         except Exception as e:
             utils.logger.warning(f"[BilibiliCrawler.close] 关闭资源时出现警告: {e}")
