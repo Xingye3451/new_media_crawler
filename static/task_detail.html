@@ -1098,12 +1098,21 @@
 
         // 工具函数
         function getThumbnail(video) {
-            // 使用新的缩略图代理API
-            if (video.cover_url) {
-                const encodedUrl = encodeURIComponent(video.cover_url);
+            // 优先使用视频封面
+            if (video.cover_url || video.video_cover_url) {
+                const coverUrl = video.cover_url || video.video_cover_url;
+                // 使用缩略图代理API避免跨域问题
+                const encodedUrl = encodeURIComponent(coverUrl);
                 return `/api/v1/thumbnail-proxy?url=${encodedUrl}`;
             }
-            return video.thumbnail || '/static/default-thumbnail.jpg';
+            // 其次使用头像
+            if (video.avatar || video.author_avatar) {
+                const avatarUrl = video.avatar || video.author_avatar;
+                const encodedUrl = encodeURIComponent(avatarUrl);
+                return `/api/v1/thumbnail-proxy?url=${encodedUrl}`;
+            }
+            // 最后使用本地默认头像（减少请求频率）
+            return '/images/default-avatar.png';
         }
         
         // 缩略图加载错误处理
