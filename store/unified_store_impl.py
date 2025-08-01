@@ -76,11 +76,11 @@ class UnifiedStoreImplement(AbstractStore):
                     # 新增内容
                     task_id = content_item.get("task_id")
                     await add_new_content(self.platform, content_item, task_id)
-                    utils.logger.info(f"✅ [UnifiedStore] 新增内容成功: {self.platform}/{content_id}")
+                    utils.logger.debug(f"✅ [UnifiedStore] 新增内容成功: {self.platform}/{content_id}")
                 else:
                     # 更新内容
                     await update_content_by_content_id(self.platform, content_id, content_item)
-                    utils.logger.info(f"✅ [UnifiedStore] 更新内容成功: {self.platform}/{content_id}")
+                    utils.logger.debug(f"✅ [UnifiedStore] 更新内容成功: {self.platform}/{content_id}")
                 
                 # 收集数据用于返回
                 self.collected_data.append(content_item)
@@ -114,11 +114,11 @@ class UnifiedStoreImplement(AbstractStore):
             if not existing_comment:
                 # 新增评论
                 await add_new_comment(self.platform, comment_item)
-                utils.logger.info(f"✅ [UnifiedStore] 新增评论成功: {self.platform}/{comment_id}")
+                utils.logger.debug(f"✅ [UnifiedStore] 新增评论成功: {self.platform}/{comment_id}")
             else:
                 # 更新评论
                 await update_comment_by_comment_id(self.platform, comment_id, comment_item)
-                utils.logger.info(f"✅ [UnifiedStore] 更新评论成功: {self.platform}/{comment_id}")
+                utils.logger.debug(f"✅ [UnifiedStore] 更新评论成功: {self.platform}/{comment_id}")
             
             # 存储到Redis
             if self.redis_callback:

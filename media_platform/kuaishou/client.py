@@ -47,11 +47,48 @@ class KuaiShouClient(AbstractApiClient):
     async def request(self, method, url, **kwargs) -> Any:
         async with httpx.AsyncClient(proxies=self.proxies) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
-        data: Dict = response.json()
-        if data.get("errors"):
-            raise DataFetchError(data.get("errors", "unkonw error"))
-        else:
-            return data.get("data", {})
+        
+        # 🆕 添加响应内容调试
+        response_text = response.text
+        utils.logger.info(f"[KuaiShouClient.request] 响应状态码: {response.status_code}")
+        utils.logger.info(f"[KuaiShouClient.request] 响应内容长度: {len(response_text)}")
+        utils.logger.info(f"[KuaiShouClient.request] 响应内容前500字符: {response_text[:500]}")
+        
+        # 检查响应是否为空
+        if not response_text.strip():
+            utils.logger.error(f"[KuaiShouClient.request] 响应为空")
+            return {}
+        
+        try:
+            data: Dict = response.json()
+            utils.logger.info(f"[KuaiShouClient.request] JSON解析成功，数据结构: {list(data.keys()) if isinstance(data, dict) else '非字典类型'}")
+            
+            # 🆕 检测反爬虫机制
+            if data.get("errors"):
+                error_msg = str(data.get("errors"))
+                utils.logger.error(f"[KuaiShouClient.request] API返回错误: {error_msg}")
+                
+                # 检测常见的反爬虫错误
+                if "400002" in error_msg or "captcha" in error_msg.lower() or "验证码" in error_msg:
+                    utils.logger.error("🚨 检测到反爬虫机制：需要验证码")
+                    raise DataFetchError("反爬虫机制触发：需要验证码验证")
+                elif "429" in error_msg or "too many requests" in error_msg.lower():
+                    utils.logger.error("🚨 检测到反爬虫机制：请求过于频繁")
+                    raise DataFetchError("反爬虫机制触发：请求过于频繁，请稍后重试")
+                elif "403" in error_msg or "forbidden" in error_msg.lower():
+                    utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
+                    raise DataFetchError("反爬虫机制触发：访问被禁止")
+                else:
+                    raise DataFetchError(data.get("errors", "unkonw error"))
+            else:
+                result = data.get("data", {})
+                utils.logger.info(f"[KuaiShouClient.request] 返回数据键: {list(result.keys()) if isinstance(result, dict) else '非字典类型'}")
+                return result
+        except Exception as e:
+            utils.logger.error(f"[KuaiShouClient.request] JSON解析失败: {e}")
+            utils.logger.error(f"[KuaiShouClient.request] 完整响应内容: {response_text}")
+            # 🆕 修复：不要返回空字典，而是抛出异常，让调用方知道请求失败
+            raise DataFetchError(f"JSON解析失败: {e}")
 
     async def get(self, uri: str, params=None) -> Dict:
         final_uri = uri
@@ -63,8 +100,17 @@ class KuaiShouClient(AbstractApiClient):
 
     async def post(self, uri: str, data: dict) -> Dict:
         json_str = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+        
+        # 🆕 修复POST请求头
+        post_headers = self.headers.copy()
+        post_headers["Content-Type"] = "application/json;charset=UTF-8"
+        
+        utils.logger.debug(f"[KuaiShouClient.post] POST请求URL: {self._host}{uri}")
+        utils.logger.debug(f"[KuaiShouClient.post] POST请求数据: {json_str}")
+        utils.logger.debug(f"[KuaiShouClient.post] POST请求头: {post_headers}")
+        
         return await self.request(
-            method="POST", url=f"{self._host}{uri}", data=json_str, headers=self.headers
+            method="POST", url=f"{self._host}{uri}", data=json_str, headers=post_headers
         )
 
     async def pong(self) -> bool:
@@ -155,7 +201,15 @@ class KuaiShouClient(AbstractApiClient):
             },
             "query": self.graphql.get("search_query"),
         }
-        return await self.post("", post_data)
+        
+        utils.logger.info(f"[KuaiShouClient.search_info_by_keyword] 搜索关键词: '{keyword}', pcursor: '{pcursor}', search_session_id: '{search_session_id}'")
+        utils.logger.info(f"[KuaiShouClient.search_info_by_keyword] POST数据: {post_data}")
+        
+        result = await self.post("", post_data)
+        
+        utils.logger.info(f"[KuaiShouClient.search_info_by_keyword] 搜索API返回结果: {result}")
+        
+        return result
 
     async def get_video_info(self, photo_id: str) -> Dict:
         """
@@ -309,6 +363,19 @@ class KuaiShouClient(AbstractApiClient):
         eg: https://www.kuaishou.com/profile/3x4jtnbfter525a
         快手用户主页
         """
+        # 🆕 添加用户状态检查
+        try:
+            post_data = {
+                "operationName": "visionProfilePhotoList",
+                "variables": {"page": "profile", "pcursor": "", "userId": user_id},
+                "query": self.graphql.get("vision_profile_photo_list"),
+            }
+            result = await self.post("", post_data)
+            utils.logger.debug(f"[KuaiShouClient.get_creator_info] 用户 {user_id} 状态检查响应: {result}")
+            return result
+        except Exception as e:
+            utils.logger.error(f"[KuaiShouClient.get_creator_info] 检查用户 {user_id} 状态失败: {e}")
+            return {}
 
         visionProfile = await self.get_creator_profile(user_id)
         return visionProfile.get("userProfile")
@@ -328,6 +395,19 @@ class KuaiShouClient(AbstractApiClient):
         Returns:
 
         """
+        # 🆕 先检查用户状态
+        try:
+            user_status = await self.get_creator_info(user_id)
+            utils.logger.debug(f"[KuaiShouClient.get_all_videos_by_creator] 用户 {user_id} 状态检查: {user_status}")
+            
+            # 检查是否有错误信息
+            if user_status.get("error"):
+                utils.logger.warning(f"[KuaiShouClient.get_all_videos_by_creator] 用户 {user_id} 状态异常: {user_status.get('error')}")
+                return []
+                
+        except Exception as e:
+            utils.logger.error(f"[KuaiShouClient.get_all_videos_by_creator] 检查用户 {user_id} 状态失败: {e}")
+        
         result = []
         pcursor = ""
         max_iterations = 50  # 最大迭代次数，防止无限循环
@@ -344,10 +424,38 @@ class KuaiShouClient(AbstractApiClient):
                 )
                 break
 
-            vision_profile_photo_list = videos_res.get("visionProfilePhotoList", {})
-            pcursor = vision_profile_photo_list.get("pcursor", "no_more")  # 如果没有pcursor，设置为no_more
+            # 🆕 检测反爬虫机制
+            if "visionProfilePhotoList" in videos_res:
+                vision_profile_photo_list = videos_res.get("visionProfilePhotoList", {})
+                result_code = vision_profile_photo_list.get("result")
+                if result_code and result_code != 1:
+                    utils.logger.error(f"[KuaiShouClient.get_all_videos_by_creator] API返回错误码: {result_code}")
+                    
+                    if result_code == 400002:
+                        utils.logger.error("🚨 检测到反爬虫机制：需要验证码验证")
+                        raise Exception("反爬虫机制触发：需要验证码验证，请重新登录或稍后重试")
+                    elif result_code == 429:
+                        utils.logger.error("🚨 检测到反爬虫机制：请求过于频繁")
+                        raise Exception("反爬虫机制触发：请求过于频繁，请稍后重试")
+                    elif result_code == 403:
+                        utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
+                        raise Exception("反爬虫机制触发：访问被禁止")
+                    else:
+                        utils.logger.error(f"🚨 未知错误码: {result_code}")
+                        raise Exception(f"API返回错误码: {result_code}")
 
-            videos = vision_profile_photo_list.get("feeds", [])
+            # 🆕 添加详细调试日志
+            utils.logger.debug(f"[KuaiShouClient.get_all_videos_by_creator] API响应: {videos_res}")
+            
+            # 🆕 修复：API响应结构可能直接返回数据，而不是嵌套在visionProfilePhotoList中
+            if "visionProfilePhotoList" in videos_res:
+                vision_profile_photo_list = videos_res.get("visionProfilePhotoList", {})
+                pcursor = vision_profile_photo_list.get("pcursor", "no_more")
+                videos = vision_profile_photo_list.get("feeds", [])
+            else:
+                # 直接使用响应数据
+                pcursor = videos_res.get("pcursor", "no_more")
+                videos = videos_res.get("feeds", [])
             utils.logger.info(
                 f"[KuaiShouClient.get_all_videos_by_creator] got user_id:{user_id} videos len : {len(videos)}"
             )
@@ -406,13 +514,32 @@ class KuaiShouClient(AbstractApiClient):
                         search_session_id=search_session_id
                     )
                     
+                    # 🆕 添加详细调试日志
+                    utils.logger.debug(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索API响应: {search_result}")
+                    
                     if not search_result:
                         utils.logger.warning(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索无结果")
                         break
                     
                     vision_search_photo = search_result.get("visionSearchPhoto", {})
                     if vision_search_photo.get("result") != 1:
-                        utils.logger.warning(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索失败")
+                        result_code = vision_search_photo.get("result")
+                        utils.logger.error(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索失败，错误码: {result_code}")
+                        
+                        # 🆕 检测反爬虫机制
+                        if result_code == 400002:
+                            utils.logger.error("🚨 检测到反爬虫机制：需要验证码验证")
+                            raise Exception("反爬虫机制触发：需要验证码验证，请重新登录或稍后重试")
+                        elif result_code == 429:
+                            utils.logger.error("🚨 检测到反爬虫机制：请求过于频繁")
+                            raise Exception("反爬虫机制触发：请求过于频繁，请稍后重试")
+                        elif result_code == 403:
+                            utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
+                            raise Exception("反爬虫机制触发：访问被禁止")
+                        else:
+                            utils.logger.error(f"🚨 未知错误码: {result_code}")
+                            raise Exception(f"搜索API返回错误码: {result_code}")
+                        
                         break
                     
                     search_session_id = vision_search_photo.get("searchSessionId", "")

@@ -72,20 +72,20 @@ class KuaishouCrawler(AbstractCrawler):
             self.ks_client = await self.create_ks_client(httpx_proxy_format)
             
             # 🆕 简化：直接使用数据库中的token，无需复杂登录流程
-            utils.logger.info("[KuaishouCrawler] 开始使用数据库中的登录凭证...")
+            utils.logger.debug("[KuaishouCrawler] 开始使用数据库中的登录凭证...")
             
             # 从传入的参数中获取account_id
             account_id = getattr(self, 'account_id', None)
             if account_id:
-                utils.logger.info(f"[KuaishouCrawler] 使用指定账号: {account_id}")
+                utils.logger.debug(f"[KuaishouCrawler] 使用指定账号: {account_id}")
             else:
-                utils.logger.info(f"[KuaishouCrawler] 使用默认账号（最新登录）")
+                utils.logger.debug(f"[KuaishouCrawler] 使用默认账号（最新登录）")
             
             # 从数据库获取cookies
             cookie_str = await get_cookies_from_database("ks", account_id)
             
             if cookie_str:
-                utils.logger.info("[KuaishouCrawler] 发现数据库中的cookies，直接使用...")
+                utils.logger.debug("[KuaishouCrawler] 发现数据库中的cookies，直接使用...")
                 try:
                     # 设置cookies到浏览器
                     await self.ks_client.set_cookies_from_string(cookie_str)
@@ -105,7 +105,16 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error("[KuaishouCrawler] ❌ 数据库中没有找到有效的登录凭证")
                 raise Exception("数据库中没有找到有效的登录凭证，请先登录")
             
+            # 🆕 修复：在创作者模式下，不调用任何搜索方法，避免使用配置文件中的关键字
             crawler_type_var.set(config.CRAWLER_TYPE)
+            
+            # 检查是否为创作者模式，如果是则不执行任何搜索
+            if hasattr(self, 'task_id') and self.task_id:
+                utils.logger.debug(f"[KuaishouCrawler.start] 任务ID: {self.task_id}，跳过start方法中的搜索逻辑")
+                utils.logger.debug(f"[KuaishouCrawler.start] 创作者模式将由get_creators_and_notes_from_db方法处理")
+                return
+            
+            # 只有在非任务模式下才执行以下逻辑
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
                 await self.search()
@@ -116,10 +125,10 @@ class KuaishouCrawler(AbstractCrawler):
                 # Get the information and comments of the specified creator
                 await self.get_creators_and_notes()
 
-            utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
+            utils.logger.debug("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
     async def search(self):
-        utils.logger.info("[KuaishouCrawler.search] Begin search kuaishou keywords")
+        utils.logger.debug("[KuaishouCrawler.search] Begin search kuaishou keywords")
         ks_limit_count = 20  # kuaishou limit page fixed value
         if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
@@ -129,16 +138,17 @@ class KuaishouCrawler(AbstractCrawler):
         start_time = time.time()
         processed_count = 0
         
-        # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
-        # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
+        # 🆕 修复：完全忽略配置文件中的关键字，只使用动态传入的关键字
+        # 从实例变量获取关键字
         keywords_to_search = getattr(self, 'dynamic_keywords', None)
         if not keywords_to_search:
-            utils.logger.warning("[KuaishouCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
-            keywords_to_search = config.KEYWORDS
+            utils.logger.error("[KuaishouCrawler.search] 没有找到动态关键字，无法进行搜索")
+            utils.logger.error("[KuaishouCrawler.search] 请确保在调用search方法前设置了dynamic_keywords")
+            return
         
         # 确保关键字不为空
-        if not keywords_to_search or not keywords_to_search.strip():
-            utils.logger.error("[KuaishouCrawler.search] 没有有效的关键字，无法进行搜索")
+        if not keywords_to_search.strip():
+            utils.logger.error("[KuaishouCrawler.search] 关键字为空，无法进行搜索")
             return
         
         # 处理多个关键字（用逗号分隔）
@@ -147,7 +157,7 @@ class KuaishouCrawler(AbstractCrawler):
         for keyword in keyword_list:
             search_session_id = ""
             source_keyword_var.set(keyword)
-            utils.logger.info(
+            utils.logger.debug(
                 f"[KuaishouCrawler.search] Current search keyword: {keyword}"
             )
             page = 1
@@ -155,12 +165,12 @@ class KuaishouCrawler(AbstractCrawler):
                 page - start_page + 1
             ) * ks_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                 if page < start_page:
-                    utils.logger.info(f"[KuaishouCrawler.search] Skip page: {page}")
+                    utils.logger.debug(f"[KuaishouCrawler.search] Skip page: {page}")
                     page += 1
                     continue
                 
                 try:
-                    utils.logger.info(
+                    utils.logger.debug(
                         f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
                     )
                     video_id_list: List[str] = []
@@ -169,6 +179,9 @@ class KuaishouCrawler(AbstractCrawler):
                         pcursor=str(page),
                         search_session_id=search_session_id,
                     )
+                    
+                    utils.logger.info(f"[KuaishouCrawler.search] 搜索API原始返回: {videos_res}")
+                    
                     if not videos_res:
                         utils.logger.error(
                             f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
@@ -176,10 +189,31 @@ class KuaishouCrawler(AbstractCrawler):
                         continue
 
                     vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
+                    utils.logger.info(f"[KuaishouCrawler.search] visionSearchPhoto: {vision_search_photo}")
+                    
+                    if not vision_search_photo:
+                        utils.logger.error(f"[KuaishouCrawler.search] visionSearchPhoto 为空")
+                        continue
+                        
                     if vision_search_photo.get("result") != 1:
+                        result_code = vision_search_photo.get("result")
                         utils.logger.error(
-                            f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
+                            f"[KuaishouCrawler.search] search info by keyword:{keyword} result != 1, result: {result_code}"
                         )
+                        
+                        # 🆕 检测反爬虫机制
+                        if result_code == 400002:
+                            utils.logger.error("🚨 检测到反爬虫机制：需要验证码验证")
+                            raise Exception("反爬虫机制触发：需要验证码验证，请重新登录或稍后重试")
+                        elif result_code == 429:
+                            utils.logger.error("🚨 检测到反爬虫机制：请求过于频繁")
+                            raise Exception("反爬虫机制触发：请求过于频繁，请稍后重试")
+                        elif result_code == 403:
+                            utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
+                            raise Exception("反爬虫机制触发：访问被禁止")
+                        else:
+                            utils.logger.error(f"🚨 未知错误码: {result_code}")
+                        
                         continue
                     search_session_id = vision_search_photo.get("searchSessionId", "")
                     
@@ -189,12 +223,11 @@ class KuaishouCrawler(AbstractCrawler):
                     
                     for i in range(0, len(feeds), batch_size):
                         batch_feeds = feeds[i:i + batch_size]
-                        utils.logger.info(f"[KuaishouCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_feeds)}")
+                        utils.logger.debug(f"[KuaishouCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_feeds)}")
                         
                         for video_detail in batch_feeds:
                             try:
-                                import json
-                                utils.logger.info(f"[KuaishouCrawler] 原始视频数据: {json.dumps(video_detail, ensure_ascii=False)}")
+                                # utils.logger.debug(f"[KuaishouCrawler] 原始视频数据: {json.dumps(video_detail, ensure_ascii=False)}")
                                 video_id_list.append(video_detail.get("photo", {}).get("id"))
                                 await self.kuaishou_store.update_kuaishou_video(video_item=video_detail, task_id=self.task_id)
                                 processed_count += 1
@@ -227,7 +260,7 @@ class KuaishouCrawler(AbstractCrawler):
                     page += 1
                     continue
             
-            utils.logger.info(f"[KuaishouCrawler.search] Search completed. Total processed: {processed_count}")
+            utils.logger.debug(f"[KuaishouCrawler.search] Search completed. Total processed: {processed_count}")
 
     async def get_specified_videos(self):
         """Get the information and comments of the specified post"""
@@ -241,7 +274,7 @@ class KuaishouCrawler(AbstractCrawler):
             utils.logger.error("[KuaishouCrawler.get_specified_videos] 没有有效的视频ID列表，无法获取视频")
             return
         
-        utils.logger.info(f"[KuaishouCrawler.get_specified_videos] 开始获取 {len(video_id_list)} 个指定视频")
+        utils.logger.debug(f"[KuaishouCrawler.get_specified_videos] 开始获取 {len(video_id_list)} 个指定视频")
         
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [
@@ -261,7 +294,7 @@ class KuaishouCrawler(AbstractCrawler):
         async with semaphore:
             try:
                 result = await self.ks_client.get_video_info(video_id)
-                utils.logger.info(
+                utils.logger.debug(
                     f"[KuaishouCrawler.get_video_info_task] Get video_id:{video_id} info result: {result} ..."
                 )
                 return result.get("visionVideoDetail")
@@ -283,12 +316,12 @@ class KuaishouCrawler(AbstractCrawler):
         :return:
         """
         if not config.ENABLE_GET_COMMENTS:
-            utils.logger.info(
+            utils.logger.debug(
                 f"[KuaishouCrawler.batch_get_video_comments] Crawling comment mode is not enabled"
             )
             return
 
-        utils.logger.info(
+        utils.logger.debug(
             f"[KuaishouCrawler.batch_get_video_comments] video ids:{video_id_list}"
         )
         
@@ -303,7 +336,7 @@ class KuaishouCrawler(AbstractCrawler):
         for i in range(0, len(video_id_list), batch_size):
             batch_videos = video_id_list[i:i + batch_size]
             
-            utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_videos)}")
+            utils.logger.debug(f"[KuaishouCrawler.batch_get_video_comments] Processing comment batch {i//batch_size + 1}, videos: {len(batch_videos)}")
             
             task_list: List[Task] = []
             for video_id in batch_videos:
@@ -319,7 +352,7 @@ class KuaishouCrawler(AbstractCrawler):
                     timeout=120  # 2分钟超时
                 )
                 total_processed += len(batch_videos)
-                utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Completed batch {i//batch_size + 1}")
+                utils.logger.debug(f"[KuaishouCrawler.batch_get_video_comments] Completed batch {i//batch_size + 1}")
             except asyncio.TimeoutError:
                 utils.logger.warning(f"[KuaishouCrawler.batch_get_video_comments] Comment batch timeout")
                 break
@@ -330,7 +363,7 @@ class KuaishouCrawler(AbstractCrawler):
             # 添加间隔，避免请求过于频繁
             await asyncio.sleep(2)
         
-        utils.logger.info(f"[KuaishouCrawler.batch_get_video_comments] Comment processing completed. Total processed: {total_processed}")
+        utils.logger.debug(f"[KuaishouCrawler.batch_get_video_comments] Comment processing completed. Total processed: {total_processed}")
 
     async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore):
         """
@@ -341,7 +374,7 @@ class KuaishouCrawler(AbstractCrawler):
         """
         async with semaphore:
             try:
-                utils.logger.info(
+                utils.logger.debug(
                     f"[KuaishouCrawler.get_comments] begin get video_id: {video_id} comments ..."
                 )
                 await self.ks_client.get_video_all_comments(
@@ -386,7 +419,7 @@ class KuaishouCrawler(AbstractCrawler):
 
     async def create_ks_client(self, httpx_proxy: Optional[str]) -> KuaiShouClient:
         """Create ks client"""
-        utils.logger.info(
+        utils.logger.debug(
             "[KuaishouCrawler.create_ks_client] Begin create kuaishou API client ..."
         )
         cookie_str, cookie_dict = utils.convert_cookies(
@@ -414,7 +447,7 @@ class KuaishouCrawler(AbstractCrawler):
         headless: bool = True,
     ) -> BrowserContext:
         """Launch browser and create browser context"""
-        utils.logger.info(
+        utils.logger.debug(
             "[KuaishouCrawler.launch_browser] Begin create browser context ..."
         )
         if config.SAVE_LOGIN_STATE:
@@ -439,15 +472,18 @@ class KuaishouCrawler(AbstractCrawler):
 
     async def get_creators_and_notes(self) -> None:
         """Get creator's videos and retrieve their comment information."""
-        utils.logger.info(
+        utils.logger.debug(
             "[KuaiShouCrawler.get_creators_and_notes] Begin get kuaishou creators"
         )
         
-        # 从配置中获取创作者ID列表（参考B站实现）
+        # 🆕 修复：在任务模式下，不使用配置文件中的创作者ID列表
+        if hasattr(self, 'task_id') and self.task_id:
+            utils.logger.info("[KuaiShouCrawler.get_creators_and_notes] 任务模式，跳过此方法，由get_creators_and_notes_from_db处理")
+            return
+        
+        # 从配置中获取创作者ID列表（仅用于非任务模式）
         if not hasattr(config, 'KS_CREATOR_ID_LIST') or not config.KS_CREATOR_ID_LIST:
-            utils.logger.warning("[KuaiShouCrawler.get_creators_and_notes] 没有配置创作者ID列表，使用默认关键词搜索")
-            # 如果没有创作者ID，回退到关键词搜索
-            await self.search()
+            utils.logger.warning("[KuaiShouCrawler.get_creators_and_notes] 没有配置创作者ID列表，无法进行创作者爬取")
             return
         
         for user_id in config.KS_CREATOR_ID_LIST:
@@ -456,7 +492,7 @@ class KuaishouCrawler(AbstractCrawler):
             # get creator detail info from web html content
             createor_info: Dict = await self.ks_client.get_creator_info(user_id=user_id)
             if createor_info:
-                await self.kuaishou_store.save_creator(user_id, creator=createor_info)
+                await self.kuaishou_store.store_creator(createor_info)
 
             # Get all video information of the creator
             all_video_list = await self.ks_client.get_all_videos_by_creator(
@@ -472,14 +508,25 @@ class KuaishouCrawler(AbstractCrawler):
 
     async def get_creators_and_videos(self) -> None:
         """Get creator's videos and retrieve their comment information."""
-        utils.logger.info(
+        utils.logger.debug(
             "[KuaiShouCrawler.get_creators_and_videos] Begin get kuaishou creators"
         )
+        
+        # 🆕 修复：在任务模式下，不使用配置文件中的创作者ID列表
+        if hasattr(self, 'task_id') and self.task_id:
+            utils.logger.info("[KuaiShouCrawler.get_creators_and_videos] 任务模式，跳过此方法，由get_creators_and_notes_from_db处理")
+            return
+        
+        # 从配置中获取创作者ID列表（仅用于非任务模式）
+        if not hasattr(config, 'KS_CREATOR_ID_LIST') or not config.KS_CREATOR_ID_LIST:
+            utils.logger.warning("[KuaiShouCrawler.get_creators_and_videos] 没有配置创作者ID列表，无法进行创作者爬取")
+            return
+        
         for user_id in config.KS_CREATOR_ID_LIST:
             # get creator detail info from web html content
             createor_info: Dict = await self.ks_client.get_creator_info(user_id=user_id)
             if createor_info:
-                await self.kuaishou_store.save_creator(user_id, creator=createor_info)
+                await self.kuaishou_store.store_creator(createor_info)
 
             # Get all video information of the creator
             all_video_list = await self.ks_client.get_all_videos_by_creator(
@@ -515,10 +562,10 @@ class KuaishouCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
-            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
-            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
-            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
+            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
+            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
             
             # 确保客户端已初始化
             if not hasattr(self, 'ks_client') or self.ks_client is None:
@@ -531,35 +578,35 @@ class KuaishouCrawler(AbstractCrawler):
                 user_id = creator.get("creator_id")
                 creator_name = creator.get("name") or creator.get("nickname") or "未知创作者"
                 
-                utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始爬取创作者: {creator_name} (ID: {user_id})")
+                utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始爬取创作者: {creator_name} (ID: {user_id})")
                 
                 try:
                     # 获取创作者详细信息
                     creator_info: Dict = await self.ks_client.get_creator_info(user_id=user_id)
                     if creator_info:
                         # 更新创作者信息到数据库
-                        await self.kuaishou_store.save_creator(user_id, creator=creator_info)
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                        await self.kuaishou_store.store_creator(creator_info)
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
                         
                         # 更新任务的creator_ref_ids字段（参考B站实现）
                         try:
                             from api.crawler_core import update_task_creator_ref_ids
                             await update_task_creator_ref_ids(self.task_id, [str(user_id)])
-                            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
+                            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
                         except Exception as e:
                             utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
                     
                     # 🆕 优化：根据是否有关键词选择不同的获取方式
                     if keywords and keywords.strip():
                         # 使用关键词搜索获取视频
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的视频")
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词类型: {type(keywords)}, 长度: {len(keywords)}")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的视频")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词类型: {type(keywords)}, 长度: {len(keywords)}")
                         
                         # 确保关键词不为空且有效
                         clean_keywords = keywords.strip()
                         if clean_keywords:
                             all_video_list = await self.ks_client.search_user_videos(user_id, clean_keywords, max_count)
-                            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
+                            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                         else:
                             utils.logger.warning(f"[KuaishouCrawler.get_creators_and_notes_from_db] 关键词为空，使用默认获取方式")
                             all_video_list = await self.ks_client.get_all_videos_by_creator(
@@ -569,35 +616,35 @@ class KuaishouCrawler(AbstractCrawler):
                             )
                     else:
                         # 获取创作者的所有视频
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
                         all_video_list = await self.ks_client.get_all_videos_by_creator(
                             user_id=user_id,
                             crawl_interval=random.random(),
                             callback=self.fetch_creator_video_detail,
                         )
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                     
                     if all_video_list:
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
                         
                         # 处理每个视频，获取详细信息（参考B站实现）
-                        utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始处理 {len(all_video_list)} 个视频")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始处理 {len(all_video_list)} 个视频")
                         
                         for i, video_item in enumerate(all_video_list):
                             try:
-                                utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 个视频")
+                                utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 个视频")
                                 
                                 # 保存到数据库
-                                utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
+                                utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
                                 try:
                                     await self.kuaishou_store.update_kuaishou_video(video_item, task_id=self.task_id)
-                                    utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
+                                    utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
                                 except Exception as e:
                                     utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频数据保存失败: {e}")
                                 
                                 # 添加到结果列表
                                 all_results.append(video_item)
-                                utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频处理完成，已添加到结果列表")
+                                utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频处理完成，已添加到结果列表")
                                 
                             except Exception as e:
                                 utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 处理视频失败: {e}")
@@ -608,7 +655,7 @@ class KuaishouCrawler(AbstractCrawler):
                             try:
                                 video_ids = [video_item.get("photo", {}).get("id") for video_item in all_video_list if video_item.get("photo", {}).get("id")]
                                 await self.batch_get_video_comments(video_ids)
-                                utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 评论获取完成")
+                                utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 评论获取完成")
                             except Exception as e:
                                 utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取评论失败: {e}")
                     else:
@@ -618,7 +665,7 @@ class KuaishouCrawler(AbstractCrawler):
                     utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[KuaishouCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
+            utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
             return all_results
             
         except Exception as e:
@@ -643,7 +690,7 @@ class KuaishouCrawler(AbstractCrawler):
     async def close(self):
         """Close browser context"""
         await self.browser_context.close()
-        utils.logger.info("[KuaishouCrawler.close] Browser context closed ...")
+        utils.logger.debug("[KuaishouCrawler.close] Browser context closed ...")
 
     async def search_by_keywords(self, keywords: str, max_count: int = 50, 
                                 account_id: str = None, session_id: str = None,
@@ -664,12 +711,12 @@ class KuaishouCrawler(AbstractCrawler):
         :return: 搜索结果列表
         """
         try:
-            utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
+            utils.logger.debug(f"[KuaishouCrawler.search_by_keywords] 开始搜索关键词: {keywords}")
             
             # 🆕 设置account_id到实例变量，供start方法使用
             self.account_id = account_id
             if account_id:
-                utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
+                utils.logger.debug(f"[KuaishouCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
             
             # 设置配置
             import config
@@ -677,7 +724,7 @@ class KuaishouCrawler(AbstractCrawler):
             if keywords and keywords.strip():
                 # 将动态关键字设置到实例变量，而不是全局配置
                 self.dynamic_keywords = keywords
-                utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
+                utils.logger.debug(f"[KuaishouCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
             else:
                 utils.logger.warning("[KuaishouCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
             
@@ -706,7 +753,7 @@ class KuaishouCrawler(AbstractCrawler):
                 except Exception as e:
                     utils.logger.warning(f"[KuaishouCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
             
-            utils.logger.info(f"[KuaishouCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
+            utils.logger.debug(f"[KuaishouCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results
             
         except Exception as e:
@@ -739,13 +786,13 @@ class KuaishouCrawler(AbstractCrawler):
         :return: 视频列表
         """
         try:
-            utils.logger.info(f"[KuaishouCrawler.get_user_notes] 开始获取用户视频: {user_id}")
+            utils.logger.debug(f"[KuaishouCrawler.get_user_notes] 开始获取用户视频: {user_id}")
             
             # 设置配置
             import config
             # 🆕 修复：使用动态用户ID，而不是修改全局配置
             self.dynamic_video_ids = [user_id]
-            utils.logger.info(f"[KuaishouCrawler.get_user_notes] 设置动态用户ID: {user_id}")
+            utils.logger.debug(f"[KuaishouCrawler.get_user_notes] 设置动态用户ID: {user_id}")
             
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
@@ -760,7 +807,7 @@ class KuaishouCrawler(AbstractCrawler):
             if hasattr(self, 'kuaishou_store') and hasattr(self.kuaishou_store, 'get_all_content'):
                 results = await self.kuaishou_store.get_all_content()
             
-            utils.logger.info(f"[KuaishouCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
+            utils.logger.debug(f"[KuaishouCrawler.get_user_notes] 获取完成，共 {len(results)} 条数据")
             return results
             
         except Exception as e:

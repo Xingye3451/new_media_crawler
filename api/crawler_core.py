@@ -383,9 +383,9 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                 await crawler.start()
                 
                 # 🆕 添加调试日志，确保关键字正确传递
-                utils.logger.info(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")
-                utils.logger.info(f"[TASK_{task_id}] 关键字类型: {type(request.keywords)}")
-                utils.logger.info(f"[TASK_{task_id}] 关键字是否为空: {not request.keywords or not request.keywords.strip()}")
+                utils.logger.debug(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")
+                utils.logger.debug(f"[TASK_{task_id}] 关键字类型: {type(request.keywords)}")
+                utils.logger.debug(f"[TASK_{task_id}] 关键字是否为空: {not request.keywords or not request.keywords.strip()}")
                 
                 # 调用创作者爬取方法
                 results = await crawler.get_creators_and_notes_from_db(
