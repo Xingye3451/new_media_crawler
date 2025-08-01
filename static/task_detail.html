@@ -1037,13 +1037,19 @@
                     video_url: video.video_url,
                     video_play_url: video.video_play_url,
                     platform: platform,
-                    contentId: contentId
+                    contentId: contentId,
+                    is_m3u8: videoUrl.includes('.m3u8')
                 });
                 
                 // B站特殊处理：优先使用直接流式传输
                 if (platform === 'bili' || platform === 'bilibili') {
                     videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
                     console.log('B站视频使用直接流式传输:', videoSrc);
+                } 
+                // 快手特殊处理：优先使用直接流式传输
+                else if (platform === 'ks' || platform === 'kuaishou') {
+                    videoSrc = `/api/v1/stream/direct?video_url=${encodedUrl}&platform=${platform}`;
+                    console.log('快手视频使用直接流式传输:', videoSrc);
                 } else {
                     // 其他平台优先使用直接流式传输
                     try {
@@ -1077,13 +1083,14 @@
                     <h4>${video.desc || video.title || '无标题'}</h4>
                     <p style="color: #666; margin: 10px 0;">@${video.nickname || video.user_name || '未知用户'}</p>
                     ${videoSrc ? `
-                        <video controls style="max-width: 100%; max-height: 400px;" onerror="handleVideoError(this)">
+                        <video controls style="max-width: 100%; max-height: 400px;" onerror="handleVideoError(this)" data-video-id="${videoId}">
                             <source src="${videoSrc}" type="video/mp4">
                             您的浏览器不支持视频播放
                         </video>
                         <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
                             💡 使用直接流式传输，实时播放视频内容
                             ${taskInfo.task_info?.platform === 'bili' || taskInfo.task_info?.platform === 'bilibili' ? '<br>🛡️ B站视频已启用反爬虫保护' : ''}
+                            ${taskInfo.task_info?.platform === 'ks' || taskInfo.task_info?.platform === 'kuaishou' ? '<br>🎬 快手视频已启用m3u8流转换<br>⏱️ 由于快手特殊格式（多文件整合），加载可能较慢，请耐心等待' : ''}
                         </div>
                         <div style="margin-top: 5px; font-size: 0.8em; color: #999;">
                             调试信息: ${videoSrc}
@@ -1126,7 +1133,20 @@
                 // 显示下载中提示
                 const downloadBtn = event.target;
                 const originalText = downloadBtn.textContent;
-                downloadBtn.textContent = '下载中...';
+                const platform = taskInfo.task_info?.platform || 'unknown';
+                
+                // 快手特殊提示
+                if (platform === 'ks' || platform === 'kuaishou') {
+                    downloadBtn.textContent = '下载中（快手视频较慢）...';
+                    // 显示详细提示
+                    if (confirm('⏱️ 快手视频下载提示\n\n由于快手使用特殊格式（m3u8多文件整合），下载过程会比较慢，请耐心等待。\n\n是否继续下载？')) {
+                        // 用户确认继续
+                    } else {
+                        return; // 用户取消
+                    }
+                } else {
+                    downloadBtn.textContent = '下载中...';
+                }
                 downloadBtn.disabled = true;
 
                 // 生成文件名
@@ -1328,7 +1348,12 @@
         function handleVideoError(video) {
             console.error('❌ 视频播放失败:', video.src);
             const errorDiv = document.createElement('div');
-            errorDiv.innerHTML = `
+            
+            // 检查是否为m3u8格式
+            const isM3u8 = video.src.includes('.m3u8');
+            const platform = taskInfo.task_info?.platform || 'unknown';
+            
+            let errorMessage = `
                 <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
                     <h5>❌ 视频播放失败</h5>
                     <p style="color: #666; margin: 10px 0;">可能的原因：</p>
@@ -1337,10 +1362,29 @@
                         <li>网络连接问题</li>
                         <li>浏览器不支持该视频格式</li>
                         <li>反爬虫保护机制</li>
+                        ${isM3u8 ? '<li>m3u8格式视频转换失败</li>' : ''}
                     </ul>
+                    ${isM3u8 && platform === 'ks' ? `
+                        <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
+                            <p style="color: #856404; margin: 0;"><strong>🎬 快手m3u8视频提示：</strong></p>
+                            <p style="color: #856404; margin: 5px 0; font-size: 0.9em;">
+                                检测到m3u8格式视频，正在尝试转换为mp4格式播放...
+                            </p>
+                            <p style="color: #856404; margin: 5px 0; font-size: 0.9em;">
+                                💡 建议：如果预览无法播放，请尝试下载视频到本地观看
+                            </p>
+                        </div>
+                    ` : ''}
                     <p style="color: #999; font-size: 0.8em; margin-top: 10px;">视频URL: ${video.src}</p>
+                    <p style="color: #999; font-size: 0.8em;">平台: ${platform}</p>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-primary" onclick="downloadVideo('${video.dataset.videoId || ''}')">📥 下载视频</button>
+                        <button class="btn btn-info" onclick="addToFavorites('${video.dataset.videoId || ''}')" style="margin-left: 10px;">⭐ 收藏视频</button>
+                    </div>
                 </div>
             `;
+            
+            errorDiv.innerHTML = errorMessage;
             video.parentElement.appendChild(errorDiv);
         }
 
@@ -1375,6 +1419,16 @@
                     }
                 };
 
+                // 快手特殊提示
+                const platform = taskInfo.task_info?.platform || 'unknown';
+                if (platform === 'ks' || platform === 'kuaishou') {
+                    if (confirm('⏱️ 快手视频收藏提示\n\n由于快手使用特殊格式（m3u8多文件整合），下载过程会比较慢，请耐心等待。\n\n是否继续收藏？')) {
+                        // 用户确认继续
+                    } else {
+                        return; // 用户取消
+                    }
+                }
+
                 const response = await fetch('/api/v1/favorites/add', {
                     method: 'POST',
                     headers: {
@@ -1386,7 +1440,11 @@
                 const data = await response.json();
                 if (data.code === 200) {
                     if (data.data.download_status === 'downloading') {
-                        alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n您可以在"我的收藏"页面查看下载进度。');
+                        if (platform === 'ks' || platform === 'kuaishou') {
+                            alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n⏱️ 由于快手特殊格式，下载过程较慢，请耐心等待。\n\n您可以在"我的收藏"页面查看下载进度。');
+                        } else {
+                            alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n您可以在"我的收藏"页面查看下载进度。');
+                        }
                     } else {
                         alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，可以在"我的收藏"页面查看和管理。');
                     }
@@ -1510,7 +1568,16 @@
         function formatDate(dateString) {
             if (!dateString) return '未知时间';
             const date = new Date(dateString);
-            return date.toLocaleString('zh-CN');
+            // 确保显示为UTC+8时区
+            return date.toLocaleString('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
 
         function formatBytes(bytes) {

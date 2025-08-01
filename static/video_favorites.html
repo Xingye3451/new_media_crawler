@@ -805,10 +805,26 @@
         // 下载收藏视频到本地（基于MinIO）
         async function downloadFavoriteVideo(fileHash) {
             try {
+                // 获取视频信息以判断平台
+                const favorite = favorites.find(f => f.file_hash === fileHash);
+                const platform = favorite?.platform || 'unknown';
+                
                 // 显示下载中状态
                 const downloadBtn = event.target;
                 const originalText = downloadBtn.textContent;
-                downloadBtn.textContent = '下载中...';
+                
+                // 快手特殊提示
+                if (platform === 'ks' || platform === 'kuaishou') {
+                    downloadBtn.textContent = '下载中（快手视频较慢）...';
+                    // 显示详细提示
+                    if (confirm('⏱️ 快手视频下载提示\n\n由于快手使用特殊格式（m3u8多文件整合），下载过程会比较慢，请耐心等待。\n\n是否继续下载？')) {
+                        // 用户确认继续
+                    } else {
+                        return; // 用户取消
+                    }
+                } else {
+                    downloadBtn.textContent = '下载中...';
+                }
                 downloadBtn.disabled = true;
 
                 // 调用MinIO下载API
@@ -953,7 +969,16 @@
         function formatDate(dateString) {
             if (!dateString) return '未知时间';
             const date = new Date(dateString);
-            return date.toLocaleString('zh-CN');
+            // 确保显示为UTC+8时区
+            return date.toLocaleString('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
         }
 
         function formatBytes(bytes) {

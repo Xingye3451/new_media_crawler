@@ -15,6 +15,7 @@ from models.task_models import (
     TaskStatus, TaskType, ActionType
 )
 from var import media_crawler_db_var
+from tools.time_util import get_current_datetime_utc8
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ async def _get_db_connection():
             password=db_config['password'],
             db=db_config['database'],
             autocommit=True,
+            charset='utf8mb4',
+            # 设置时区为UTC+8
+            init_command="SET time_zone = '+08:00'"
         )
         
         async_db_obj = AsyncMysqlDB(pool)
@@ -85,8 +89,8 @@ class TaskManagementService:
                 task_data.get('ip_address'),
                 task_data.get('user_security_id'),
                 task_data.get('user_signature'),
-                datetime.now(),
-                datetime.now()
+                get_current_datetime_utc8(),
+                get_current_datetime_utc8()
             )
             
             # 记录日志
@@ -114,6 +118,22 @@ class TaskManagementService:
             """
             
             result = await db.get_first(query, task_id)
+            
+            if result:
+                # 转换时间字段为UTC+8格式
+                if result.get("created_at"):
+                    if isinstance(result["created_at"], datetime):
+                        result["created_at"] = result["created_at"].isoformat()
+                if result.get("updated_at"):
+                    if isinstance(result["updated_at"], datetime):
+                        result["updated_at"] = result["updated_at"].isoformat()
+                if result.get("started_at"):
+                    if isinstance(result["started_at"], datetime):
+                        result["started_at"] = result["started_at"].isoformat()
+                if result.get("completed_at"):
+                    if isinstance(result["completed_at"], datetime):
+                        result["completed_at"] = result["completed_at"].isoformat()
+            
             return result
             
         except Exception as e:
@@ -138,7 +158,7 @@ class TaskManagementService:
                 return False
             
             set_clauses.append("updated_at = %s")
-            params.append(datetime.now())
+            params.append(get_current_datetime_utc8())
             params.append(task_id)
             
             update_sql = f"""
@@ -175,7 +195,7 @@ class TaskManagementService:
             WHERE id = %s AND deleted = 0
             """
             
-            result = await db.execute(update_sql, datetime.now(), task_id)
+            result = await db.execute(update_sql, get_current_datetime_utc8(), task_id)
             
             if result:
                 # 记录日志
@@ -258,6 +278,21 @@ class TaskManagementService:
             
             query_params = params + [page_size, offset]
             results = await db.query(query_sql, *query_params)
+            
+            # 转换时间字段为UTC+8格式
+            for item in results:
+                if item.get("created_at"):
+                    if isinstance(item["created_at"], datetime):
+                        item["created_at"] = item["created_at"].isoformat()
+                if item.get("updated_at"):
+                    if isinstance(item["updated_at"], datetime):
+                        item["updated_at"] = item["updated_at"].isoformat()
+                if item.get("started_at"):
+                    if isinstance(item["started_at"], datetime):
+                        item["started_at"] = item["started_at"].isoformat()
+                if item.get("completed_at"):
+                    if isinstance(item["completed_at"], datetime):
+                        item["completed_at"] = item["completed_at"].isoformat()
             
             return {
                 'total': total,

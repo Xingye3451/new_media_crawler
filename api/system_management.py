@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 import utils
 from var import media_crawler_db_var
+from tools.time_util import get_isoformat_utc8, get_current_datetime_utc8
 
 router = APIRouter()
 
@@ -24,7 +25,7 @@ async def root():
         "version": "1.0.0",
         "description": "多平台媒体内容爬虫API服务",
         "status": "running",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": get_isoformat_utc8(),
         "endpoints": {
             "crawler": "/api/v1/crawler/*",
             "content": "/api/v1/content/*",
@@ -77,13 +78,13 @@ async def health_check():
         
         return {
             "status": overall_status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": get_isoformat_utc8(),
             "components": {
                 "database": db_status,
                 "redis": redis_status,
                 "config": config_status
             },
-            "uptime": datetime.now().isoformat()  # 这里可以添加实际的启动时间
+            "uptime": get_isoformat_utc8()  # 这里可以添加实际的启动时间
         }
         
     except Exception as e:
@@ -91,7 +92,7 @@ async def health_check():
         return {
             "status": "error",
             "error": str(e),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": get_isoformat_utc8()
         }
 
 @router.post("/database/init")
@@ -104,7 +105,7 @@ async def init_database():
             return {
                 "message": "数据库已初始化",
                 "status": "already_initialized",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": get_isoformat_utc8()
             }
         
         # 导入数据库初始化模块
@@ -144,7 +145,7 @@ async def init_database():
             "message": "数据库初始化完成",
             "status": "initialized",
             "missing_tables": missing_tables,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": get_isoformat_utc8()
         }
         
     except Exception as e:
@@ -161,7 +162,7 @@ async def get_database_status():
             return {
                 "status": "not_initialized",
                 "message": "数据库未初始化",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": get_isoformat_utc8()
             }
         
         # 检查连接

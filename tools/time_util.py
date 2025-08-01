@@ -34,6 +34,36 @@ def get_current_time() -> str:
     return time.strftime('%Y-%m-%d %X', time.localtime())
 
 
+def get_current_time_utc8() -> str:
+    """
+    获取当前UTC+8时间：'2023-12-02 13:01:23'
+    :return:
+    """
+    # 获取UTC+8时区
+    china_tz = timezone(timedelta(hours=8))
+    now = datetime.now(china_tz)
+    return now.strftime('%Y-%m-%d %H:%M:%S')
+
+
+def get_current_datetime_utc8() -> datetime:
+    """
+    获取当前UTC+8时间的datetime对象
+    :return:
+    """
+    china_tz = timezone(timedelta(hours=8))
+    return datetime.now(china_tz)
+
+
+def get_isoformat_utc8() -> str:
+    """
+    获取当前UTC+8时间的ISO格式字符串
+    :return:
+    """
+    china_tz = timezone(timedelta(hours=8))
+    now = datetime.now(china_tz)
+    return now.isoformat()
+
+
 def get_current_date() -> str:
     """
     获取当前的日期：'2023-12-02'

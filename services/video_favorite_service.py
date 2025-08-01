@@ -12,6 +12,7 @@ import logging
 
 from utils.db_utils import _get_db_connection
 from utils.minio_client import MinioClient
+from tools.time_util import get_current_datetime_utc8
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,8 @@ class VideoFavoriteService:
                 "download_status": "downloading" if download_to_minio else "pending",
                 "metadata": json.dumps(video_data.get("metadata", {}), ensure_ascii=False),
                 "thumbnail_url": video_data.get("thumbnail_url"),
-                "created_at": datetime.now(),
-                "updated_at": datetime.now()
+                "created_at": get_current_datetime_utc8(),
+                "updated_at": get_current_datetime_utc8()
             }
             
             # 保存到数据库
@@ -210,6 +211,18 @@ class VideoFavoriteService:
             
             results = await db.query(query, *params)
             
+            # 转换时间字段为UTC+8格式
+            for item in results:
+                if item.get("created_at"):
+                    if isinstance(item["created_at"], datetime):
+                        item["created_at"] = item["created_at"].isoformat()
+                if item.get("updated_at"):
+                    if isinstance(item["updated_at"], datetime):
+                        item["updated_at"] = item["updated_at"].isoformat()
+                if item.get("last_accessed_at"):
+                    if isinstance(item["last_accessed_at"], datetime):
+                        item["last_accessed_at"] = item["last_accessed_at"].isoformat()
+            
             return {
                 "success": True,
                 "data": {
@@ -282,7 +295,21 @@ class VideoFavoriteService:
             db = await _get_db_connection()
             query = "SELECT * FROM video_files WHERE file_hash = %s"
             results = await db.query(query, file_hash)
-            return results[0] if results else None
+            
+            if results:
+                item = results[0]
+                # 转换时间字段为UTC+8格式
+                if item.get("created_at"):
+                    if isinstance(item["created_at"], datetime):
+                        item["created_at"] = item["created_at"].isoformat()
+                if item.get("updated_at"):
+                    if isinstance(item["updated_at"], datetime):
+                        item["updated_at"] = item["updated_at"].isoformat()
+                if item.get("last_accessed_at"):
+                    if isinstance(item["last_accessed_at"], datetime):
+                        item["last_accessed_at"] = item["last_accessed_at"].isoformat()
+                return item
+            return None
         except Exception as e:
             logger.error(f"获取文件记录失败 {file_hash}: {str(e)}")
             return None
@@ -315,14 +342,14 @@ class VideoFavoriteService:
                     SET download_status = %s, download_error = %s, updated_at = %s
                     WHERE file_hash = %s
                 """
-                await db.execute(query, status, error, datetime.now(), file_hash)
+                await db.execute(query, status, error, get_current_datetime_utc8(), file_hash)
             else:
                 query = """
                     UPDATE video_files 
                     SET download_status = %s, updated_at = %s
                     WHERE file_hash = %s
                 """
-                await db.execute(query, status, datetime.now(), file_hash)
+                await db.execute(query, status, get_current_datetime_utc8(), file_hash)
         except Exception as e:
             logger.error(f"更新下载状态失败 {file_hash}: {str(e)}")
     
@@ -332,7 +359,7 @@ class VideoFavoriteService:
             db = await _get_db_connection()
             set_clause = ", ".join([f"{k} = %s" for k in updates.keys()])
             query = f"UPDATE video_files SET {set_clause}, updated_at = %s WHERE file_hash = %s"
-            params = list(updates.values()) + [datetime.now(), file_hash]
+            params = list(updates.values()) + [get_current_datetime_utc8(), file_hash]
             await db.execute(query, *params)
         except Exception as e:
             logger.error(f"更新文件记录失败 {file_hash}: {str(e)}")
@@ -409,50 +436,82 @@ class VideoFavoriteService:
             
             # 下载视频数据
             logger.info(f"开始下载视频到MinIO: {file_record['original_url']}, 平台: {platform}")
-            async with aiohttp.ClientSession() as session:
-                async with session.get(file_record["original_url"], headers=headers) as response:
-                    if response.status == 200:
-                        video_data = await response.read()
-                        logger.info(f"视频下载成功，大小: {len(video_data)} 字节")
-                        
-                        # 生成MinIO对象名
-                        platform = file_record.get("platform", "unknown")
-                        content_id = file_record.get("content_id", "unknown")
-                        object_name = f"{platform}/{content_id}/{file_record['file_hash']}.mp4"
-                        
-                        # 上传到MinIO
-                        logger.info(f"开始上传到MinIO: {object_name}")
-                        result = await self.minio_client.upload_data(
-                            bucket_name=self.minio_client.bucket_name,
-                            object_name=object_name,
-                            data=video_data,
-                            content_type="video/mp4"
-                        )
-                        
-                        if result["success"]:
-                            logger.info(f"MinIO上传成功: {object_name}")
-                            return {
-                                "success": True,
-                                "data": {
-                                    "storage_type": "minio",
-                                    "minio_bucket": self.minio_client.bucket_name,
-                                    "minio_object_key": object_name,
-                                    "file_size": len(video_data),
-                                    "minio_url": result.get("url", "")
-                                }
-                            }
-                        else:
-                            logger.error(f"MinIO上传失败: {result.get('error', '未知错误')}")
-                            return {
-                                "success": False,
-                                "error": f"MinIO上传失败: {result.get('error', '未知错误')}"
-                            }
+            
+            # 快手特殊处理：处理m3u8和mp4格式视频
+            if platform == "ks" or 'kuaishou' in original_url or '.m3u8' in original_url:
+                try:
+                    from services.kuaishou_video_service import kuaishou_video_service
+                    if '.m3u8' in original_url:
+                        logger.info(f"检测到快手m3u8格式视频，开始转换下载...")
+                        # 下载完整视频：使用full_video=True
+                        video_data = b""
+                        async for chunk in kuaishou_video_service.convert_m3u8_to_mp4_stream(original_url, full_video=True):
+                            video_data += chunk
+                        logger.info(f"快手m3u8视频转换下载完成，大小: {len(video_data)} 字节")
                     else:
-                        logger.error(f"视频下载失败，状态码: {response.status}, URL: {file_record['original_url']}")
-                        return {
-                            "success": False,
-                            "error": f"视频下载失败，状态码: {response.status}"
-                        }
+                        # 对于mp4格式的快手视频，直接使用原始URL，但设置正确的请求头
+                        logger.info(f"检测到快手mp4格式视频，使用原始URL: {original_url[:100]}...")
+                        # 快手mp4视频需要特殊的请求头
+                        headers.update({
+                            "Referer": "https://www.kuaishou.com/",
+                            "Origin": "https://www.kuaishou.com",
+                            "Sec-Fetch-Dest": "video",
+                            "Sec-Fetch-Mode": "cors",
+                            "Sec-Fetch-Site": "cross-site"
+                        })
+                        # 使用原始URL下载
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(original_url, headers=headers) as response:
+                                    if response.status == 200:
+                                        video_data = await response.read()
+                                        logger.info(f"快手视频下载成功，大小: {len(video_data)} 字节")
+                                    else:
+                                        raise Exception(f"快手视频下载失败，状态码: {response.status}")
+                except Exception as e:
+                    logger.error(f"快手视频处理失败: {e}")
+                    raise Exception(f"快手视频处理失败: {str(e)}")
+            else:
+                # 其他平台的正常下载流程
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(file_record["original_url"], headers=headers) as response:
+                        if response.status == 200:
+                            video_data = await response.read()
+                            logger.info(f"视频下载成功，大小: {len(video_data)} 字节")
+                        else:
+                            raise Exception(f"视频下载失败，状态码: {response.status}")
+            
+            # 生成MinIO对象名
+            platform = file_record.get("platform", "unknown")
+            content_id = file_record.get("content_id", "unknown")
+            object_name = f"{platform}/{content_id}/{file_record['file_hash']}.mp4"
+            
+            # 上传到MinIO
+            logger.info(f"开始上传到MinIO: {object_name}")
+            result = await self.minio_client.upload_data(
+                bucket_name=self.minio_client.bucket_name,
+                object_name=object_name,
+                data=video_data,
+                content_type="video/mp4"
+            )
+            
+            if result["success"]:
+                logger.info(f"MinIO上传成功: {object_name}")
+                return {
+                    "success": True,
+                    "data": {
+                        "storage_type": "minio",
+                        "minio_bucket": self.minio_client.bucket_name,
+                        "minio_object_key": object_name,
+                        "file_size": len(video_data),
+                        "minio_url": result.get("url", "")
+                    }
+                }
+            else:
+                logger.error(f"MinIO上传失败: {result.get('error', '未知错误')}")
+                return {
+                    "success": False,
+                    "error": f"MinIO上传失败: {result.get('error', '未知错误')}"
+                }
                         
         except Exception as e:
             logger.error(f"下载到MinIO失败: {str(e)}")

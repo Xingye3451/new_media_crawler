@@ -30,6 +30,9 @@ async def _get_db_connection():
             autocommit=True,
             minsize=1,
             maxsize=10,
+            charset='utf8mb4',
+            # 设置时区为UTC+8
+            init_command="SET time_zone = '+08:00'"
         )
         
         async_db_obj = AsyncMysqlDB(pool)

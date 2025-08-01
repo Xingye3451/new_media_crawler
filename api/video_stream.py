@@ -198,6 +198,31 @@ async def stream_direct_video(
                 except Exception as e:
                     logger.warning(f"B站视频URL处理异常: {e}")
             
+            # 快手特殊处理：处理m3u8和mp4格式视频
+            elif platform == "ks" or 'kuaishou' in decoded_url or '.m3u8' in decoded_url:
+                try:
+                    from services.kuaishou_video_service import kuaishou_video_service
+                    if '.m3u8' in decoded_url:
+                        logger.info(f"检测到快手m3u8格式视频，开始转换流...")
+                        async for chunk in kuaishou_video_service.convert_m3u8_to_mp4_stream(decoded_url):
+                            yield chunk
+                        return
+                    else:
+                        # 对于mp4格式的快手视频，直接使用原始URL，但设置正确的请求头
+                        logger.info(f"检测到快手mp4格式视频，使用原始URL: {decoded_url[:100]}...")
+                        # 快手mp4视频需要特殊的请求头
+                        headers.update({
+                            "Referer": "https://www.kuaishou.com/",
+                            "Origin": "https://www.kuaishou.com",
+                            "Sec-Fetch-Dest": "video",
+                            "Sec-Fetch-Mode": "cors",
+                            "Sec-Fetch-Site": "cross-site"
+                        })
+                        final_url = decoded_url
+                        logger.info(f"快手mp4视频URL处理完成")
+                except Exception as e:
+                    logger.warning(f"快手视频URL处理异常: {e}")
+            
             async with aiohttp.ClientSession() as session:
                 async with session.get(final_url, headers=headers) as response:
                     if response.status == 200:

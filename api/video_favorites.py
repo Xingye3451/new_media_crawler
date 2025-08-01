@@ -266,7 +266,34 @@ async def download_favorite_video(file_hash: str):
                 except Exception as e:
                     logger.warning(f"B站视频URL处理异常: {e}")
             
-            # 设置B站特殊请求头
+            # 快手特殊处理：处理m3u8和mp4格式视频
+            elif file_record.get("platform") == "kuaishou" or 'kuaishou' in download_url or '.m3u8' in download_url:
+                try:
+                    from services.kuaishou_video_service import kuaishou_video_service
+                    if '.m3u8' in download_url:
+                        logger.info(f"检测到快手m3u8格式视频，开始转换下载...")
+                        # 下载完整视频：使用full_video=True
+                        async for chunk in kuaishou_video_service.convert_m3u8_to_mp4_stream(download_url, full_video=True):
+                            yield chunk
+                        logger.info(f"快手m3u8视频转换下载完成")
+                        return
+                    else:
+                        # 对于mp4格式的快手视频，直接使用原始URL，但设置正确的请求头
+                        logger.info(f"检测到快手mp4格式视频，使用原始URL: {download_url[:100]}...")
+                        # 快手mp4视频需要特殊的请求头
+                        headers.update({
+                            "Referer": "https://www.kuaishou.com/",
+                            "Origin": "https://www.kuaishou.com",
+                            "Sec-Fetch-Dest": "video",
+                            "Sec-Fetch-Mode": "cors",
+                            "Sec-Fetch-Site": "cross-site"
+                        })
+                        final_download_url = download_url
+                        logger.info(f"快手mp4视频URL处理完成")
+                except Exception as e:
+                    logger.warning(f"快手视频URL处理异常: {e}")
+            
+            # 设置通用请求头
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Accept": "*/*",
@@ -275,6 +302,7 @@ async def download_favorite_video(file_hash: str):
                 "Connection": "keep-alive"
             }
             
+            # 根据平台设置特殊请求头
             if file_record.get("platform") == "bilibili":
                 headers.update({
                     "Referer": "https://www.bilibili.com/",
@@ -284,6 +312,14 @@ async def download_favorite_video(file_hash: str):
                     "Sec-Fetch-Site": "cross-site",
                     "Cache-Control": "no-cache",
                     "Pragma": "no-cache"
+                })
+            elif file_record.get("platform") == "kuaishou":
+                headers.update({
+                    "Referer": "https://www.kuaishou.com/",
+                    "Origin": "https://www.kuaishou.com",
+                    "Sec-Fetch-Dest": "video",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Site": "cross-site"
                 })
             
             async with aiohttp.ClientSession() as session:

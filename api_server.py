@@ -12,6 +12,7 @@ from datetime import datetime
 
 import utils
 import db
+from tools.time_util import get_isoformat_utc8
 from var import media_crawler_db_var
 from models.content_models import (
     CrawlerRequest, CrawlerResponse, TaskStatusResponse,
@@ -59,7 +60,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "detail": "请求参数验证失败",
             "errors": exc.errors(),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": get_isoformat_utc8()
         }
     )
 
@@ -72,7 +73,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={
             "detail": "服务器内部错误",
             "error": str(exc),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": get_isoformat_utc8()
         }
     )
 
