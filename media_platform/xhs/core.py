@@ -137,7 +137,22 @@ class XiaoHongShuCrawler(AbstractCrawler):
         search_note_type = getattr(config, 'SEARCH_NOTE_TYPE', SearchNoteType.ALL)
         utils.logger.info(f"[XiaoHongShuCrawler.search] 搜索内容类型: {search_note_type.name}")
         
-        for keyword in config.KEYWORDS.split(","):
+        # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
+        # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
+        keywords_to_search = getattr(self, 'dynamic_keywords', None)
+        if not keywords_to_search:
+            utils.logger.warning("[XHSCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
+            keywords_to_search = config.KEYWORDS
+        
+        # 确保关键字不为空
+        if not keywords_to_search or not keywords_to_search.strip():
+            utils.logger.error("[XHSCrawler.search] 没有有效的关键字，无法进行搜索")
+            return
+        
+        # 处理多个关键字（用逗号分隔）
+        keyword_list = [kw.strip() for kw in keywords_to_search.split(",") if kw.strip()]
+        
+        for keyword in keyword_list:
             source_keyword_var.set(keyword)
             utils.logger.info(
                 f"[XiaoHongShuCrawler.search] Current search keyword: {keyword}"
@@ -736,7 +751,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
             
             # 设置配置
             import config
-            config.KEYWORDS = keywords
+            # 🆕 修复：使用动态关键字，完全忽略配置文件中的关键字
+            if keywords and keywords.strip():
+                # 将动态关键字设置到实例变量，而不是全局配置
+                self.dynamic_keywords = keywords
+                utils.logger.info(f"[XHSCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
+            else:
+                utils.logger.warning("[XHSCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option

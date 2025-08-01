@@ -7,7 +7,7 @@ import asyncio
 import uuid
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 from tools import utils
@@ -119,13 +119,23 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
             "proxy_strategy": request.proxy_strategy
         }
         
+        # 处理创作者ID列表
+        creator_ref_ids = None
+        if request.crawler_type == "creator":
+            if hasattr(request, 'selected_creators') and request.selected_creators:
+                creator_ref_ids = request.selected_creators
+            elif hasattr(request, 'creator_ref_ids') and request.creator_ref_ids:
+                creator_ref_ids = request.creator_ref_ids
+            elif hasattr(request, 'creator_ref_id') and request.creator_ref_id:
+                creator_ref_ids = [request.creator_ref_id]
+        
         # 使用字典方式构建数据
         task_data = {
             'id': task_id,
             'platform': request.platform,
             'task_type': 'single_platform',
             'crawler_type': request.crawler_type,  # 添加爬取类型
-            'creator_ref_id': request.creator_ref_id if request.creator_ref_id else None,  # 添加创作者引用ID
+            'creator_ref_ids': json.dumps(creator_ref_ids) if creator_ref_ids else None,  # 添加创作者引用ID列表
             'keywords': request.keywords,
             'status': 'pending',
             'progress': 0.0,
@@ -183,8 +193,8 @@ async def update_task_progress(task_id: str, progress: float, status: str = None
     except Exception as e:
         utils.logger.error(f"[TASK_PROGRESS] 更新任务进度失败: {e}")
 
-async def update_task_creator_ref_id(task_id: str, creator_ref_id: str):
-    """更新任务的creator_ref_id字段"""
+async def update_task_creator_ref_ids(task_id: str, creator_ref_ids: List[str]):
+    """更新任务的creator_ref_ids字段"""
     try:
         async_db_obj = await get_db_connection()
         if not async_db_obj:
@@ -193,17 +203,17 @@ async def update_task_creator_ref_id(task_id: str, creator_ref_id: str):
         
         # 构建更新数据字典
         update_data = {
-            'creator_ref_id': creator_ref_id,
+            'creator_ref_ids': json.dumps(creator_ref_ids),
             'updated_at': datetime.now()
         }
         
         # 使用update_table方法
         await async_db_obj.update_table('crawler_tasks', update_data, 'id', task_id)
         
-        utils.logger.info(f"[TASK_CREATOR_REF] 任务creator_ref_id更新: {task_id}, creator_ref_id: {creator_ref_id}")
+        utils.logger.info(f"[TASK_CREATOR_REF] 任务creator_ref_ids更新: {task_id}, creator_ref_ids: {creator_ref_ids}")
         
     except Exception as e:
-        utils.logger.error(f"[TASK_CREATOR_REF] 更新任务creator_ref_id失败: {e}")
+        utils.logger.error(f"[TASK_CREATOR_REF] 更新任务creator_ref_ids失败: {e}")
 
 async def log_task_step(task_id: str, platform: str, step: str, message: str, log_level: str = "INFO", progress: int = None):
     """记录任务步骤日志"""
@@ -371,6 +381,11 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
                 
                 # 先初始化爬虫（创建客户端等）
                 await crawler.start()
+                
+                # 🆕 添加调试日志，确保关键字正确传递
+                utils.logger.info(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")
+                utils.logger.info(f"[TASK_{task_id}] 关键字类型: {type(request.keywords)}")
+                utils.logger.info(f"[TASK_{task_id}] 关键字是否为空: {not request.keywords or not request.keywords.strip()}")
                 
                 # 调用创作者爬取方法
                 results = await crawler.get_creators_and_notes_from_db(

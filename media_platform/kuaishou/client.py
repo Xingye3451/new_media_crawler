@@ -330,17 +330,22 @@ class KuaiShouClient(AbstractApiClient):
         """
         result = []
         pcursor = ""
+        max_iterations = 50  # 最大迭代次数，防止无限循环
+        iteration_count = 0
 
-        while pcursor != "no_more":
+        while pcursor != "no_more" and iteration_count < max_iterations:
+            iteration_count += 1
+            utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 第 {iteration_count} 次查询，pcursor: {pcursor}")
+            
             videos_res = await self.get_video_by_creater(user_id, pcursor)
             if not videos_res:
-                utils.logger.error(
-                    f"[KuaiShouClient.get_all_videos_by_creator] The current creator may have been banned by ks, so they cannot access the data."
+                utils.logger.warning(
+                    f"[KuaiShouClient.get_all_videos_by_creator] 用户 {user_id} 可能没有视频或已被封禁，停止查询"
                 )
                 break
 
             vision_profile_photo_list = videos_res.get("visionProfilePhotoList", {})
-            pcursor = vision_profile_photo_list.get("pcursor", "")
+            pcursor = vision_profile_photo_list.get("pcursor", "no_more")  # 如果没有pcursor，设置为no_more
 
             videos = vision_profile_photo_list.get("feeds", [])
             utils.logger.info(
@@ -351,4 +356,130 @@ class KuaiShouClient(AbstractApiClient):
                 await callback(videos)
             await asyncio.sleep(crawl_interval)
             result.extend(videos)
+            
+            # 如果连续多次没有获取到视频，提前结束
+            if len(videos) == 0 and iteration_count > 3:
+                utils.logger.warning(f"[KuaiShouClient.get_all_videos_by_creator] 连续 {iteration_count} 次没有获取到视频，提前结束查询")
+                break
+        
+        if iteration_count >= max_iterations:
+            utils.logger.warning(f"[KuaiShouClient.get_all_videos_by_creator] 达到最大迭代次数 {max_iterations}，停止查询")
+        
+        utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 查询完成，共获取 {len(result)} 个视频，迭代次数: {iteration_count}")
         return result
+
+    async def search_user_videos(self, user_id: str, keywords: str, max_count: int = 50) -> List[Dict]:
+        """
+        搜索指定用户的视频
+        Args:
+            user_id: 用户ID
+            keywords: 搜索关键词
+            max_count: 最大获取数量
+        Returns:
+            List[Dict]: 视频列表
+        """
+        try:
+            utils.logger.info(f"[KuaiShouClient.search_user_videos] 开始搜索用户 {user_id} 的关键词 '{keywords}' 视频")
+            
+            # 🆕 优化：使用快手的原生搜索API，而不是获取所有视频后过滤
+            # 这样可以更准确地匹配关键词，避免获取无关内容
+            utils.logger.info(f"[KuaiShouClient.search_user_videos] 使用原生搜索API搜索关键词: {keywords}")
+            
+            # 使用全局搜索API，然后过滤出指定用户的视频
+            search_session_id = ""
+            pcursor = "1"
+            all_matching_videos = []
+            
+            # 限制搜索页数，避免过度请求
+            max_search_pages = 10
+            current_page = 0
+            
+            while current_page < max_search_pages and len(all_matching_videos) < max_count:
+                current_page += 1
+                utils.logger.info(f"[KuaiShouClient.search_user_videos] 搜索第 {current_page} 页")
+                
+                try:
+                    # 使用全局搜索API
+                    search_result = await self.search_info_by_keyword(
+                        keyword=keywords,
+                        pcursor=pcursor,
+                        search_session_id=search_session_id
+                    )
+                    
+                    if not search_result:
+                        utils.logger.warning(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索无结果")
+                        break
+                    
+                    vision_search_photo = search_result.get("visionSearchPhoto", {})
+                    if vision_search_photo.get("result") != 1:
+                        utils.logger.warning(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索失败")
+                        break
+                    
+                    search_session_id = vision_search_photo.get("searchSessionId", "")
+                    feeds = vision_search_photo.get("feeds", [])
+                    
+                    if not feeds:
+                        utils.logger.info(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页没有更多结果")
+                        break
+                    
+                    # 过滤出指定用户的视频
+                    for video in feeds:
+                        try:
+                            video_user_id = video.get("photo", {}).get("author", {}).get("id")
+                            if video_user_id == user_id:
+                                all_matching_videos.append(video)
+                                utils.logger.info(f"[KuaiShouClient.search_user_videos] 找到匹配用户 {user_id} 的视频")
+                                
+                                if len(all_matching_videos) >= max_count:
+                                    utils.logger.info(f"[KuaiShouClient.search_user_videos] 已达到最大数量限制 {max_count}")
+                                    break
+                        except Exception as e:
+                            utils.logger.warning(f"[KuaiShouClient.search_user_videos] 处理视频时出错: {e}")
+                            continue
+                    
+                    # 获取下一页的pcursor
+                    pcursor = vision_search_photo.get("pcursor", "no_more")
+                    if pcursor == "no_more":
+                        utils.logger.info(f"[KuaiShouClient.search_user_videos] 搜索完成，没有更多页面")
+                        break
+                    
+                    # 添加延迟，避免请求过于频繁
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    utils.logger.error(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索失败: {e}")
+                    break
+            
+            utils.logger.info(f"[KuaiShouClient.search_user_videos] 原生搜索完成，找到 {len(all_matching_videos)} 个匹配用户 {user_id} 的视频")
+            
+            # 如果原生搜索没有找到足够的结果，回退到本地过滤方式
+            if len(all_matching_videos) < max_count // 2:  # 如果找到的结果少于一半，使用回退方案
+                utils.logger.info(f"[KuaiShouClient.search_user_videos] 原生搜索结果较少，使用本地过滤回退方案")
+                
+                # 获取用户的所有视频
+                all_videos = await self.get_all_videos_by_creator(
+                    user_id=user_id,
+                    crawl_interval=0.5,
+                    callback=None,
+                )
+                
+                if all_videos:
+                    # 本地关键词过滤
+                    for video in all_videos:
+                        try:
+                            video_desc = video.get("photo", {}).get("caption", "").lower()
+                            if keywords.lower() in video_desc:
+                                all_matching_videos.append(video)
+                                if len(all_matching_videos) >= max_count:
+                                    break
+                        except Exception as e:
+                            utils.logger.warning(f"[KuaiShouClient.search_user_videos] 本地过滤处理视频时出错: {e}")
+                            continue
+                    
+                    utils.logger.info(f"[KuaiShouClient.search_user_videos] 本地过滤完成，总共找到 {len(all_matching_videos)} 个匹配视频")
+            
+            return all_matching_videos[:max_count]  # 确保不超过最大数量限制
+            
+        except Exception as e:
+            utils.logger.error(f"[KuaiShouClient.search_user_videos] 搜索用户视频失败: {e}")
+            return []

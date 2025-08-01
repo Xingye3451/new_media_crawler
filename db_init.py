@@ -151,7 +151,7 @@ class DatabaseInitializer:
                     {'name': 'platform', 'type': 'VARCHAR(20) NOT NULL'},
                     {'name': 'task_type', 'type': 'VARCHAR(20) NOT NULL'},
                     {'name': 'crawler_type', 'type': 'VARCHAR(20) DEFAULT "search" COMMENT "爬取类型：search(关键词搜索)、detail(指定内容)、creator(创作者主页)"'},
-                    {'name': 'creator_ref_id', 'type': 'VARCHAR(100) DEFAULT NULL COMMENT "创作者引用ID（当crawler_type为creator时，关联unified_creator表）"'},
+                    {'name': 'creator_ref_ids', 'type': 'JSON DEFAULT NULL COMMENT "创作者引用ID列表（当crawler_type为creator时，关联unified_creator表）"'},
                     {'name': 'keywords', 'type': 'TEXT'},
                     {'name': 'status', 'type': 'VARCHAR(20) NOT NULL DEFAULT "pending"'},
                     {'name': 'progress', 'type': 'FLOAT DEFAULT 0.0'},
@@ -175,7 +175,7 @@ class DatabaseInitializer:
                     {'name': 'idx_crawler_tasks_platform', 'columns': '(platform)'},
                     {'name': 'idx_crawler_tasks_status', 'columns': '(status)'},
                     {'name': 'idx_crawler_tasks_crawler_type', 'columns': '(crawler_type)'},
-                    {'name': 'idx_crawler_tasks_creator_ref_id', 'columns': '(creator_ref_id)'},
+                    {'name': 'idx_crawler_tasks_creator_ref_ids', 'columns': '(creator_ref_ids(50))'},
                     {'name': 'idx_crawler_tasks_user_id', 'columns': '(user_id)'},
                     {'name': 'idx_crawler_tasks_created_at', 'columns': '(created_at)'}
                 ]

@@ -185,7 +185,22 @@ class BilibiliCrawler(AbstractCrawler):
         start_time = time.time()
         processed_count = 0
         
-        for keyword in config.KEYWORDS.split(","):
+        # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
+        # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
+        keywords_to_search = getattr(self, 'dynamic_keywords', None)
+        if not keywords_to_search:
+            utils.logger.warning("[BilibiliCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
+            keywords_to_search = config.KEYWORDS
+        
+        # 确保关键字不为空
+        if not keywords_to_search or not keywords_to_search.strip():
+            utils.logger.error("[BilibiliCrawler.search] 没有有效的关键字，无法进行搜索")
+            return
+        
+        # 处理多个关键字（用逗号分隔）
+        keyword_list = [kw.strip() for kw in keywords_to_search.split(",") if kw.strip()]
+        
+        for keyword in keyword_list:
             source_keyword_var.set(keyword)
             utils.logger.info(f"[BilibiliCrawler.search] Current search keyword: {keyword}")
             # 每个关键词最多返回 1000 条数据
@@ -961,13 +976,13 @@ class BilibiliCrawler(AbstractCrawler):
                         await self.bilibili_store.store_creator(creator_info)
                         utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
                         
-                        # 更新任务的creator_ref_id字段
+                        # 更新任务的creator_ref_ids字段
                         try:
-                            from api.crawler_core import update_task_creator_ref_id
-                            await update_task_creator_ref_id(self.task_id, str(user_id))
-                            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 任务creator_ref_id已更新: {user_id}")
+                            from api.crawler_core import update_task_creator_ref_ids
+                            await update_task_creator_ref_ids(self.task_id, [str(user_id)])
+                            utils.logger.info(f"[BilibiliCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
                         except Exception as e:
-                            utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_id失败: {e}")
+                            utils.logger.error(f"[BilibiliCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
                     
                     # 根据是否有关键词选择不同的获取方式
                     if keywords and keywords.strip():
@@ -1218,7 +1233,14 @@ class BilibiliCrawler(AbstractCrawler):
             
             # 设置配置
             import config
-            config.KEYWORDS = keywords
+            # 🆕 修复：使用动态关键字，完全忽略配置文件中的关键字
+            if keywords and keywords.strip():
+                # 将动态关键字设置到实例变量，而不是全局配置
+                self.dynamic_keywords = keywords
+                utils.logger.info(f"[BilibiliCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
+            else:
+                utils.logger.warning("[BilibiliCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
+            
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option
@@ -1272,7 +1294,10 @@ class BilibiliCrawler(AbstractCrawler):
             
             # 设置配置
             import config
-            config.BILI_SPECIFIED_ID_LIST = [user_id]
+            # 🆕 修复：使用动态用户ID，而不是修改全局配置
+            self.dynamic_video_ids = [user_id]
+            utils.logger.info(f"[BilibiliCrawler.get_user_notes] 设置动态用户ID: {user_id}")
+            
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option

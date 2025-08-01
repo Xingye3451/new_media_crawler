@@ -776,8 +776,8 @@
                         <span class="crawler-type-badge crawler-type-${taskInfo.task_info?.crawler_type || 'search'}">
                             ${getCrawlerTypeText(taskInfo.task_info?.crawler_type)}
                         </span>
-                        ${taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_id ? 
-                            `<br><span style="color: #667eea; font-size: 0.9em; margin-top: 5px; display: inline-block;">👤 创作者ID: ${taskInfo.task_info.creator_ref_id}</span>` : ''}
+                        ${taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_ids ? 
+                            `<br><span style="color: #667eea; font-size: 0.9em; margin-top: 5px; display: inline-block;">👤 创作者数量: ${Array.isArray(taskInfo.task_info.creator_ref_ids) ? taskInfo.task_info.creator_ref_ids.length : 1}</span>` : ''}
                         ${taskInfo.task_info?.crawler_type === 'search' && taskInfo.task_info?.keywords ? 
                             `<br><span style="color: #1976d2; font-size: 0.9em; margin-top: 5px; display: inline-block;">🔍 搜索关键词: ${taskInfo.task_info.keywords}</span>` : ''}
                         ${taskInfo.task_info?.crawler_type === 'detail' ? 
@@ -796,11 +796,17 @@
 
             // 如果是创作者主页模式，加载创作者信息
             if (taskInfo.task_info?.crawler_type === 'creator') {
-                if (taskInfo.task_info?.creator_ref_id) {
-                    // 如果有creator_ref_id，使用API获取
-                    loadCreatorDetail(taskInfo.task_info.creator_ref_id);
+                if (taskInfo.task_info?.creator_ref_ids) {
+                    // 如果有creator_ref_ids，使用API获取第一个创作者信息
+                    const creatorIds = Array.isArray(taskInfo.task_info.creator_ref_ids) 
+                        ? taskInfo.task_info.creator_ref_ids 
+                        : JSON.parse(taskInfo.task_info.creator_ref_ids || '[]');
+                    
+                    if (creatorIds.length > 0) {
+                        loadCreatorDetail(creatorIds[0]); // 暂时只显示第一个创作者
+                    }
                 } else if (taskInfo.recent_videos && taskInfo.recent_videos.length > 0) {
-                    // 如果没有creator_ref_id，从视频数据中提取创作者信息
+                    // 如果没有creator_ref_ids，从视频数据中提取创作者信息
                     loadCreatorFromVideos(taskInfo.recent_videos);
                 }
             }
@@ -828,9 +834,15 @@
             `;
 
             // 异步加载创作者详细信息
-            if (taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_id) {
+            if (taskInfo.task_info?.crawler_type === 'creator' && taskInfo.task_info?.creator_ref_ids) {
                 setTimeout(() => {
-                    loadCreatorInfo(taskInfo.task_info.creator_ref_id);
+                    const creatorIds = Array.isArray(taskInfo.task_info.creator_ref_ids) 
+                        ? taskInfo.task_info.creator_ref_ids 
+                        : JSON.parse(taskInfo.task_info.creator_ref_ids || '[]');
+                    
+                    if (creatorIds.length > 0) {
+                        loadCreatorInfo(creatorIds[0]); // 暂时只显示第一个创作者
+                    }
                 }, 1000); // 延迟1秒加载，避免阻塞页面渲染
             }
         }

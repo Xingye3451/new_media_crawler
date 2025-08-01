@@ -356,7 +356,7 @@ class TaskResultService:
                     'user_id': result.get('user_id'),
                     'task_type': result.get('task_type'),
                     'crawler_type': result.get('crawler_type', 'search'),  # 添加爬取类型字段
-                    'creator_ref_id': result.get('creator_ref_id')  # 添加创作者引用ID字段
+                    'creator_ref_ids': result.get('creator_ref_ids')  # 添加创作者引用ID列表字段
                 }
             
             return None
