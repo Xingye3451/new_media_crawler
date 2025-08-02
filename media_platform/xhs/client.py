@@ -122,6 +122,14 @@ class XiaoHongShuClient(AbstractApiClient):
         elif data.get("code") == self.IP_ERROR_CODE:
             utils.logger.error(f"[XiaoHongShuClient.request] IP被限制: {data}")
             raise IPBlockError(self.IP_ERROR_STR)
+        elif data.get("code") == -510000 and data.get("msg") == "笔记不存在":
+            # 🆕 修复：笔记不存在是正常现象，不是错误
+            utils.logger.debug(f"[XiaoHongShuClient.request] 笔记不存在，这是正常现象: {data}")
+            return {}  # 返回空字典，让调用方处理
+        elif data.get("code") == -510001 and data.get("msg") == "笔记状态异常，请稍后查看":
+            # 🆕 修复：笔记状态异常也是正常现象
+            utils.logger.debug(f"[XiaoHongShuClient.request] 笔记状态异常，这是正常现象: {data}")
+            return {}  # 返回空字典，让调用方处理
         else:
             error_msg = data.get("msg", f"未知错误，状态码: {response.status_code}")
             utils.logger.error(f"[XiaoHongShuClient.request] 请求失败: {error_msg}, 完整响应: {data}")
@@ -345,9 +353,10 @@ class XiaoHongShuClient(AbstractApiClient):
         if res and res.get("items"):
             res_dict: Dict = res["items"][0]["note_card"]
             return res_dict
-        # 爬取频繁了可能会出现有的笔记能有结果有的没有
-        utils.logger.error(
-            f"[XiaoHongShuClient.get_note_by_id] get note id:{note_id} empty and res:{res}"
+        # 🆕 修复：将错误日志改为警告级别，因为这是正常现象
+        # 爬取频繁了可能会出现有的笔记能有结果有的没有，这是正常现象
+        utils.logger.warning(
+            f"[XiaoHongShuClient.get_note_by_id] 笔记详情获取失败，使用基本信息: note_id={note_id}"
         )
         return dict()
 
@@ -708,3 +717,75 @@ class XiaoHongShuClient(AbstractApiClient):
             return get_note_dict(html)
         except:
             return None
+
+    async def search_user_notes(self, user_id: str, keywords: str, max_count: int = 50) -> List[Dict]:
+        """
+        搜索指定用户的笔记
+        Args:
+            user_id: 用户ID
+            keywords: 搜索关键词
+            max_count: 最大获取数量
+        Returns:
+            List[Dict]: 笔记列表
+        """
+        try:
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 开始搜索用户 {user_id} 的关键词 '{keywords}' 笔记")
+            
+            # 🆕 使用小红书的原生搜索API，然后过滤出指定用户的笔记
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 使用原生搜索API搜索关键词: {keywords}")
+            
+            all_matching_notes = []
+            page = 1
+            max_search_pages = 10  # 限制搜索页数，避免过度请求
+            
+            while page <= max_search_pages and len(all_matching_notes) < max_count:
+                utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 搜索第 {page} 页")
+                
+                try:
+                    # 使用全局搜索API
+                    search_result = await self.get_note_by_keyword(
+                        keyword=keywords,
+                        page=page,
+                        page_size=20,
+                        note_type=SearchNoteType.VIDEO  # 默认搜索视频内容
+                    )
+                    
+                    utils.logger.debug(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页搜索API响应: {search_result}")
+                    
+                    if not search_result or not search_result.get("items"):
+                        utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页没有更多结果")
+                        break
+                    
+                    items = search_result.get("items", [])
+                    
+                    # 过滤出指定用户的笔记
+                    for note in items:
+                        try:
+                            note_user_id = note.get("user", {}).get("user_id")
+                            if note_user_id == user_id:
+                                all_matching_notes.append(note)
+                                utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 找到匹配用户 {user_id} 的笔记")
+                                
+                                if len(all_matching_notes) >= max_count:
+                                    utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 已达到最大数量限制 {max_count}")
+                                    break
+                        except Exception as e:
+                            utils.logger.warning(f"[XiaoHongShuClient.search_user_notes] 处理笔记时出错: {e}")
+                            continue
+                    
+                    # 如果当前页没有找到匹配的笔记，继续搜索下一页
+                    page += 1
+                    
+                    # 添加延迟，避免请求过于频繁
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    utils.logger.error(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页搜索失败: {e}")
+                    break
+            
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 搜索完成，找到 {len(all_matching_notes)} 个匹配用户 {user_id} 的笔记")
+            return all_matching_notes
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuClient.search_user_notes] 搜索用户笔记失败: {e}")
+            return []

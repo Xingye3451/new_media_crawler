@@ -122,31 +122,31 @@ PLATFORM_FIELD_MAPPINGS = {
         "raw_data": "raw_data"
     },
     "xhs": {
-        "content_id": "note_id",
-        "content_type": "type",
-        "title": "title",
-        "description": "desc",
-        "content": "desc",
-        "author_id": "user.user_id",
-        "author_name": "user.nickname",
-        "author_nickname": "user.nickname",
-        "author_avatar": "user.avatar",
-        "like_count": "interact_info.liked_count",
-        "comment_count": "interact_info.comment_count",
-        "share_count": "interact_info.share_count",
-        "collect_count": "interact_info.collected_count",
-        "cover_url": "image_list.0.url",
-        "image_urls": "image_list",
-        "video_url": "note_url",
-        "video_download_url": "video_url",
-        "video_play_url": "note_url",
-        "video_share_url": "note_url",
-        "ip_location": "ip_location",
-        "create_time": "time",
-        "publish_time": "time",
-        "update_time": "last_update_time",
-        "tags": "tag_list",
-        "topics": "tag_list",
+        "content_id": "id",  # 修复：使用顶层的id字段
+        "content_type": "type",  # 修复：使用顶层的type字段
+        "title": "desc",  # 修复：使用顶层的desc字段
+        "description": "desc",  # 修复：使用顶层的desc字段
+        "content": "desc",  # 修复：使用顶层的desc字段
+        "author_id": "user.user_id",  # 修复：使用嵌套的user.user_id
+        "author_name": "user.nickname",  # 修复：使用嵌套的user.nickname
+        "author_nickname": "user.nickname",  # 修复：使用嵌套的user.nickname
+        "author_avatar": "user.avatar",  # 修复：使用嵌套的user.avatar
+        "like_count": "interact_info.liked_count",  # 修复：使用嵌套的interact_info.liked_count
+        "comment_count": "interact_info.comment_count",  # 修复：使用嵌套的interact_info.comment_count
+        "share_count": "interact_info.share_count",  # 修复：使用嵌套的interact_info.share_count
+        "collect_count": "interact_info.collected_count",  # 修复：使用嵌套的interact_info.collected_count
+        "cover_url": "image_list.0.url_default",  # 修复：使用嵌套的image_list第一个图片的url_default
+        "image_urls": "image_list",  # 修复：使用嵌套的image_list
+        "video_url": "video.media.stream.h264.0.master_url",  # 修复：使用嵌套的视频流URL
+        "video_download_url": "video.media.stream.h264.0.master_url",  # 修复：使用嵌套的视频流URL
+        "video_play_url": "video.media.stream.h264.0.master_url",  # 修复：使用嵌套的视频流URL
+        "video_share_url": "video.media.stream.h264.0.master_url",  # 修复：使用嵌套的视频流URL
+        "ip_location": "ip_location",  # 修复：使用顶层的ip_location
+        "create_time": "time",  # 修复：使用顶层的time字段
+        "publish_time": "time",  # 修复：使用顶层的time字段
+        "update_time": "last_update_time",  # 修复：使用顶层的last_update_time
+        "tags": "tag_list",  # 修复：使用顶层的tag_list
+        "topics": "tag_list",  # 修复：使用顶层的tag_list
         "raw_data": "raw_data"
     },
     "kuaishou": {
@@ -361,6 +361,11 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
     mapping = PLATFORM_FIELD_MAPPINGS[platform]
     mapped_data = {}
     
+    # 🆕 添加调试日志，打印原始数据
+    utils.logger.info(f"[map_platform_fields] 平台: {platform}")
+    utils.logger.info(f"[map_platform_fields] 原始数据字段: {list(data.keys())}")
+    utils.logger.info(f"[map_platform_fields] 原始数据内容: {data}")
+    
     # 添加平台标识
     mapped_data["platform"] = platform
     
@@ -406,7 +411,19 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
                 if platform_field in data:
                     value = data[platform_field]
             
+            # 🆕 修复：特殊处理content_id字段，如果为空则生成临时ID
+            if unified_field == "content_id" and (value is None or value == ""):
+                value = f"temp_{platform}_{int(time.time() * 1000)}"
+                utils.logger.warning(f"[map_platform_fields] {platform} content_id为空，生成临时ID: {value}")
+            
+            # 🆕 修复：确保content_id字段总是被添加，即使value为None
+            if unified_field == "content_id" and value is None:
+                value = f"temp_{platform}_{int(time.time() * 1000)}"
+                utils.logger.warning(f"[map_platform_fields] {platform} content_id字段不存在，生成临时ID: {value}")
+            
             if value is not None:
+                # 🆕 添加调试日志，打印映射结果
+                utils.logger.info(f"[map_platform_fields] 字段映射: {platform_field} -> {unified_field} = {value}")
                 # 对数值字段进行类型转换
                 if unified_field in numeric_fields:
                     try:
@@ -433,6 +450,10 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
                                 utils.logger.info(f"[map_platform_fields] B站时间戳转换: {timestamp} -> {mapped_data[unified_field]}")
                 else:
                     mapped_data[unified_field] = value
+    
+    # 🆕 添加调试日志，打印最终映射结果
+    utils.logger.info(f"[map_platform_fields] 最终映射结果: {mapped_data}")
+    utils.logger.info(f"[map_platform_fields] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
     
     return mapped_data
 
@@ -477,6 +498,11 @@ async def add_new_content(platform: str, content_item: Dict, task_id: str = None
         mapped_data = map_platform_fields(platform, content_item)
         utils.logger.debug(f"[add_new_content] 字段映射完成，映射后字段数: {len(mapped_data)}")
         
+        # 🆕 添加调试日志，检查映射后的数据
+        utils.logger.info(f"[add_new_content] 映射后数据字段: {list(mapped_data.keys())}")
+        utils.logger.info(f"[add_new_content] content_id是否存在: {'content_id' in mapped_data}")
+        utils.logger.info(f"[add_new_content] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
+        
         # 添加任务ID
         if task_id:
             mapped_data["task_id"] = task_id
@@ -497,6 +523,11 @@ async def add_new_content(platform: str, content_item: Dict, task_id: str = None
         # 过滤字段
         safe_item = filter_fields_for_table(safe_item, UNIFIED_CONTENT_FIELDS)
         utils.logger.debug(f"[add_new_content] 字段过滤完成，最终字段数: {len(safe_item)}")
+        
+        # 🆕 添加调试日志，检查过滤后的数据
+        utils.logger.info(f"[add_new_content] 过滤后数据字段: {list(safe_item.keys())}")
+        utils.logger.info(f"[add_new_content] 过滤后content_id是否存在: {'content_id' in safe_item}")
+        utils.logger.info(f"[add_new_content] 过滤后content_id值: {safe_item.get('content_id', 'NOT_FOUND')}")
         
         # 插入数据库
         utils.logger.debug(f"[add_new_content] 开始插入数据库，表名: unified_content")

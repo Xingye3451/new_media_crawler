@@ -122,6 +122,35 @@ class XiaoHongShuCrawler(AbstractCrawler):
             raise Exception("数据库中没有找到有效的登录凭证，请先登录")
         
         utils.logger.info("[XiaoHongShuCrawler.start] 爬虫初始化完成，浏览器上下文已创建")
+        
+        # 🆕 修复：根据动态参数决定执行逻辑，而不是依赖配置文件
+        crawler_type_var.set(config.CRAWLER_TYPE)
+        
+        # 检查是否有动态关键字，如果有则执行搜索
+        if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态关键字: {self.dynamic_keywords}")
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行关键词搜索模式")
+            await self.search()
+        elif hasattr(self, 'dynamic_note_ids') and self.dynamic_note_ids:
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态笔记ID: {self.dynamic_note_ids}")
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行指定笔记模式")
+            await self.get_specified_notes()
+        elif hasattr(self, 'dynamic_creators') and self.dynamic_creators:
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态创作者: {self.dynamic_creators}")
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行创作者模式")
+            await self.get_creators_and_notes()
+        else:
+            # 如果没有动态参数，则使用配置文件中的设置
+            utils.logger.debug(f"[XiaoHongShuCrawler.start] 使用配置文件中的爬取类型: {config.CRAWLER_TYPE}")
+            if config.CRAWLER_TYPE == "search":
+                # Search for notes and retrieve their comment information.
+                await self.search()
+            elif config.CRAWLER_TYPE == "detail":
+                # Get the information and comments of the specified post
+                await self.get_specified_notes()
+            elif config.CRAWLER_TYPE == "creator":
+                # Get the information and comments of the specified creator
+                await self.get_creators_and_notes()
 
     async def search(self) -> None:
         """Search for notes and retrieve their comment information."""
@@ -133,9 +162,9 @@ class XiaoHongShuCrawler(AbstractCrawler):
             config.CRAWLER_MAX_NOTES_COUNT = xhs_limit_count
         start_page = config.START_PAGE
         
-        # 获取搜索类型配置，默认为全部内容
-        search_note_type = getattr(config, 'SEARCH_NOTE_TYPE', SearchNoteType.ALL)
-        utils.logger.info(f"[XiaoHongShuCrawler.search] 搜索内容类型: {search_note_type.name}")
+        # 🆕 修复：默认使用视频筛选，专门爬取视频内容
+        search_note_type = getattr(config, 'SEARCH_NOTE_TYPE', SearchNoteType.VIDEO)
+        utils.logger.info(f"[XiaoHongShuCrawler.search] 搜索内容类型: {search_note_type.name} (1=视频, 0=全部, 2=图片)")
         
         # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
         # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
@@ -204,11 +233,51 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             break
                         
                         try:
-                            # 添加关键词信息
-                            item["source_keyword"] = keyword
-                            # 使用Redis存储
-                            await self.xhs_store.store_content({**item, "task_id": self.task_id} if self.task_id else item)
-                            processed_count += 1
+                            # 🆕 修复：恢复原有逻辑，但优化错误处理
+                            note_id = item.get("id")
+                            xsec_source = item.get("xsec_source", "pc_search")
+                            xsec_token = item.get("xsec_token", "")
+                            
+                            if note_id and xsec_token:
+                                utils.logger.debug(f"[XiaoHongShuCrawler.search] 获取笔记详细信息: {note_id}")
+                                try:
+                                    # 获取详细信息
+                                    detail_item = await self.xhs_client.get_note_by_id(
+                                        note_id=note_id,
+                                        xsec_source=xsec_source,
+                                        xsec_token=xsec_token
+                                    )
+                                    
+                                    if detail_item:
+                                        # 合并基本信息到详细信息中
+                                        detail_item.update({
+                                            "source_keyword": keyword,
+                                            "id": note_id,  # 确保ID字段存在
+                                            "xsec_source": xsec_source,
+                                            "xsec_token": xsec_token
+                                        })
+                                        
+                                        # 使用详细信息存储
+                                        await self.xhs_store.store_content({**detail_item, "task_id": self.task_id} if self.task_id else detail_item)
+                                        processed_count += 1
+                                        utils.logger.debug(f"[XiaoHongShuCrawler.search] 成功获取并存储笔记详细信息: {note_id}")
+                                    else:
+                                        utils.logger.debug(f"[XiaoHongShuCrawler.search] 详细信息获取失败，使用基本信息: {note_id}")
+                                        # 如果获取详细信息失败，使用基本信息
+                                        item["source_keyword"] = keyword
+                                        await self.xhs_store.store_content({**item, "task_id": self.task_id} if self.task_id else item)
+                                        processed_count += 1
+                                        
+                                except Exception as detail_e:
+                                    utils.logger.debug(f"[XiaoHongShuCrawler.search] 获取详细信息异常，使用基本信息: {detail_e}")
+                                    # 如果获取详细信息失败，使用基本信息
+                                    item["source_keyword"] = keyword
+                                    await self.xhs_store.store_content({**item, "task_id": self.task_id} if self.task_id else item)
+                                    processed_count += 1
+                            else:
+                                utils.logger.debug(f"[XiaoHongShuCrawler.search] 笔记缺少必要信息，跳过: note_id={note_id}, xsec_token={xsec_token}")
+                                continue
+                                
                         except Exception as e:
                             utils.logger.error(f"[XiaoHongShuCrawler.search] 处理数据项失败: {e}")
                             continue
@@ -281,7 +350,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者，最大数量限制: {max_count}")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
+            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
             
             # 确保客户端已初始化
             if not hasattr(self, 'xhs_client') or self.xhs_client is None:
@@ -289,7 +361,6 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 raise Exception("小红书客户端未初始化，请先调用start()方法")
             
             all_results = []
-            total_processed = 0
             
             for creator in creators:
                 user_id = creator.get("creator_id")
@@ -304,62 +375,98 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         # 更新创作者信息到数据库
                         await self.xhs_store.save_creator(user_id, creator=creator_info)
                         utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                        
+                        # 🆕 更新任务的creator_ref_ids字段（参考B站和快手实现）
+                        try:
+                            from api.crawler_core import update_task_creator_ref_ids
+                            await update_task_creator_ref_ids(self.task_id, [str(user_id)])
+                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
+                        except Exception as e:
+                            utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
                     
-                    # 设置爬取间隔
-                    if config.ENABLE_IP_PROXY:
-                        crawl_interval = random.random()
-                    else:
-                        crawl_interval = random.uniform(1, config.CRAWLER_MAX_SLEEP_SEC)
-                    
-                    # 获取创作者的所有笔记
-                    # 根据是否有关键词选择不同的获取方式
+                    # 🆕 优化：根据是否有关键词选择不同的获取方式（参考B站和快手实现）
                     if keywords and keywords.strip():
                         # 使用关键词搜索获取笔记
                         utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的笔记")
-                        all_notes_list = await self.xhs_client.search_user_notes(user_id, keywords, max_count)
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 关键词类型: {type(keywords)}, 长度: {len(keywords)}")
+                        
+                        # 确保关键词不为空且有效
+                        clean_keywords = keywords.strip()
+                        if clean_keywords:
+                            all_notes_list = await self.xhs_client.search_user_notes(user_id, clean_keywords, max_count)
+                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_notes_list) if all_notes_list else 0} 条笔记")
+                        else:
+                            utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 关键词为空，使用默认获取方式")
+                            # 设置爬取间隔
+                            if config.ENABLE_IP_PROXY:
+                                crawl_interval = random.random()
+                            else:
+                                crawl_interval = random.uniform(1, config.CRAWLER_MAX_SLEEP_SEC)
+                            
+                            all_notes_list = await self.xhs_client.get_all_notes_by_creator(
+                                user_id=user_id,
+                                crawl_interval=crawl_interval,
+                                callback=self.fetch_creator_notes_detail,
+                            )
                     else:
                         # 获取创作者的所有笔记
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有笔记（无关键词筛选）")
+                        
+                        # 设置爬取间隔
+                        if config.ENABLE_IP_PROXY:
+                            crawl_interval = random.random()
+                        else:
+                            crawl_interval = random.uniform(1, config.CRAWLER_MAX_SLEEP_SEC)
+                        
                         all_notes_list = await self.xhs_client.get_all_notes_by_creator(
                             user_id=user_id,
                             crawl_interval=crawl_interval,
                             callback=self.fetch_creator_notes_detail,
                         )
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取所有笔记完成，获取到 {len(all_notes_list) if all_notes_list else 0} 条笔记")
                     
                     if all_notes_list:
                         utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取到 {len(all_notes_list)} 条笔记")
                         
-                        # 使用原生搜索API
+                        # 🆕 处理每个笔记，获取详细信息（参考B站和快手实现）
+                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始处理 {len(all_notes_list)} 条笔记")
                         
-                        # 计算当前创作者可处理的最大数量
-                        remaining_count = max_count - total_processed
-                        if remaining_count <= 0:
-                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，跳过剩余创作者")
+                        for i, note_item in enumerate(all_notes_list):
+                            try:
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 条笔记")
+                                
+                                # 保存到数据库
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
+                                try:
+                                    await self.xhs_store.update_xhs_note(note_item, task_id=self.task_id)
+                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记数据保存成功")
+                                except Exception as e:
+                                    utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 保存笔记数据失败: {e}")
+                                    continue
+                                
+                                all_results.append(note_item)
+                                
+                                # 检查是否达到数量限制
+                                if len(all_results) >= max_count:
+                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 已达到最大数量限制 {max_count}")
+                                    break
+                                
+                            except Exception as e:
+                                utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 处理笔记时出错: {e}")
+                                continue
+                        
+                        # 如果已达到数量限制，跳出创作者循环
+                        if len(all_results) >= max_count:
                             break
                         
-                        # 应用数量限制
-                        limited_notes_list = all_notes_list[:remaining_count]
-                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 应用数量限制，处理前 {len(limited_notes_list)} 条笔记 (剩余限制: {remaining_count})")
-                        
-                        # 处理笔记详情
-                        note_ids = []
-                        xsec_tokens = []
-                        for note_item in limited_notes_list:
-                            note_ids.append(note_item.get("note_id"))
-                            xsec_tokens.append(note_item.get("xsec_token"))
-                            all_results.append(note_item)
-                            total_processed += 1
+                        # 🆕 获取评论（参考B站和快手实现）
+                        if get_comments and len(all_results) < max_count:
+                            note_ids = []
+                            xsec_tokens = []
+                            for note_item in all_notes_list:
+                                note_ids.append(note_item.get("note_id"))
+                                xsec_tokens.append(note_item.get("xsec_token"))
                             
-                            # 检查是否达到总数量限制
-                            if total_processed >= max_count:
-                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，停止处理")
-                                break
-                        
-                        # 如果已达到总数量限制，跳出创作者循环
-                        if total_processed >= max_count:
-                            break
-                        
-                        # 获取评论
-                        if get_comments and total_processed < max_count:
                             if note_ids:
                                 utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 为 {len(note_ids)} 条笔记获取评论")
                                 await self.batch_get_note_comments(note_ids, xsec_tokens)

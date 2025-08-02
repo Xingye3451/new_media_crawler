@@ -105,25 +105,34 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error("[KuaishouCrawler] ❌ 数据库中没有找到有效的登录凭证")
                 raise Exception("数据库中没有找到有效的登录凭证，请先登录")
             
-            # 🆕 修复：在创作者模式下，不调用任何搜索方法，避免使用配置文件中的关键字
+            # 🆕 修复：根据动态参数决定执行逻辑，而不是依赖配置文件
             crawler_type_var.set(config.CRAWLER_TYPE)
             
-            # 检查是否为创作者模式，如果是则不执行任何搜索
-            if hasattr(self, 'task_id') and self.task_id:
-                utils.logger.debug(f"[KuaishouCrawler.start] 任务ID: {self.task_id}，跳过start方法中的搜索逻辑")
-                utils.logger.debug(f"[KuaishouCrawler.start] 创作者模式将由get_creators_and_notes_from_db方法处理")
-                return
-            
-            # 只有在非任务模式下才执行以下逻辑
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
+            # 检查是否有动态关键字，如果有则执行搜索
+            if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
+                utils.logger.debug(f"[KuaishouCrawler.start] 检测到动态关键字: {self.dynamic_keywords}")
+                utils.logger.debug(f"[KuaishouCrawler.start] 执行关键词搜索模式")
                 await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_notes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get the information and comments of the specified creator
+            elif hasattr(self, 'dynamic_video_ids') and self.dynamic_video_ids:
+                utils.logger.debug(f"[KuaishouCrawler.start] 检测到动态视频ID: {self.dynamic_video_ids}")
+                utils.logger.debug(f"[KuaishouCrawler.start] 执行指定视频模式")
+                await self.get_specified_videos()
+            elif hasattr(self, 'dynamic_creators') and self.dynamic_creators:
+                utils.logger.debug(f"[KuaishouCrawler.start] 检测到动态创作者: {self.dynamic_creators}")
+                utils.logger.debug(f"[KuaishouCrawler.start] 执行创作者模式")
                 await self.get_creators_and_notes()
+            else:
+                # 如果没有动态参数，则使用配置文件中的设置
+                utils.logger.debug(f"[KuaishouCrawler.start] 使用配置文件中的爬取类型: {config.CRAWLER_TYPE}")
+                if config.CRAWLER_TYPE == "search":
+                    # Search for notes and retrieve their comment information.
+                    await self.search()
+                elif config.CRAWLER_TYPE == "detail":
+                    # Get the information and comments of the specified post
+                    await self.get_specified_notes()
+                elif config.CRAWLER_TYPE == "creator":
+                    # Get the information and comments of the specified creator
+                    await self.get_creators_and_notes()
 
             utils.logger.debug("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 

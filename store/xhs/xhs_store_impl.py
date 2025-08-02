@@ -236,6 +236,11 @@ class XhsDbStoreImplement(AbstractStore):
             video_url = ','.join(self._get_video_url_arr(note_item))
             
             # 构建符合统一存储字段映射的数据结构
+            # 确保note_id不为空，如果为空则生成一个临时ID
+            if not note_id:
+                note_id = f"temp_{int(time.time() * 1000)}"
+                utils.logger.warning(f"[XhsDbStoreImplement] note_id为空，生成临时ID: {note_id}")
+            
             unified_content = {
                 "note_id": note_id,  # content_id 映射
                 "type": note_item.get("type", "note"),  # content_type 映射
