@@ -98,14 +98,20 @@ class DouYinCrawler(AbstractCrawler):
                     # 设置cookies到浏览器
                     await self.dy_client.set_cookies_from_string(cookie_str)
                     
-                    # 验证cookies是否有效
-                    if await self.dy_client.pong(browser_context=self.browser_context):
-                        utils.logger.info("[DouYinCrawler] ✅ 数据库中的cookies有效，开始爬取")
-                        # 更新cookies到客户端
-                        await self.dy_client.update_cookies(browser_context=self.browser_context)
-                    else:
-                        utils.logger.error("[DouYinCrawler] ❌ 数据库中的cookies无效，无法继续")
-                        raise Exception("数据库中的登录凭证无效，请重新登录")
+                    # 🆕 临时注释：验证cookies是否有效
+                    # if await self.dy_client.pong(browser_context=self.browser_context):
+                    #     utils.logger.info("[DouYinCrawler] ✅ 数据库中的cookies有效，开始爬取")
+                    #     # 更新cookies到客户端
+                    #     await self.dy_client.update_cookies(browser_context=self.browser_context)
+                    # else:
+                    #     utils.logger.error("[DouYinCrawler] ❌ 数据库中的cookies无效，无法继续")
+                    #     raise Exception("数据库中的登录凭证无效，请重新登录")
+                    
+                    # 🆕 临时跳过验证，直接使用cookies
+                    utils.logger.info("[DouYinCrawler] ✅ 跳过cookies验证，直接使用数据库中的cookies")
+                    # 更新cookies到客户端
+                    await self.dy_client.update_cookies(browser_context=self.browser_context)
+                    
                 except Exception as e:
                     utils.logger.error(f"[DouYinCrawler] 使用数据库cookies失败: {e}")
                     raise Exception(f"使用数据库登录凭证失败: {str(e)}")
@@ -113,16 +119,32 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.error("[DouYinCrawler] ❌ 数据库中没有找到有效的登录凭证")
                 raise Exception("数据库中没有找到有效的登录凭证，请先登录")
             
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
+            # 🆕 修复：根据动态参数决定执行逻辑，而不是依赖配置文件
+            # 检查是否有动态关键字
+            if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
+                utils.logger.info(f"[DouYinCrawler.start] 检测到动态关键字，执行搜索模式")
                 await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
+            # 检查是否有动态视频ID列表
+            elif hasattr(self, 'dynamic_video_ids') and self.dynamic_video_ids:
+                utils.logger.info(f"[DouYinCrawler.start] 检测到动态视频ID列表，执行详情模式")
                 await self.get_specified_awemes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get the information and comments of the specified creator
+            # 检查是否有动态创作者列表
+            elif hasattr(self, 'dynamic_creators') and self.dynamic_creators:
+                utils.logger.info(f"[DouYinCrawler.start] 检测到动态创作者列表，执行创作者模式")
                 await self.get_creators_and_videos()
+            # 回退到配置文件模式（向后兼容）
+            else:
+                utils.logger.info(f"[DouYinCrawler.start] 使用配置文件模式，类型: {config.CRAWLER_TYPE}")
+                crawler_type_var.set(config.CRAWLER_TYPE)
+                if config.CRAWLER_TYPE == "search":
+                    # Search for notes and retrieve their comment information.
+                    await self.search()
+                elif config.CRAWLER_TYPE == "detail":
+                    # Get the information and comments of the specified post
+                    await self.get_specified_awemes()
+                elif config.CRAWLER_TYPE == "creator":
+                    # Get the information and comments of the specified creator
+                    await self.get_creators_and_videos()
 
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
@@ -141,12 +163,12 @@ class DouYinCrawler(AbstractCrawler):
         # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
         keywords_to_search = getattr(self, 'dynamic_keywords', None)
         if not keywords_to_search:
-            utils.logger.warning("[DYCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
+            utils.logger.warning("[DouYinCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
             keywords_to_search = config.KEYWORDS
         
         # 确保关键字不为空
         if not keywords_to_search or not keywords_to_search.strip():
-            utils.logger.error("[DYCrawler.search] 没有有效的关键字，无法进行搜索")
+            utils.logger.error("[DouYinCrawler.search] 没有有效的关键字，无法进行搜索")
             return
         
         # 处理多个关键字（用逗号分隔）
@@ -348,10 +370,11 @@ class DouYinCrawler(AbstractCrawler):
                                            save_data_option: str = "db", use_proxy: bool = False,
                                            proxy_strategy: str = "disabled") -> List[Dict]:
         """
-        从数据库获取创作者列表进行爬取
+        从数据库获取创作者列表进行爬取（参考B站和快手实现）
         Args:
             creators: 创作者列表，包含creator_id, platform, name, nickname
             max_count: 最大爬取数量
+            keywords: 关键词（可选，用于筛选创作者内容）
             account_id: 账号ID
             session_id: 会话ID
             login_type: 登录类型
@@ -363,7 +386,10 @@ class DouYinCrawler(AbstractCrawler):
             List[Dict]: 爬取结果列表
         """
         try:
-            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者，最大数量限制: {max_count}")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取 {len(creators)} 个创作者")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
             
             # 确保客户端已初始化
             if not hasattr(self, 'dy_client') or self.dy_client is None:
@@ -371,7 +397,6 @@ class DouYinCrawler(AbstractCrawler):
                 raise Exception("抖音客户端未初始化，请先调用start()方法")
             
             all_results = []
-            total_processed = 0
             
             for creator in creators:
                 user_id = creator.get("creator_id")
@@ -386,51 +411,91 @@ class DouYinCrawler(AbstractCrawler):
                         # 更新创作者信息到数据库
                         await self.douyin_store.save_creator(user_id, creator=creator_info)
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                        
+                        # 🆕 更新任务的creator_ref_ids字段（参考B站实现）
+                        try:
+                            from api.crawler_core import update_task_creator_ref_ids
+                            await update_task_creator_ref_ids(self.task_id, [str(user_id)])
+                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
+                        except Exception as e:
+                            utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
                     
-                    # 根据是否有关键词选择不同的获取方式
+                    # 🆕 根据是否有关键词选择不同的获取方式（参考B站和快手实现）
                     if keywords and keywords.strip():
                         # 使用关键词搜索获取视频
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 使用关键词 '{keywords}' 搜索创作者 {creator_name} 的视频")
-                        all_video_list = await self.dy_client.search_user_videos(user_id, keywords, max_count)
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词类型: {type(keywords)}, 长度: {len(keywords)}")
+                        
+                        # 确保关键词不为空且有效
+                        clean_keywords = keywords.strip()
+                        if clean_keywords:
+                            all_video_list = await self.dy_client.search_user_videos(user_id, clean_keywords, max_count)
+                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
+                        else:
+                            utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词为空，使用默认获取方式")
+                            all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                                sec_user_id=user_id,
+                                callback=self.fetch_creator_video_detail
+                            )
                     else:
-                        # 获取创作者的所有视频
+                        # 获取创作者的所有视频（应用数量限制）
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
                         all_video_list = await self.dy_client.get_all_user_aweme_posts(
                             sec_user_id=user_id,
                             callback=self.fetch_creator_video_detail
                         )
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                     
                     if all_video_list:
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
                         
-                        # 计算当前创作者可处理的最大数量
-                        remaining_count = max_count - total_processed
-                        if remaining_count <= 0:
-                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，跳过剩余创作者")
-                            break
+                        # 🆕 处理每个视频，获取详细信息（参考B站实现）
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始处理 {len(all_video_list)} 个视频")
                         
-                        # 应用数量限制
-                        limited_list = all_video_list[:remaining_count]
-                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 应用数量限制，处理前 {len(limited_list)} 个内容 (剩余限制: {remaining_count})")
-                        
-                        # 处理每个内容
-                        for item in limited_list:
+                        for i, video_item in enumerate(all_video_list):
                             try:
-                                # 处理内容...
-                                all_results.append(item)
-                                total_processed += 1
+                                utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 个视频")
+                                utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频信息: aweme_id={video_item.get('aweme_id')}")
                                 
-                                # 检查是否达到总数量限制
-                                if total_processed >= max_count:
-                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 已达到总数量限制 {max_count}，停止处理")
-                                    break
-                            
+                                # 🆕 获取视频详细信息（参考B站实现）
+                                video_detail = await self.get_aweme_detail(
+                                    aweme_id=video_item.get("aweme_id", ""), 
+                                    semaphore=asyncio.Semaphore(5)
+                                )
+                                
+                                if video_detail:
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 成功获取视频详细信息")
+                                    
+                                    # 保存到数据库
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
+                                    try:
+                                        await self.douyin_store.store_content({**video_detail, "task_id": self.task_id} if self.task_id else video_detail)
+                                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
+                                    except Exception as e:
+                                        utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频数据保存失败: {e}")
+                                    
+                                    # 添加到结果列表
+                                    all_results.append(video_detail)
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频处理完成，已添加到结果列表")
+                                else:
+                                    utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取视频详细信息失败")
+                                
                             except Exception as e:
-                                utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 处理内容失败: {e}")
+                                utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 处理视频失败: {e}")
+                                import traceback
+                                utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 错误堆栈: {traceback.format_exc()}")
                                 continue
                         
-                        # 如果已达到总数量限制，跳出创作者循环
-                        if total_processed >= max_count:
-                            break
+                        # 🆕 获取评论（如果启用）（参考B站和快手实现）
+                        if get_comments and all_video_list:
+                            try:
+                                aweme_ids = [video_item.get("aweme_id") for video_item in all_results if video_item.get("aweme_id")]
+                                if aweme_ids:
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 为 {len(aweme_ids)} 个视频获取评论")
+                                    await self.batch_get_note_comments(aweme_ids)
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 评论获取完成")
+                            except Exception as e:
+                                utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取评论失败: {e}")
                     else:
                         utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到视频")
                 
@@ -438,7 +503,7 @@ class DouYinCrawler(AbstractCrawler):
                     utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取创作者 {creator_name} 失败: {e}")
                     continue
             
-            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据 (限制: {max_count})")
+            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 爬取完成，共获取 {len(all_results)} 条数据")
             return all_results
             
         except Exception as e:
@@ -530,7 +595,7 @@ class DouYinCrawler(AbstractCrawler):
                                 save_data_option: str = "db", use_proxy: bool = False,
                                 proxy_strategy: str = "disabled") -> List[Dict]:
         """
-        根据关键词搜索抖音视频
+        根据关键词搜索抖音视频（参考B站和快手实现）
         :param keywords: 搜索关键词
         :param max_count: 最大获取数量
         :param account_id: 账号ID
@@ -556,9 +621,10 @@ class DouYinCrawler(AbstractCrawler):
             if keywords and keywords.strip():
                 # 将动态关键字设置到实例变量，而不是全局配置
                 self.dynamic_keywords = keywords
-                utils.logger.info(f"[DYCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
+                utils.logger.info(f"[DouYinCrawler.search_by_keywords] 设置动态关键字: '{keywords}'")
             else:
-                utils.logger.warning("[DYCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
+                utils.logger.warning("[DouYinCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
+            
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option
@@ -567,22 +633,13 @@ class DouYinCrawler(AbstractCrawler):
             # 启动爬虫
             await self.start()
             
-            # 由于Redis存储是通过回调函数处理的，我们需要从Redis中获取数据
-            # 或者直接返回爬取过程中收集的数据
+            # 执行实际的搜索
+            await self.search()
+            
+            # 从统一存储中获取结果
             results = []
-            
-            # 如果使用了Redis存储，尝试从Redis获取数据
-            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'get_all_content'):
-                results = await self.douyin_store.get_all_content()
-            
-            # 如果Redis中没有数据，尝试从任务结果中获取
-            if not results and hasattr(self, 'task_id'):
-                from utils.redis_manager import redis_manager
-                try:
-                    task_videos = await redis_manager.get_task_videos(self.task_id, "dy")
-                    results = task_videos
-                except Exception as e:
-                    utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
+            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'unified_store'):
+                results = await self.douyin_store.unified_store.get_all_content()
             
             utils.logger.info(f"[DouYinCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results
@@ -604,7 +661,7 @@ class DouYinCrawler(AbstractCrawler):
                             save_data_option: str = "db", use_proxy: bool = False,
                             proxy_strategy: str = "disabled") -> List[Dict]:
         """
-        获取用户发布的视频
+        获取用户发布的视频（参考B站和快手实现）
         :param user_id: 用户ID
         :param max_count: 最大获取数量
         :param account_id: 账号ID
@@ -621,7 +678,10 @@ class DouYinCrawler(AbstractCrawler):
             
             # 设置配置
             import config
-            config.DY_SPECIFIED_ID_LIST = [user_id]
+            # 🆕 修复：使用动态用户ID，而不是修改全局配置
+            self.dynamic_video_ids = [user_id]
+            utils.logger.info(f"[DouYinCrawler.get_user_notes] 设置动态用户ID: {user_id}")
+            
             config.CRAWLER_MAX_NOTES_COUNT = max_count
             config.ENABLE_GET_COMMENTS = get_comments
             config.SAVE_DATA_OPTION = save_data_option

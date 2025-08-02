@@ -1062,22 +1062,36 @@
                     // 清空现有选项
                     accountSelect.innerHTML = '';
                     
-                    // 直接选择第一个账号
-                    const firstAccount = result.data[0];
-                    const option = document.createElement('option');
-                    option.value = firstAccount.id;
-                    option.textContent = firstAccount.account_name || firstAccount.username || `账号${firstAccount.id}`;
-                    option.selected = true; // 默认选中第一个
-                    accountSelect.appendChild(option);
+                    // 优先选择已登录的账号
+                    let selectedAccount = result.data[0];
+                    for (const account of result.data) {
+                        if (account.login_status === 'logged_in') {
+                            selectedAccount = account;
+                            break;
+                        }
+                    }
                     
-                    console.log(`自动选择账号: ${option.textContent} (ID: ${firstAccount.id})`);
+                    // 添加所有账号到选择框
+                    result.data.forEach((account) => {
+                        const option = document.createElement('option');
+                        option.value = account.id;
+                        option.textContent = `${account.account_name || account.username || `账号${account.id}`} (${account.login_status === 'logged_in' ? '✅已登录' : '⚠️未登录'})`;
+                        if (account.id === selectedAccount.id) {
+                            option.selected = true; // 默认选中已登录的账号
+                        }
+                        accountSelect.appendChild(option);
+                    });
+                    
+                    console.log(`自动选择账号: ${selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`} (ID: ${selectedAccount.id}, 状态: ${selectedAccount.login_status})`);
                     
                     // 更新显示状态
                     updateStatus('single-platform-result', 
-                        `✅ 已自动选择账号\n\n` +
+                        `✅ 已加载账号列表\n\n` +
                         `平台: ${getPlatformName(platform)}\n` +
-                        `账号: ${option.textContent}\n` +
-                        `账号ID: ${firstAccount.id}\n\n` +
+                        `账号数量: ${result.data.length} 个\n` +
+                        `默认选择: ${selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`}\n` +
+                        `账号ID: ${selectedAccount.id}\n` +
+                        `登录状态: ${selectedAccount.login_status === 'logged_in' ? '✅已登录' : '⚠️未登录'}\n\n` +
                         `可以开始爬取任务`
                     );
                     
@@ -1296,11 +1310,19 @@
                     const result = await response.json();
                     
                     if (response.ok && result.code === 200 && result.data && result.data.length > 0) {
-                        // 选择第一个账号
-                        const firstAccount = result.data[0];
+                        // 优先选择已登录的账号，如果没有则选择第一个
+                        let selectedAccount = result.data[0];
+                        for (const account of result.data) {
+                            if (account.login_status === 'logged_in') {
+                                selectedAccount = account;
+                                break;
+                            }
+                        }
+                        
                         platformAccounts[platform] = {
-                            account_id: firstAccount.id,
-                            account_name: firstAccount.account_name || firstAccount.username || `账号${firstAccount.id}`
+                            account_id: selectedAccount.id,
+                            account_name: selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`,
+                            login_status: selectedAccount.login_status
                         };
                     } else {
                         showToast(`平台 ${getPlatformName(platform)} 没有可用账号`, 'error');
@@ -1352,7 +1374,8 @@
                     
                     let accountInfo = '';
                     for (const [platform, account] of Object.entries(platformAccounts)) {
-                        accountInfo += `${getPlatformName(platform)}: ${account.account_name} (ID: ${account.account_id})\n`;
+                        const statusIcon = account.login_status === 'logged_in' ? '✅' : '⚠️';
+                        accountInfo += `${getPlatformName(platform)}: ${account.account_name} (ID: ${account.account_id}, ${statusIcon}${account.login_status === 'logged_in' ? '已登录' : '未登录'})\n`;
                     }
                     
                     updateStatus('multi-platform-result', 

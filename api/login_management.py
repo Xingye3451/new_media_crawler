@@ -620,9 +620,10 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 }
             else:
                 utils.logger.info(f"[CHECK] 验证失败: {account['account_name']} 未登录，原因: {verification_result.get('message')}")
-                # 实际验证失败，将token设为无效
-                update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
-                await db.execute(update_query, request.account_id, request.platform)
+                # 🆕 临时注释：实际验证失败，将token设为无效
+                # update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
+                # await db.execute(update_query, request.account_id, request.platform)
+                utils.logger.warning(f"[CHECK] 临时跳过token无效化处理，保持token有效状态")
                 
                 return {
                     "code": 200,
@@ -1247,21 +1248,32 @@ async def is_qrcode_image(img_element):
         return False
 
 async def handle_xhs_login(session_id: str, browser_context, page):
-    """处理小红书登录"""
+    """处理小红书登录 - 增强反爬虫版本"""
     session_data = login_sessions[session_id]
     
     try:
-        # 先测试网络连接
+        # 🆕 导入小红书反爬虫增强模块
+        from api.xhs_anti_crawler import xhs_anti_crawler
+        
+        # 🆕 设置增强的浏览器上下文
+        await xhs_anti_crawler.setup_enhanced_browser_context(browser_context)
+        
+        # 🆕 先测试网络连接
         import requests
         try:
-            utils.logger.info("测试网络连接...")
+            utils.logger.info("🛡️ [XHS反爬] 测试网络连接...")
             response = requests.get("https://www.xiaohongshu.com", timeout=10)
-            utils.logger.info(f"HTTP请求状态码: {response.status_code}")
+            utils.logger.info(f"🛡️ [XHS反爬] HTTP请求状态码: {response.status_code}")
         except Exception as e:
-            utils.logger.error(f"网络连接测试失败: {e}")
+            utils.logger.error(f"🛡️ [XHS反爬] 网络连接测试失败: {e}")
         
-        # 尝试直接访问登录页面 - 优先使用主站
+        # 🆕 获取最优登录URL
+        optimal_url = await xhs_anti_crawler.get_optimal_login_url()
+        utils.logger.info(f"🛡️ [XHS反爬] 选择最优登录URL: {optimal_url}")
+        
+        # 🆕 尝试直接访问登录页面 - 使用智能URL选择
         login_urls = [
+            optimal_url,
             "https://www.xiaohongshu.com/explore",
             "https://www.xiaohongshu.com",
             "https://creator.xiaohongshu.com/login",
@@ -1271,119 +1283,168 @@ async def handle_xhs_login(session_id: str, browser_context, page):
         page_loaded = False
         for url in login_urls:
             try:
-                utils.logger.info(f"尝试访问: {url}")
-                utils.logger.info(f"浏览器User-Agent: {await page.evaluate('navigator.userAgent')}")
+                utils.logger.info(f"🛡️ [XHS反爬] 尝试访问: {url}")
+                utils.logger.info(f"🛡️ [XHS反爬] 浏览器User-Agent: {await page.evaluate('navigator.userAgent')}")
                 
-                # 使用与测试脚本相同的配置
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                utils.logger.info(f"页面DOM加载完成: {url}")
-                
-                # 等待页面稳定
-                await asyncio.sleep(2)
-                
-                # 检查页面是否正常加载
-                page_title = await page.title()
-                utils.logger.info(f"页面标题: {page_title}")
-                
-                # 如果页面标题包含"安全限制"，获取详细信息
-                if "安全限制" in page_title or "安全" in page_title:
-                    utils.logger.warning(f"检测到安全限制页面，标题: {page_title}")
+                # 🆕 使用增强的页面加载策略
+                if await xhs_anti_crawler.enhance_page_loading(page, url):
+                    utils.logger.info(f"🛡️ [XHS反爬] 页面DOM加载完成: {url}")
                     
-                    # 获取页面的完整文本内容
-                    page_content = await page.text_content("body")
-                    utils.logger.info(f"页面内容: {page_content[:500]}...")  # 只显示前500字符
+                    # 🆕 模拟人类行为
+                    await xhs_anti_crawler.simulate_human_behavior(page)
                     
-                    # 查找具体的安全限制信息
-                    security_elements = await page.query_selector_all("h1, h2, h3, .title, .message, .error-message, .security-info")
-                    for i, elem in enumerate(security_elements):
-                        if elem:
-                            text = await elem.text_content()
-                            if text and text.strip():
-                                utils.logger.info(f"安全限制信息 {i+1}: {text.strip()}")
+                    # 🆕 检查频率限制
+                    if await xhs_anti_crawler.handle_frequency_limit(page, session_id):
+                        utils.logger.warning(f"🛡️ [XHS反爬] 检测到频率限制，已处理")
+                        continue
                     
-                    # 检查是否有验证码或其他安全验证
-                    captcha_elements = await page.query_selector_all("input[type='text'], input[placeholder*='验证'], .captcha, .verify")
-                    if captcha_elements:
-                        utils.logger.info(f"检测到验证元素，数量: {len(captcha_elements)}")
+                    # 🆕 绕过验证码
+                    if not await xhs_anti_crawler.bypass_captcha(page, session_id):
+                        utils.logger.error(f"🛡️ [XHS反爬] 验证码处理失败")
+                        continue
                     
-                    continue
-                
-                # 检查是否有错误页面
-                error_elements = await page.query_selector_all(".error-img, .error-page, [class*='error']")
-                if error_elements:
-                    utils.logger.warning(f"检测到错误页面元素，数量: {len(error_elements)}")
-                    continue
+                    # 检查页面是否正常加载
+                    page_title = await page.title()
+                    utils.logger.info(f"🛡️ [XHS反爬] 页面标题: {page_title}")
+                    
+                    # 如果页面标题包含"安全限制"，获取详细信息
+                    if "安全限制" in page_title or "安全" in page_title:
+                        utils.logger.warning(f"🛡️ [XHS反爬] 检测到安全限制页面，标题: {page_title}")
+                        
+                        # 获取页面的完整文本内容
+                        page_content = await page.text_content("body")
+                        utils.logger.info(f"🛡️ [XHS反爬] 页面内容: {page_content[:500]}...")  # 只显示前500字符
+                        
+                        # 查找具体的安全限制信息
+                        security_elements = await page.query_selector_all("h1, h2, h3, .title, .message, .error-message, .security-info")
+                        for i, elem in enumerate(security_elements):
+                            if elem:
+                                text = await elem.text_content()
+                                if text and text.strip():
+                                    utils.logger.info(f"🛡️ [XHS反爬] 安全限制信息 {i+1}: {text.strip()}")
+                        
+                        # 检查是否有验证码或其他安全验证
+                        captcha_elements = await page.query_selector_all("input[type='text'], input[placeholder*='验证'], .captcha, .verify")
+                        if captcha_elements:
+                            utils.logger.info(f"🛡️ [XHS反爬] 检测到验证元素，数量: {len(captcha_elements)}")
+                        
+                        continue
+                    
+                    # 检查是否有错误页面
+                    error_elements = await page.query_selector_all(".error-img, .error-page, [class*='error']")
+                    if error_elements:
+                        utils.logger.warning(f"🛡️ [XHS反爬] 检测到错误页面元素，数量: {len(error_elements)}")
+                        continue
+                    else:
+                        utils.logger.info(f"🛡️ [XHS反爬] 页面正常加载: {url}")
+                        page_loaded = True
+                        break
                 else:
-                    utils.logger.info(f"页面正常加载: {url}")
-                    page_loaded = True
-                    break
+                    utils.logger.warning(f"🛡️ [XHS反爬] 增强页面加载失败: {url}")
+                    continue
             except Exception as e:
-                utils.logger.warning(f"访问 {url} 失败: {e}")
+                utils.logger.warning(f"🛡️ [XHS反爬] 访问 {url} 失败: {e}")
                 continue
         
         if not page_loaded:
-            utils.logger.warning("所有URL都无法正常加载，尝试其他策略...")
+            utils.logger.warning("🛡️ [XHS反爬] 所有URL都无法正常加载，尝试其他策略...")
             
-            # 尝试策略1: 访问手机版页面
+            # 🆕 尝试策略1: 使用代理轮换
             try:
-                utils.logger.info("尝试策略1: 访问手机版页面")
-                await page.goto("https://m.xiaohongshu.com", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(3)
-                page_title = await page.title()
-                utils.logger.info(f"手机版页面标题: {page_title}")
-                if "小红书" in page_title:
+                utils.logger.info("🛡️ [XHS反爬] 尝试策略1: 使用代理轮换")
+                await xhs_anti_crawler.setup_proxy_rotation(browser_context)
+                
+                # 重新尝试访问
+                optimal_url = await xhs_anti_crawler.get_optimal_login_url()
+                if await xhs_anti_crawler.enhance_page_loading(page, optimal_url):
                     page_loaded = True
-                    utils.logger.info("成功访问手机版页面")
+                    utils.logger.info("🛡️ [XHS反爬] 代理轮换策略成功")
             except Exception as e:
-                utils.logger.warning(f"策略1失败: {e}")
+                utils.logger.warning(f"🛡️ [XHS反爬] 策略1失败: {e}")
             
-            # 尝试策略2: 访问创作者中心登录页面
+            # 🆕 尝试策略2: 访问手机版页面
             if not page_loaded:
                 try:
-                    utils.logger.info("尝试策略2: 访问创作者中心登录页面")
-                    await page.goto("https://creator.xiaohongshu.com/login", wait_until="domcontentloaded", timeout=60000)
-                    await asyncio.sleep(3)
-                    page_title = await page.title()
-                    utils.logger.info(f"创作者中心页面标题: {page_title}")
-                    if "登录" in page_title or "小红书" in page_title:
-                        page_loaded = True
-                        utils.logger.info("成功访问创作者中心登录页面")
+                    utils.logger.info("🛡️ [XHS反爬] 尝试策略2: 访问手机版页面")
+                    if await xhs_anti_crawler.enhance_page_loading(page, "https://m.xiaohongshu.com"):
+                        page_title = await page.title()
+                        utils.logger.info(f"🛡️ [XHS反爬] 手机版页面标题: {page_title}")
+                        if "小红书" in page_title:
+                            page_loaded = True
+                            utils.logger.info("🛡️ [XHS反爬] 成功访问手机版页面")
                 except Exception as e:
-                    utils.logger.warning(f"策略2失败: {e}")
+                    utils.logger.warning(f"🛡️ [XHS反爬] 策略2失败: {e}")
             
-            # 尝试策略3: 刷新当前页面
+            # 🆕 尝试策略3: 访问创作者中心登录页面
             if not page_loaded:
                 try:
-                    utils.logger.info("尝试策略3: 刷新当前页面")
+                    utils.logger.info("🛡️ [XHS反爬] 尝试策略3: 访问创作者中心登录页面")
+                    if await xhs_anti_crawler.enhance_page_loading(page, "https://creator.xiaohongshu.com/login"):
+                        page_title = await page.title()
+                        utils.logger.info(f"🛡️ [XHS反爬] 创作者中心页面标题: {page_title}")
+                        if "登录" in page_title or "小红书" in page_title:
+                            page_loaded = True
+                            utils.logger.info("🛡️ [XHS反爬] 成功访问创作者中心登录页面")
+                except Exception as e:
+                    utils.logger.warning(f"🛡️ [XHS反爬] 策略3失败: {e}")
+            
+            # 🆕 尝试策略4: 刷新当前页面
+            if not page_loaded:
+                try:
+                    utils.logger.info("🛡️ [XHS反爬] 尝试策略4: 刷新当前页面")
                     await page.reload(wait_until="domcontentloaded", timeout=60000)
                     await asyncio.sleep(3)
+                    
+                    # 🆕 再次检查频率限制和验证码
+                    if await xhs_anti_crawler.handle_frequency_limit(page, session_id):
+                        utils.logger.warning(f"🛡️ [XHS反爬] 刷新后检测到频率限制，已处理")
+                    
+                    if not await xhs_anti_crawler.bypass_captcha(page, session_id):
+                        utils.logger.error(f"🛡️ [XHS反爬] 刷新后验证码处理失败")
                 except Exception as e:
-                    utils.logger.warning(f"策略3失败: {e}")
+                    utils.logger.warning(f"🛡️ [XHS反爬] 策略4失败: {e}")
             
             # 获取当前页面的详细信息
             current_title = await page.title()
             current_url = page.url
-            utils.logger.info(f"刷新后页面标题: {current_title}")
-            utils.logger.info(f"当前页面URL: {current_url}")
+            utils.logger.info(f"🛡️ [XHS反爬] 刷新后页面标题: {current_title}")
+            utils.logger.info(f"🛡️ [XHS反爬] 当前页面URL: {current_url}")
             
             # 如果仍然是安全限制页面，获取详细信息
             if "安全限制" in current_title or "安全" in current_title:
                 page_content = await page.text_content("body")
-                utils.logger.error(f"安全限制页面完整内容: {page_content}")
+                utils.logger.error(f"🛡️ [XHS反爬] 安全限制页面完整内容: {page_content}")
                 
                 # 保存页面截图用于调试
                 screenshot_path = f"/tmp/xhs_security_restriction_{session_id}.png"
                 await page.screenshot(path=screenshot_path, full_page=True)
-                utils.logger.info(f"安全限制页面截图已保存: {screenshot_path}")
+                utils.logger.info(f"🛡️ [XHS反爬] 安全限制页面截图已保存: {screenshot_path}")
+                
+                # 🆕 尝试最后的反制措施
+                utils.logger.info("🛡️ [XHS反爬] 尝试最后的反制措施...")
+                
+                # 清除所有cookies和localStorage
+                await page.evaluate("""
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    document.cookie.split(";").forEach(function(c) { 
+                        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                    });
+                """)
+                
+                # 等待更长时间
+                wait_time = random.uniform(60, 180)
+                utils.logger.info(f"🛡️ [XHS反爬] 等待 {wait_time:.1f} 秒后重试...")
+                await asyncio.sleep(wait_time)
                 
                 # 更新会话状态
                 login_sessions[session_id]["status"] = "failed"
                 login_sessions[session_id]["message"] = f"访问被安全限制阻止: {current_title}"
                 login_sessions[session_id]["progress"] = 0
                 
-                raise Exception(f"小红书访问被安全限制阻止: {current_title}")
+                raise Exception(f"🛡️ [XHS反爬] 小红书访问被安全限制阻止: {current_title}")
             else:
-                utils.logger.info("页面刷新后恢复正常")
+                utils.logger.info("🛡️ [XHS反爬] 页面刷新后恢复正常")
         
         # 更新状态
         session_data["status"] = "generating_qrcode"

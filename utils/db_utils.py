@@ -57,7 +57,7 @@ async def get_cookies_from_database(platform: str, account_id: Optional[str] = N
             query = """
             SELECT token_data, created_at, expires_at
             FROM login_tokens 
-            WHERE platform = %s AND account_id = %s AND is_valid = 1 AND token_type = 'cookie'
+            WHERE platform = %s AND account_id = %s AND is_valid = 1
             ORDER BY created_at DESC 
             LIMIT 1
             """
@@ -68,7 +68,7 @@ async def get_cookies_from_database(platform: str, account_id: Optional[str] = N
             query = """
             SELECT token_data, created_at, expires_at
             FROM login_tokens 
-            WHERE platform = %s AND is_valid = 1 AND token_type = 'cookie'
+            WHERE platform = %s AND is_valid = 1
             ORDER BY created_at DESC 
             LIMIT 1
             """
@@ -126,7 +126,7 @@ async def get_account_list_by_platform(platform: str) -> List[Dict]:
                COUNT(*) as login_count
         FROM login_tokens lt
         LEFT JOIN social_accounts sa ON lt.account_id = sa.id
-        WHERE lt.platform = %s AND lt.is_valid = 1 AND lt.token_type = 'cookie'
+        WHERE lt.platform = %s AND lt.is_valid = 1
         GROUP BY lt.account_id, sa.account_name
         ORDER BY last_login_time DESC
         """
@@ -154,7 +154,7 @@ async def check_token_validity(platform: str, account_id: Optional[str] = None) 
             query = """
             SELECT id, account_id, expires_at, created_at, updated_at
             FROM login_tokens 
-            WHERE platform = %s AND account_id = %s AND is_valid = 1 AND token_type = 'cookie'
+            WHERE platform = %s AND account_id = %s AND is_valid = 1
             ORDER BY created_at DESC 
             LIMIT 1
             """
@@ -163,7 +163,7 @@ async def check_token_validity(platform: str, account_id: Optional[str] = None) 
             query = """
             SELECT id, account_id, expires_at, created_at, updated_at
             FROM login_tokens 
-            WHERE platform = %s AND is_valid = 1 AND token_type = 'cookie'
+            WHERE platform = %s AND is_valid = 1
             ORDER BY created_at DESC 
             LIMIT 1
             """
@@ -243,7 +243,7 @@ async def get_expiring_tokens(hours: int = 24) -> List[Dict]:
                lt.expires_at, lt.created_at
         FROM login_tokens lt
         LEFT JOIN social_accounts sa ON lt.account_id = sa.id
-        WHERE lt.is_valid = 1 AND lt.token_type = 'cookie'
+        WHERE lt.is_valid = 1
         AND lt.expires_at IS NOT NULL 
         AND lt.expires_at > NOW() 
         AND lt.expires_at <= DATE_ADD(NOW(), INTERVAL %s HOUR)
