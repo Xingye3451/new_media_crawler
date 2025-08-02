@@ -52,7 +52,17 @@ class DOUYINClient(AbstractApiClient):
         if not params:
             return
         headers = headers or self.headers
-        local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+        
+        # 🆕 检查页面是否已关闭
+        if not self.playwright_page or self.playwright_page.is_closed():
+            utils.logger.warning("⚠️ [DOUYINClient] 页面已关闭，跳过localStorage获取")
+            local_storage: Dict = {}
+        else:
+            try:
+                local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DOUYINClient] 获取localStorage失败: {e}")
+                local_storage: Dict = {}
         common_params = {
             "device_platform": "webapp",
             "aid": "6383",
@@ -143,10 +153,16 @@ class DOUYINClient(AbstractApiClient):
                 return True
             
             # 原有的严格验证（作为备选）
-            local_storage = await self.playwright_page.evaluate("() => window.localStorage")
-            if local_storage.get("HasUserLogin", "") == "1":
-                utils.logger.info("[DOUYINClient] ✅ localStorage验证通过")
-                return True
+            if not self.playwright_page or self.playwright_page.is_closed():
+                utils.logger.warning("[DOUYINClient] ⚠️ 页面已关闭，跳过localStorage验证")
+            else:
+                try:
+                    local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+                    if local_storage.get("HasUserLogin", "") == "1":
+                        utils.logger.info("[DOUYINClient] ✅ localStorage验证通过")
+                        return True
+                except Exception as e:
+                    utils.logger.warning(f"[DOUYINClient] ⚠️ localStorage验证失败: {e}")
 
             if cookie_dict.get("LOGIN_STATUS") == "1":
                 utils.logger.info("[DOUYINClient] ✅ LOGIN_STATUS验证通过")
@@ -171,14 +187,18 @@ class DOUYINClient(AbstractApiClient):
             from tools import utils as crawler_utils
             cookie_dict = crawler_utils.convert_str_cookie_to_dict(cookie_str)
             
-            # 设置cookies到浏览器上下文
-            for key, value in cookie_dict.items():
-                await self.playwright_page.context.add_cookies([{
-                    'name': key,
-                    'value': value,
-                    'domain': '.douyin.com',
-                    'path': '/'
-                }])
+            # 🆕 检查页面是否已关闭
+            if not self.playwright_page or self.playwright_page.is_closed():
+                utils.logger.warning("[DOUYINClient] ⚠️ 页面已关闭，跳过cookies设置")
+            else:
+                # 设置cookies到浏览器上下文
+                for key, value in cookie_dict.items():
+                    await self.playwright_page.context.add_cookies([{
+                        'name': key,
+                        'value': value,
+                        'domain': '.douyin.com',
+                        'path': '/'
+                    }])
             
             # 更新客户端cookies
             self.headers["Cookie"] = cookie_str
@@ -193,8 +213,12 @@ class DOUYINClient(AbstractApiClient):
     async def clear_cookies(self):
         """清除cookies"""
         try:
-            # 清除浏览器上下文中的cookies
-            await self.playwright_page.context.clear_cookies()
+            # 🆕 检查页面是否已关闭
+            if not self.playwright_page or self.playwright_page.is_closed():
+                utils.logger.warning("[DOUYINClient] ⚠️ 页面已关闭，跳过cookies清除")
+            else:
+                # 清除浏览器上下文中的cookies
+                await self.playwright_page.context.clear_cookies()
             
             # 清除客户端cookies
             self.headers["Cookie"] = ""

@@ -72,10 +72,72 @@ class DouYinCrawler(AbstractCrawler):
                 user_agent=None,
                 headless=config.HEADLESS
             )
+            
+            # 🆕 集成抖音反爬虫增强模块
+            try:
+                from api.dy_anti_crawler import dy_anti_crawler
+                
+                # 设置增强的浏览器上下文
+                await dy_anti_crawler.setup_enhanced_browser_context(self.browser_context)
+                utils.logger.info("🛡️ [DouYinCrawler] 抖音反爬虫增强模块已集成")
+                
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DouYinCrawler] 抖音反爬虫模块加载失败，使用基础模式: {e}")
+            
             # stealth.min.js is a js script to prevent the website from detecting the crawler.
             await self.browser_context.add_init_script(path="libs/stealth.min.js")
             self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+            
+            # 🆕 使用增强的页面加载策略
+            try:
+                from api.dy_anti_crawler import dy_anti_crawler
+                
+                # 获取最优登录URL
+                optimal_url = await dy_anti_crawler.get_optimal_login_url()
+                utils.logger.info(f"🛡️ [DouYinCrawler] 选择最优登录URL: {optimal_url}")
+                
+                # 使用增强的页面加载
+                try:
+                    if await dy_anti_crawler.enhance_page_loading(self.context_page, optimal_url):
+                        utils.logger.info("🛡️ [DouYinCrawler] 页面加载成功")
+                        
+                        # 模拟人类行为
+                        try:
+                            await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 模拟人类行为失败: {e}")
+                        
+                        # 检查频率限制
+                        try:
+                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_session"):
+                                utils.logger.warning("🛡️ [DouYinCrawler] 检测到频率限制，已处理")
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 频率限制检查失败: {e}")
+                        
+                        # 绕过验证码
+                        try:
+                            if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_session"):
+                                utils.logger.error("🛡️ [DouYinCrawler] 验证码处理失败")
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 验证码检查失败: {e}")
+                        
+                        # 处理抖音特有的反爬虫机制
+                        try:
+                            if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_session"):
+                                utils.logger.warning("🛡️ [DouYinCrawler] 检测到抖音特有反爬虫机制，已处理")
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 抖音特有反爬虫检查失败: {e}")
+                            
+                    else:
+                        utils.logger.warning("🛡️ [DouYinCrawler] 增强页面加载失败，使用默认方式")
+                        await self.context_page.goto(self.index_url)
+                except Exception as e:
+                    utils.logger.warning(f"🛡️ [DouYinCrawler] 增强页面加载处理失败: {e}")
+                    await self.context_page.goto(self.index_url)
+                    
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DouYinCrawler] 反爬虫增强功能失败，使用默认方式: {e}")
+                await self.context_page.goto(self.index_url)
 
             self.dy_client = await self.create_douyin_client(httpx_proxy_format)
             
@@ -155,6 +217,14 @@ class DouYinCrawler(AbstractCrawler):
             config.CRAWLER_MAX_NOTES_COUNT = dy_limit_count
         start_page = config.START_PAGE  # start page number
         
+        # 🆕 集成抖音反爬虫增强模块
+        try:
+            from api.dy_anti_crawler import dy_anti_crawler
+            utils.logger.info("🛡️ [DouYinCrawler.search] 抖音反爬虫增强模块已启用")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ [DouYinCrawler.search] 抖音反爬虫模块加载失败: {e}")
+            dy_anti_crawler = None
+        
         # 添加资源监控
         start_time = time.time()
         processed_count = 0
@@ -188,6 +258,29 @@ class DouYinCrawler(AbstractCrawler):
                 
                 try:
                     utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page}")
+                    
+                    # 🆕 反爬虫处理：在搜索前检查页面状态
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                        try:
+                            # 检查频率限制
+                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_search"):
+                                utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到频率限制，等待后继续")
+                                await asyncio.sleep(random.uniform(10, 30))
+                            
+                            # 绕过验证码
+                            if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_search"):
+                                utils.logger.error("🛡️ [DouYinCrawler.search] 验证码处理失败，跳过当前页面")
+                                continue
+                            
+                            # 处理抖音特有的反爬虫机制
+                            if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_search"):
+                                utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到抖音特有反爬虫机制，等待后继续")
+                                await asyncio.sleep(random.uniform(15, 45))
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler.search] 反爬虫处理失败: {e}")
+                    elif not hasattr(self, 'context_page') or not self.context_page or self.context_page.is_closed():
+                        utils.logger.warning("🛡️ [DouYinCrawler.search] 页面不可用，跳过反爬虫检查")
+                    
                     posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
                                                                             offset=page * dy_limit_count - dy_limit_count,
                                                                             publish_time=PublishTimeType(config.PUBLISH_TIME_TYPE),
@@ -198,6 +291,22 @@ class DouYinCrawler(AbstractCrawler):
                         break
                 except DataFetchError:
                     utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed")
+                    
+                    # 🆕 反爬虫处理：搜索失败时的处理
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                        try:
+                            utils.logger.warning("🛡️ [DouYinCrawler.search] 搜索失败，尝试反爬虫处理")
+                            
+                            # 模拟人类行为
+                            await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                            
+                            # 等待更长时间
+                            wait_time = random.uniform(30, 90)
+                            utils.logger.info(f"🛡️ [DouYinCrawler.search] 等待 {wait_time:.1f} 秒后重试...")
+                            await asyncio.sleep(wait_time)
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索失败反爬虫处理失败: {e}")
+                    
                     break
 
                 page += 1
@@ -214,6 +323,16 @@ class DouYinCrawler(AbstractCrawler):
                 for i in range(0, len(data_list), batch_size):
                     batch_data = data_list[i:i + batch_size]
                     utils.logger.info(f"[DouYinCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_data)}")
+                    
+                    # 🆕 反爬虫处理：批处理前的检查
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                        try:
+                            # 检查频率限制
+                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_batch"):
+                                utils.logger.warning("🛡️ [DouYinCrawler.search] 批处理前检测到频率限制，等待后继续")
+                                await asyncio.sleep(random.uniform(5, 15))
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理前反爬虫检查失败: {e}")
                     
                     for post_item in batch_data:
                         try:
@@ -233,8 +352,22 @@ class DouYinCrawler(AbstractCrawler):
                             utils.logger.error(f"[DouYinCrawler.search] Failed to process video: {e}")
                             continue
                     
-                    # 添加间隔，避免请求过于频繁
-                    await asyncio.sleep(1)
+                    # 🆕 反爬虫处理：增加随机间隔，避免请求过于频繁
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                        try:
+                            # 模拟人类行为
+                            await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                            
+                            # 随机间隔
+                            interval = random.uniform(2, 5)
+                            utils.logger.info(f"🛡️ [DouYinCrawler.search] 批处理间隔: {interval:.1f} 秒")
+                            await asyncio.sleep(interval)
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理反爬虫处理失败: {e}")
+                            await asyncio.sleep(1)
+                    else:
+                        # 基础间隔
+                        await asyncio.sleep(1)
                 
                 # 检查处理时间，避免长时间运行
                 elapsed_time = time.time() - start_time
@@ -563,7 +696,50 @@ class DouYinCrawler(AbstractCrawler):
             user_agent: Optional[str],
             headless: bool = True
     ) -> BrowserContext:
-        """Launch browser and create browser context"""
+        """Launch browser and create browser context with anti-crawler measures"""
+        # 🆕 反爬虫配置
+        browser_args = [
+            "--no-sandbox",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--disable-web-security",
+            "--disable-features=VizDisplayCompositor",
+            "--disable-ipc-flooding-protection",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--disable-features=TranslateUI",
+            "--disable-extension",
+            "--disable-plugins",
+            "--disable-images",
+            "--disable-javascript",
+            "--disable-default-apps",
+            "--disable-sync",
+            "--disable-translate",
+            "--hide-scrollbars",
+            "--mute-audio",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--no-pings",
+            "--no-zygote",
+            "--single-process",
+            "--disable-background-networking",
+            "--disable-default-apps",
+            "--disable-extensions",
+            "--disable-sync",
+            "--disable-translate",
+            "--hide-scrollbars",
+            "--metrics-recording-only",
+            "--mute-audio",
+            "--no-first-run",
+            "--safebrowsing-disable-auto-update",
+            "--ignore-certificate-errors",
+            "--ignore-ssl-errors",
+            "--ignore-certificate-errors-spki-list",
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        ]
+        
         if config.SAVE_LOGIN_STATE:
             user_data_dir = os.path.join(os.getcwd(), "browser_data",
                                          config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
@@ -573,14 +749,32 @@ class DouYinCrawler(AbstractCrawler):
                 headless=headless,
                 proxy=playwright_proxy,  # type: ignore
                 viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent
+                user_agent=user_agent,
+                args=browser_args  # 🆕 添加反爬虫参数
             )  # type: ignore
             return browser_context
         else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)  # type: ignore
+            browser = await chromium.launch(
+                headless=headless, 
+                proxy=playwright_proxy,  # type: ignore
+                args=browser_args  # 🆕 添加反爬虫参数
+            )
             browser_context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent
+                user_agent=user_agent,
+                # 🆕 添加反爬虫配置
+                extra_http_headers={
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1"
+                }
             )
             return browser_context
 
