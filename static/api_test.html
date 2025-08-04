@@ -777,21 +777,36 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="multi-save-format">💾 保存格式</label>
-                        <select id="multi-save-format">
-                            <option value="json">JSON文件</option>
-                            <option value="csv">CSV文件</option>
-                            <option value="db">数据库存储</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label for="multi-account-strategy">🎲 账号策略</label>
                         <select id="multi-account-strategy">
-                            <option value="random">随机混用 (推荐)</option>
+                            <option value="smart">智能选择 (推荐)</option>
+                            <option value="random">随机混用</option>
                             <option value="round_robin">轮询使用</option>
                             <option value="priority">优先级使用</option>
                             <option value="single">单账号使用</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="multi-execution-mode">⚡ 执行模式</label>
+                        <select id="multi-execution-mode">
+                            <option value="parallel">并行执行 (推荐)</option>
+                            <option value="sequential">顺序执行</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <div style="padding-top: 5px; color: #666; font-size: 0.9em;">
+                            💾 数据存储：统一存储到数据库 (unified_content, unified_creator, unified_comment)
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <div style="padding-top: 5px; color: #666; font-size: 0.9em;">
+                            🎯 智能选择：优先已登录账号，综合考虑成功率和使用频率
+                        </div>
                     </div>
                 </div>
 
@@ -1302,49 +1317,57 @@
                 return;
             }
             
-            // 为每个平台获取账号信息
-            const platformAccounts = {};
+            // 获取账号策略和执行模式
+            const accountStrategy = document.getElementById('multi-account-strategy').value;
+            const executionMode = document.getElementById('multi-execution-mode').value;
+            
+            // 检查各平台登录状态
+            const loginIssues = [];
             for (const platform of selectedPlatforms) {
                 try {
-                    const response = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
-                    const result = await response.json();
+                    const response = await fetch('/api/v1/login/check', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ platform: platform })
+                    });
                     
-                    if (response.ok && result.code === 200 && result.data && result.data.length > 0) {
-                        // 优先选择已登录的账号，如果没有则选择第一个
-                        let selectedAccount = result.data[0];
-                        for (const account of result.data) {
-                            if (account.login_status === 'logged_in') {
-                                selectedAccount = account;
-                                break;
-                            }
-                        }
-                        
-                        platformAccounts[platform] = {
-                            account_id: selectedAccount.id,
-                            account_name: selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`,
-                            login_status: selectedAccount.login_status
-                        };
-                    } else {
-                        showToast(`平台 ${getPlatformName(platform)} 没有可用账号`, 'error');
-                        return;
+                    const result = await response.json();
+                    if (result.code !== 200) {
+                        loginIssues.push(`${getPlatformName(platform)}: ${result.message || '需要登录'}`);
                     }
                 } catch (error) {
-                    showToast(`获取平台 ${getPlatformName(platform)} 账号失败`, 'error');
-                    return;
+                    loginIssues.push(`${getPlatformName(platform)}: 检查失败`);
                 }
+            }
+            
+            if (loginIssues.length > 0) {
+                showToast('部分平台需要登录，但将继续执行', 'warning');
+                updateStatus('multi-platform-result', 
+                    `⚠️ 登录状态检查\n\n` +
+                    `以下平台需要登录：\n${loginIssues.join('\n')}\n\n` +
+                    `系统将尝试使用可用账号继续执行任务`
+                );
             }
             
             const requestData = {
                 platforms: selectedPlatforms,
                 keywords: keywords,
-                max_notes_count: maxCount,
-                platform_accounts: platformAccounts // 传递账号信息
+                max_count_per_platform: maxCount,
+                enable_comments: false, // 评论功能待开发
+                enable_images: document.getElementById('multi-enable-images').checked,
+                save_format: "db", // 固定使用数据库存储
+                use_proxy: false, // 默认不使用代理
+                proxy_strategy: "disabled",
+                account_strategy: accountStrategy,
+                execution_mode: executionMode
             };
             
             try {
                 showToast('正在启动多平台爬虫任务...', 'info');
                 
-                const response = await fetch('/api/v1/crawler/start-multi', {
+                const response = await fetch('/api/v1/multi-platform/start', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1372,20 +1395,16 @@
                 if (response.ok && (result.status === 'started' || result.status === 'pending')) {
                     showToast('多平台爬虫任务启动成功', 'success');
                     
-                    let accountInfo = '';
-                    for (const [platform, account] of Object.entries(platformAccounts)) {
-                        const statusIcon = account.login_status === 'logged_in' ? '✅' : '⚠️';
-                        accountInfo += `${getPlatformName(platform)}: ${account.account_name} (ID: ${account.account_id}, ${statusIcon}${account.login_status === 'logged_in' ? '已登录' : '未登录'})\n`;
-                    }
-                    
                     updateStatus('multi-platform-result', 
                         `✅ 多平台爬虫任务启动成功\n\n` +
                         `任务ID: ${result.task_id}\n` +
+                        `平台: ${selectedPlatforms.map(p => getPlatformName(p)).join(', ')}\n` +
                         `关键词: ${keywords}\n` +
-                        `最大数量: ${maxCount}\n` +
+                        `每平台最大数量: ${maxCount}\n` +
+                        `账号策略: ${accountStrategy}\n` +
+                        `执行模式: ${executionMode}\n` +
                         `任务状态: ${result.status}\n` +
-                        `消息: ${result.message}\n` +
-                        `平台账号:\n${accountInfo}\n` +
+                        `消息: ${result.message}\n\n` +
                         `任务正在后台运行，请查看任务结果页面`
                     );
                     
@@ -1693,6 +1712,8 @@
             document.getElementById('multi-max-count').value = '15';
             document.getElementById('multi-get-comments').checked = false; // 保持禁用状态
             document.getElementById('multi-enable-images').checked = false;
+            document.getElementById('multi-account-strategy').value = 'smart';
+            document.getElementById('multi-execution-mode').value = 'parallel';
             selectedMultiPlatforms.clear();
             const multiCards = document.querySelectorAll('#multi-platform .platform-card');
             multiCards.forEach(card => card.classList.remove('selected'));

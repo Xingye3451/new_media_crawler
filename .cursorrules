@@ -72,7 +72,7 @@ media_crawler/
 - 支持 Linux 环境运行
 
 ## 环境配置
-- **Conda环境**: mediacrawler
+- **Conda环境**: mediacrawler (必须先激活环境)
 - **Python版本**: 3.9+
 - **环境变量**: ENV=dev、prod、local、docker (开发环境)
 - **配置文件**: 根据ENV环境变量读取不同配置
@@ -81,9 +81,9 @@ media_crawler/
   - Docker环境: config/config_docker.yaml
   - 生产环境: config/config_prod.yaml
   - 远程桌面配置: browser_config_2024.py (远程桌面配置)
-- **Redis缓存**: 本地Redis服务 (localhost:6379)
-- **数据库**: MySQL (192.168.31.231:3306)
-- **MinIO存储**: 对象存储服务 (192.168.31.231:9000)
+- **Redis缓存**: 本地Redis服务 (localhost:6379) 连接配置在config/config_local.yaml文件中
+- **数据库**: MySQL (192.168.31.231:3306) 连接配置在config/config_local.yaml文件中
+- **MinIO存储**: 对象存储服务 (192.168.31.231:9000) 连接配置在config/config_local.yaml文件中
 
 ## 代码规范
 - 使用异步编程 (async/await)

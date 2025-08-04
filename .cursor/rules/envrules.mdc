@@ -1,0 +1,6 @@
+---
+description:运行在conda环境：mediacrawler,每次运行测试用例麻烦请先激活环境
+globs: test_*.py
+alwaysApply: true
+---
+运行在conda环境：mediacrawler,每次运行测试用例麻烦请先激活环境

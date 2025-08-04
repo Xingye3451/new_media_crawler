@@ -134,12 +134,15 @@ class MultiPlatformCrawlerRequest(BaseModel):
     max_count_per_platform: int = Field(default=50, description="每个平台最大抓取数量")
     enable_comments: bool = Field(default=False, description="是否抓取评论")
     enable_images: bool = Field(default=False, description="是否抓取图片")
-    save_format: str = Field(default="json", description="保存格式: json, csv")
+    save_format: str = Field(default="db", description="保存格式: db (固定数据库存储)")
     session_ids: Optional[Dict[str, str]] = Field(default=None, description="各平台的登录会话ID")
     account_ids: Optional[Dict[str, int]] = Field(default=None, description="各平台的账号ID")
     # 新增代理相关参数
     use_proxy: bool = Field(default=False, description="是否使用代理")
     proxy_strategy: str = Field(default="round_robin", description="代理策略: round_robin, random, weighted, failover, geo_based, smart, disabled")
+    # 新增账号策略和执行模式参数
+    account_strategy: str = Field(default="smart", description="账号策略: random, round_robin, priority, smart, single")
+    execution_mode: str = Field(default="parallel", description="执行模式: parallel(并行), sequential(顺序)")
 
 
 class CrawlerResponse(BaseModel):
