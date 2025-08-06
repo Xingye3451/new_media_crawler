@@ -13,17 +13,27 @@ from pydantic import BaseModel, Field
 from tools import utils
 from var import media_crawler_db_var
 
-# 添加独立的数据库连接函数
+# 🆕 全局数据库连接池管理
+_db_pool = None
+_db_async_obj = None
+
 async def get_db_connection():
-    """获取数据库连接"""
+    """获取数据库连接 - 使用全局连接池"""
+    global _db_pool, _db_async_obj
+    
     try:
+        # 如果连接池已存在且有效，直接返回
+        if _db_pool and not _db_pool.closed:
+            return _db_async_obj
+        
+        # 创建新的连接池
         from config.env_config_loader import config_loader
         from async_db import AsyncMysqlDB
         import aiomysql
         
         db_config = config_loader.get_database_config()
         
-        pool = await aiomysql.create_pool(
+        _db_pool = await aiomysql.create_pool(
             host=db_config['host'],
             port=db_config['port'],
             user=db_config['username'],
@@ -31,15 +41,31 @@ async def get_db_connection():
             db=db_config['database'],
             autocommit=True,
             minsize=1,
-            maxsize=10,
+            maxsize=20,  # 🆕 增加连接池大小
+            echo=False,   # 🆕 关闭SQL日志，减少性能开销
         )
         
-        async_db_obj = AsyncMysqlDB(pool)
-        return async_db_obj
+        _db_async_obj = AsyncMysqlDB(_db_pool)
+        utils.logger.info("数据库连接池创建成功")
+        return _db_async_obj
         
     except Exception as e:
         utils.logger.error(f"获取数据库连接失败: {e}")
         return None
+
+async def close_db_connection():
+    """关闭数据库连接池"""
+    global _db_pool, _db_async_obj
+    
+    try:
+        if _db_pool and not _db_pool.closed:
+            _db_pool.close()
+            await _db_pool.wait_closed()
+            _db_pool = None
+            _db_async_obj = None
+            utils.logger.info("数据库连接池已关闭")
+    except Exception as e:
+        utils.logger.error(f"关闭数据库连接池失败: {e}")
 
 from models.content_models import (
     CrawlerRequest, CrawlerResponse, TaskStatusResponse,
@@ -50,6 +76,47 @@ router = APIRouter()
 
 # 全局任务状态存储
 task_status = {}
+
+# 🆕 任务清理配置
+TASK_CLEANUP_INTERVAL = 3600  # 1小时清理一次
+TASK_MAX_AGE = 86400  # 24小时后清理任务状态
+
+async def cleanup_old_tasks():
+    """清理过期的任务状态"""
+    try:
+        from datetime import datetime, timedelta
+        current_time = datetime.now()
+        
+        tasks_to_remove = []
+        for task_id, task_info in task_status.items():
+            # 检查任务是否超过24小时
+            if 'created_at' in task_info:
+                created_time = datetime.fromisoformat(task_info['created_at'])
+                if current_time - created_time > timedelta(seconds=TASK_MAX_AGE):
+                    tasks_to_remove.append(task_id)
+        
+        # 移除过期任务
+        for task_id in tasks_to_remove:
+            del task_status[task_id]
+            utils.logger.info(f"清理过期任务状态: {task_id}")
+        
+        if tasks_to_remove:
+            utils.logger.info(f"清理了 {len(tasks_to_remove)} 个过期任务状态")
+            
+    except Exception as e:
+        utils.logger.error(f"清理过期任务失败: {e}")
+
+# 🆕 启动定期清理任务
+import asyncio
+async def start_task_cleanup():
+    """启动定期任务清理"""
+    while True:
+        try:
+            await asyncio.sleep(TASK_CLEANUP_INTERVAL)
+            await cleanup_old_tasks()
+        except Exception as e:
+            utils.logger.error(f"任务清理循环失败: {e}")
+            await asyncio.sleep(60)  # 出错后等待1分钟再重试
 
 class PlatformComingSoonException(Exception):
     """平台即将支持异常"""
@@ -245,6 +312,33 @@ async def log_task_step(task_id: str, platform: str, step: str, message: str, lo
 
 async def run_crawler_task(task_id: str, request: CrawlerRequest):
     """后台运行爬虫任务"""
+    # 🆕 设置任务超时时间（30分钟）
+    import asyncio
+    from concurrent.futures import TimeoutError
+    
+    try:
+        # 🆕 使用asyncio.wait_for添加超时机制
+        await asyncio.wait_for(
+            _run_crawler_task_internal(task_id, request),
+            timeout=1800  # 30分钟超时
+        )
+    except TimeoutError:
+        utils.logger.error(f"[TASK_{task_id}] ❌ 任务执行超时（30分钟）")
+        task_status[task_id]["status"] = "timeout"
+        task_status[task_id]["error"] = "任务执行超时，请检查网络连接或重试"
+        task_status[task_id]["updated_at"] = datetime.now().isoformat()
+        await update_task_progress(task_id, 0.0, "timeout")
+        await log_task_step(task_id, request.platform, "task_timeout", "任务执行超时", "ERROR", 0)
+    except Exception as e:
+        utils.logger.error(f"[TASK_{task_id}] ❌ 任务执行失败: {e}")
+        task_status[task_id]["status"] = "failed"
+        task_status[task_id]["error"] = str(e)
+        task_status[task_id]["updated_at"] = datetime.now().isoformat()
+        await update_task_progress(task_id, 0.0, "failed")
+        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0)
+
+async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
+    """内部爬虫任务执行函数"""
     try:
         utils.logger.info("█" * 100)
         utils.logger.info(f"[TASK_{task_id}] 🚀 开始执行爬虫任务")
@@ -423,13 +517,29 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
             await log_task_step(task_id, request.platform, "crawling_failed", f"爬取失败: {str(e)}", "ERROR", 0)
             raise
         finally:
-            # 安全关闭爬虫资源
+            # 🆕 安全关闭爬虫资源
             try:
                 if hasattr(crawler, 'close'):
                     await crawler.close()
                     utils.logger.info(f"[TASK_{task_id}] 爬虫资源已关闭")
             except Exception as e:
                 utils.logger.warning(f"[TASK_{task_id}] 关闭爬虫资源时出现警告: {e}")
+            
+            # 🆕 确保浏览器实例被正确关闭
+            try:
+                if hasattr(crawler, 'browser') and crawler.browser:
+                    await crawler.browser.close()
+                    utils.logger.info(f"[TASK_{task_id}] 浏览器实例已关闭")
+            except Exception as e:
+                utils.logger.warning(f"[TASK_{task_id}] 关闭浏览器实例时出现警告: {e}")
+            
+            # 🆕 清理Playwright上下文
+            try:
+                if hasattr(crawler, 'context') and crawler.context:
+                    await crawler.context.close()
+                    utils.logger.info(f"[TASK_{task_id}] Playwright上下文已关闭")
+            except Exception as e:
+                utils.logger.warning(f"[TASK_{task_id}] 关闭Playwright上下文时出现警告: {e}")
         
     except Exception as e:
         utils.logger.error("█" * 100)
@@ -562,4 +672,47 @@ async def delete_task(task_id: str):
         raise HTTPException(status_code=404, detail="任务不存在")
     
     del task_status[task_id]
-    return {"message": "任务已删除"} 
+    return {"message": "任务已删除"}
+
+@router.get("/crawler/health")
+async def get_crawler_health():
+    """获取爬虫系统健康状态"""
+    try:
+        # 检查数据库连接
+        db_status = "unknown"
+        try:
+            async_db_obj = await get_db_connection()
+            if async_db_obj:
+                db_status = "healthy"
+            else:
+                db_status = "unhealthy"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+        
+        # 统计任务状态
+        total_tasks = len(task_status)
+        running_tasks = len([t for t in task_status.values() if t.get('status') == 'running'])
+        completed_tasks = len([t for t in task_status.values() if t.get('status') == 'completed'])
+        failed_tasks = len([t for t in task_status.values() if t.get('status') == 'failed'])
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "database": db_status,
+            "tasks": {
+                "total": total_tasks,
+                "running": running_tasks,
+                "completed": completed_tasks,
+                "failed": failed_tasks
+            },
+            "memory_usage": {
+                "task_status_size": len(str(task_status)),
+                "estimated_memory_mb": len(str(task_status)) / (1024 * 1024)
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        } 

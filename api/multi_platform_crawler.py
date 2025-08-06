@@ -25,6 +25,47 @@ router = APIRouter()
 # 全局多平台任务状态存储
 multi_platform_task_status = {}
 
+# 🆕 多平台任务清理配置
+MULTI_TASK_CLEANUP_INTERVAL = 3600  # 1小时清理一次
+MULTI_TASK_MAX_AGE = 86400  # 24小时后清理任务状态
+
+async def cleanup_old_multi_platform_tasks():
+    """清理过期的多平台任务状态"""
+    try:
+        from datetime import datetime, timedelta
+        current_time = datetime.now()
+        
+        tasks_to_remove = []
+        for task_id, task_info in multi_platform_task_status.items():
+            # 检查任务是否超过24小时
+            if 'created_at' in task_info:
+                created_time = datetime.fromisoformat(task_info['created_at'])
+                if current_time - created_time > timedelta(seconds=MULTI_TASK_MAX_AGE):
+                    tasks_to_remove.append(task_id)
+        
+        # 移除过期任务
+        for task_id in tasks_to_remove:
+            del multi_platform_task_status[task_id]
+            utils.logger.info(f"清理过期多平台任务状态: {task_id}")
+        
+        if tasks_to_remove:
+            utils.logger.info(f"清理了 {len(tasks_to_remove)} 个过期多平台任务状态")
+            
+    except Exception as e:
+        utils.logger.error(f"清理过期多平台任务失败: {e}")
+
+# 🆕 启动定期清理任务
+import asyncio
+async def start_multi_platform_task_cleanup():
+    """启动定期多平台任务清理"""
+    while True:
+        try:
+            await asyncio.sleep(MULTI_TASK_CLEANUP_INTERVAL)
+            await cleanup_old_multi_platform_tasks()
+        except Exception as e:
+            utils.logger.error(f"多平台任务清理循环失败: {e}")
+            await asyncio.sleep(60)  # 出错后等待1分钟再重试
+
 class AccountStrategy(str, Enum):
     """账号策略枚举"""
     RANDOM = "random"           # 随机选择
@@ -63,32 +104,8 @@ class MultiPlatformCrawlerFactory:
         crawler_class = MultiPlatformCrawlerFactory._get_crawler_class(platform)
         return crawler_class(task_id=task_id)
 
-async def get_db_connection():
-    """获取数据库连接"""
-    try:
-        from config.env_config_loader import config_loader
-        from async_db import AsyncMysqlDB
-        import aiomysql
-        
-        db_config = config_loader.get_database_config()
-        
-        pool = await aiomysql.create_pool(
-            host=db_config['host'],
-            port=db_config['port'],
-            user=db_config['username'],
-            password=db_config['password'],
-            db=db_config['database'],
-            autocommit=True,
-            minsize=1,
-            maxsize=10,
-        )
-        
-        async_db_obj = AsyncMysqlDB(pool)
-        return async_db_obj
-        
-    except Exception as e:
-        utils.logger.error(f"获取数据库连接失败: {e}")
-        return None
+# 🆕 复用单平台爬虫的数据库连接管理
+from api.crawler_core import get_db_connection, close_db_connection
 
 async def create_multi_platform_task_record(task_id: str, request: MultiPlatformCrawlerRequest) -> None:
     """创建多平台任务记录到数据库"""
@@ -338,12 +355,29 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
         await log_multi_platform_task_step(task_id, platform, "crawling_completed", 
                                          f"爬取完成，共获取 {result_count} 条数据")
         
-        # 安全关闭爬虫资源
+        # 🆕 安全关闭爬虫资源
         try:
             if hasattr(crawler, 'close'):
                 await crawler.close()
+                utils.logger.info(f"[MULTI_TASK_{task_id}] 爬虫资源已关闭")
         except Exception as e:
             utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭爬虫资源时出现警告: {e}")
+        
+        # 🆕 确保浏览器实例被正确关闭
+        try:
+            if hasattr(crawler, 'browser') and crawler.browser:
+                await crawler.browser.close()
+                utils.logger.info(f"[MULTI_TASK_{task_id}] 浏览器实例已关闭")
+        except Exception as e:
+            utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭浏览器实例时出现警告: {e}")
+        
+        # 🆕 清理Playwright上下文
+        try:
+            if hasattr(crawler, 'context') and crawler.context:
+                await crawler.context.close()
+                utils.logger.info(f"[MULTI_TASK_{task_id}] Playwright上下文已关闭")
+        except Exception as e:
+            utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭Playwright上下文时出现警告: {e}")
         
         return result_count
         
@@ -354,6 +388,33 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
 
 async def run_multi_platform_crawler_task(task_id: str, request: MultiPlatformCrawlerRequest):
     """后台运行多平台爬虫任务"""
+    # 🆕 设置任务超时时间（45分钟，因为多平台需要更多时间）
+    import asyncio
+    from concurrent.futures import TimeoutError
+    
+    try:
+        # 🆕 使用asyncio.wait_for添加超时机制
+        await asyncio.wait_for(
+            _run_multi_platform_crawler_task_internal(task_id, request),
+            timeout=2700  # 45分钟超时
+        )
+    except TimeoutError:
+        utils.logger.error(f"[MULTI_TASK_{task_id}] ❌ 多平台任务执行超时（45分钟）")
+        multi_platform_task_status[task_id]["status"] = "timeout"
+        multi_platform_task_status[task_id]["error"] = "多平台任务执行超时，请检查网络连接或重试"
+        multi_platform_task_status[task_id]["completed_at"] = datetime.now().isoformat()
+        await update_multi_platform_task_progress(task_id, 0.0, "timeout")
+        await log_multi_platform_task_step(task_id, "multi", "task_timeout", "多平台任务执行超时", "ERROR", 0)
+    except Exception as e:
+        utils.logger.error(f"[MULTI_TASK_{task_id}] ❌ 多平台任务执行失败: {e}")
+        multi_platform_task_status[task_id]["status"] = "failed"
+        multi_platform_task_status[task_id]["error"] = str(e)
+        multi_platform_task_status[task_id]["completed_at"] = datetime.now().isoformat()
+        await update_multi_platform_task_progress(task_id, 0.0, "failed")
+        await log_multi_platform_task_step(task_id, "multi", "task_failed", f"多平台任务执行失败: {str(e)}", "ERROR", 0)
+
+async def _run_multi_platform_crawler_task_internal(task_id: str, request: MultiPlatformCrawlerRequest):
+    """内部多平台爬虫任务执行函数"""
     try:
         utils.logger.info("█" * 100)
         utils.logger.info(f"[MULTI_TASK_{task_id}] 🚀 开始执行多平台爬虫任务")
@@ -613,6 +674,49 @@ async def delete_multi_platform_task(task_id: str):
     
     del multi_platform_task_status[task_id]
     return {"message": "多平台任务已删除"}
+
+@router.get("/multi-platform/health")
+async def get_multi_platform_health():
+    """获取多平台爬虫系统健康状态"""
+    try:
+        # 检查数据库连接
+        db_status = "unknown"
+        try:
+            async_db_obj = await get_db_connection()
+            if async_db_obj:
+                db_status = "healthy"
+            else:
+                db_status = "unhealthy"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+        
+        # 统计任务状态
+        total_tasks = len(multi_platform_task_status)
+        running_tasks = len([t for t in multi_platform_task_status.values() if t.get('status') == 'running'])
+        completed_tasks = len([t for t in multi_platform_task_status.values() if t.get('status') == 'completed'])
+        failed_tasks = len([t for t in multi_platform_task_status.values() if t.get('status') == 'failed'])
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "database": db_status,
+            "tasks": {
+                "total": total_tasks,
+                "running": running_tasks,
+                "completed": completed_tasks,
+                "failed": failed_tasks
+            },
+            "memory_usage": {
+                "task_status_size": len(str(multi_platform_task_status)),
+                "estimated_memory_mb": len(str(multi_platform_task_status)) / (1024 * 1024)
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/multi-platform/info")
 async def get_multi_platform_info():

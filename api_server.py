@@ -97,6 +97,14 @@ async def startup_event():
         await redis_manager.ping()
         utils.logger.info("✅ Redis连接初始化完成")
         
+        # 🆕 启动任务清理机制
+        try:
+            from api.task_cleanup_init import init_task_cleanup
+            await init_task_cleanup()
+            utils.logger.info("✅ 任务清理机制初始化完成")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 任务清理机制初始化失败: {e}")
+        
         # 加载配置
         from config.env_config_loader import config_loader
         env = config_loader.get_environment()

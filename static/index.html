@@ -354,6 +354,19 @@
                     <a href="/docs" class="btn btn-secondary">API文档</a>
                 </div>
             </div>
+
+            <!-- 系统监控管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/system_monitor.html'">
+                <span class="feature-icon">📊</span>
+                <div class="feature-title">系统监控管理</div>
+                <div class="feature-desc">
+                    实时监控系统资源使用情况，包括CPU、内存、磁盘、网络等性能指标
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/system_monitor.html" class="btn btn-primary">系统监控</a>
+                    <a href="#" onclick="showSystemHealth()" class="btn btn-secondary">健康检查</a>
+                </div>
+            </div>
         </div>
 
         <!-- 快速操作 -->
@@ -413,6 +426,14 @@
                     <div class="action-text">
                         <div class="action-title">导出数据</div>
                         <div class="action-desc">导出所有爬取的数据</div>
+                    </div>
+                </a>
+                
+                <a href="/static/system_monitor.html" class="action-btn">
+                    <span class="action-icon">📊</span>
+                    <div class="action-text">
+                        <div class="action-title">系统监控</div>
+                        <div class="action-desc">实时监控系统资源使用</div>
                     </div>
                 </a>
             </div>
@@ -563,6 +584,41 @@
         // 显示技术支持
         function showSupport() {
             alert('技术支持信息：\n\n📧 Email: support@mediacrawler.com\n📚 文档: /docs\n🐛 Bug报告: GitHub Issues');
+        }
+
+        // 显示系统健康状态
+        async function showSystemHealth() {
+            try {
+                const response = await fetch('/api/v1/system/health');
+                const data = await response.json();
+                
+                let message = `📊 系统健康状态\n\n`;
+                message += `状态: ${data.status === 'healthy' ? '✅ 健康' : '⚠️ 警告'}\n`;
+                message += `时间: ${new Date(data.timestamp).toLocaleString()}\n\n`;
+                
+                if (data.system_stats) {
+                    const stats = data.system_stats;
+                    message += `🖥️ 系统资源:\n`;
+                    message += `CPU使用率: ${stats.cpu_percent.toFixed(1)}%\n`;
+                    message += `内存使用率: ${stats.memory_percent.toFixed(1)}%\n`;
+                    message += `磁盘使用率: ${stats.disk_percent.toFixed(1)}%\n`;
+                    message += `进程数: ${stats.process_count}\n`;
+                    message += `爬虫进程: ${len(stats.crawler_processes)}\n\n`;
+                }
+                
+                if (data.warnings && data.warnings.length > 0) {
+                    message += `⚠️ 警告信息:\n`;
+                    data.warnings.forEach(warning => {
+                        message += `• ${warning}\n`;
+                    });
+                } else {
+                    message += `✅ 系统运行正常，无警告信息`;
+                }
+                
+                alert(message);
+            } catch (error) {
+                alert('❌ 获取系统健康状态失败: ' + error.message);
+            }
         }
 
         // 工具函数

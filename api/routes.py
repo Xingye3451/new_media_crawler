@@ -25,6 +25,7 @@ from api.video_stream import router as video_stream_router
 from api.thumbnail_proxy import router as thumbnail_proxy_router
 from api.creator_management import router as creator_management_router
 from api.multi_platform_crawler import router as multi_platform_crawler_router
+from api.system_monitor import router as system_monitor_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -160,4 +161,11 @@ api_router.include_router(
     multi_platform_crawler_router,
     prefix="/v1",
     tags=["multi-platform-crawler"]
+)
+
+# 系统监控相关路由
+api_router.include_router(
+    system_monitor_router,
+    prefix="/v1",
+    tags=["system-monitor"]
 ) 
