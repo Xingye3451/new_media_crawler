@@ -226,21 +226,29 @@ class DouyinDbStoreImplement(AbstractStore):
         Returns:
             Dict: 扁平化后的数据
         """
+        # 🆕 修复：确保source_keyword正确传递
+        source_keyword = content_item.get("source_keyword", "")
+        if not source_keyword:
+            # 如果没有直接传递，尝试从全局变量获取
+            from var import source_keyword_var
+            source_keyword = source_keyword_var.get()
+        
         # 基础信息
         flattened = {
             "content_id": content_item.get("aweme_id", ""),
             "platform": "douyin",
             "content_type": "video",
             "task_id": content_item.get("task_id", ""),
-            "source_keyword": content_item.get("source_keyword", ""),
+            "source_keyword": source_keyword,  # 🆕 修复：确保source_keyword正确设置
             
             # 内容信息
             "title": content_item.get("desc", ""),
             "description": content_item.get("desc", ""),
             "content": content_item.get("desc", ""),
-            "create_time": content_item.get("create_time", 0),
-            "publish_time": content_item.get("create_time", 0),
-            "update_time": content_item.get("create_time", 0),
+            # 🆕 修复：将10位时间戳转换为13位时间戳
+            "create_time": content_item.get("create_time", 0) * 1000 if content_item.get("create_time", 0) < 1000000000000 else content_item.get("create_time", 0),
+            "publish_time": content_item.get("create_time", 0) * 1000 if content_item.get("create_time", 0) < 1000000000000 else content_item.get("create_time", 0),
+            "update_time": content_item.get("create_time", 0) * 1000 if content_item.get("create_time", 0) < 1000000000000 else content_item.get("create_time", 0),
             
             # 统计信息
             "like_count": content_item.get("statistics", {}).get("digg_count", 0),
@@ -261,44 +269,38 @@ class DouyinDbStoreImplement(AbstractStore):
             
             # 时间戳
             "add_ts": utils.get_current_timestamp(),
-            "last_modify_ts": utils.get_current_timestamp()
+            "last_modify_ts": utils.get_current_timestamp(),
+            
+            # 作者信息
+            "author_id": content_item.get("author", {}).get("uid", ""),
+            "author_name": content_item.get("author", {}).get("nickname", ""),
+            "author_nickname": content_item.get("author", {}).get("nickname", ""),
+            "author_avatar": content_item.get("author", {}).get("avatar_thumb", {}).get("url_list", [""])[0] if content_item.get("author", {}).get("avatar_thumb") else "",
+            "author_signature": content_item.get("author", {}).get("signature", ""),
+            "author_unique_id": content_item.get("author", {}).get("unique_id", ""),
+            "author_sec_uid": content_item.get("author", {}).get("sec_uid", ""),
+            "author_short_id": content_item.get("author", {}).get("short_id", ""),
+            
+            # 媒体信息
+            "cover_url": self._extract_content_cover_url(content_item),
+            "video_url": self._extract_video_play_url(content_item),
+            "video_download_url": self._extract_video_download_url(content_item),
+            "video_play_url": self._extract_video_play_url(content_item),
+            "video_share_url": self._extract_video_play_url(content_item),
+            
+            # 位置信息
+            "ip_location": content_item.get("ip_location", ""),
+            "location": content_item.get("location", ""),
+            
+            # 标签和分类
+            "tags": json.dumps(content_item.get("tag_list", []), ensure_ascii=False),
+            "categories": json.dumps([], ensure_ascii=False),
+            "topics": json.dumps(content_item.get("cha_list", []), ensure_ascii=False),
+            
+            # 扩展信息
+            "metadata": json.dumps({}, ensure_ascii=False),
+            "extra_info": json.dumps({}, ensure_ascii=False)
         }
-        
-        # 提取作者信息
-        author_info = self._extract_author_info(content_item)
-        flattened.update(author_info)
-        
-        # 提取视频信息
-        video_info = self._extract_video_info(content_item)
-        flattened.update(video_info)
-        
-        # 生成URL信息
-        aweme_id = content_item.get("aweme_id", "")
-        if aweme_id:
-            flattened["aweme_url"] = f"https://www.douyin.com/video/{aweme_id}"
-            flattened["video_url"] = f"https://www.douyin.com/video/{aweme_id}"
-            flattened["video_play_url"] = f"https://www.douyin.com/video/{aweme_id}"
-            flattened["video_share_url"] = f"https://www.douyin.com/video/{aweme_id}"
-        
-        # 提取下载链接
-        download_url = self._extract_video_download_url(content_item)
-        if download_url:
-            flattened["download_url"] = download_url
-            flattened["video_download_url"] = download_url
-        
-        # 提取音乐信息
-        music = content_item.get("music", {})
-        if music:
-            flattened["audio_url"] = music.get("play_url", {}).get("uri", "")
-        
-        # 提取话题标签
-        cha_list = content_item.get("cha_list", [])
-        if cha_list:
-            flattened["topics"] = json.dumps([cha.get("cha_name", "") for cha in cha_list], ensure_ascii=False)
-        
-        # 提取位置信息
-        if content_item.get("ip_location"):
-            flattened["ip_location"] = content_item.get("ip_location", "")
         
         return flattened
 

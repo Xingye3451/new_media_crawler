@@ -209,49 +209,84 @@ async def get_platform_accounts(platform: str, account_strategy: str = "smart") 
         if not async_db_obj:
             return []
         
-        # 获取该平台的所有可用账号
+        # 🆕 修复：使用正确的表结构，参考单平台爬取的账号管理逻辑
+        # 获取该平台的所有可用账号（从social_accounts表）
         query = """
-            SELECT id, account_name, username, login_status, success_rate, last_used_at
-            FROM platform_accounts 
-            WHERE platform = %s AND is_active = 1 AND is_deleted = 0
+            SELECT sa.id, sa.account_name, sa.username, sa.platform, sa.login_method,
+                   lt.is_valid, lt.expires_at, lt.last_used_at, lt.created_at as token_created_at
+            FROM social_accounts sa
+            LEFT JOIN login_tokens lt ON sa.id = lt.account_id AND sa.platform = lt.platform
+            WHERE sa.platform = %s
             ORDER BY 
                 CASE 
-                    WHEN login_status = 'logged_in' THEN 1
+                    WHEN lt.is_valid = 1 AND lt.expires_at > NOW() THEN 1
                     ELSE 2
                 END,
-                success_rate DESC,
-                last_used_at ASC
+                lt.created_at DESC,
+                sa.created_at DESC
         """
         
         accounts = await async_db_obj.query(query, platform)
         
         if not accounts:
+            utils.logger.warning(f"平台 {platform} 没有找到任何账号")
             return []
+        
+        # 过滤出有效的账号（有有效token的账号）
+        valid_accounts = []
+        for account in accounts:
+            if account.get('is_valid') == 1 and account.get('expires_at'):
+                # 检查token是否过期
+                from datetime import datetime
+                expires_at = account['expires_at']
+                if isinstance(expires_at, str):
+                    from datetime import datetime
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                
+                if expires_at > datetime.now():
+                    valid_accounts.append(account)
+        
+        if not valid_accounts:
+            utils.logger.warning(f"平台 {platform} 没有找到有效的登录账号")
+            return []
+        
+        utils.logger.info(f"平台 {platform} 找到 {len(valid_accounts)} 个有效账号")
         
         # 根据策略选择账号
         if account_strategy == "random":
             import random
-            return random.sample(accounts, min(len(accounts), 3))  # 随机选择最多3个
+            selected = random.sample(valid_accounts, min(len(valid_accounts), 3))
+            utils.logger.info(f"随机选择 {len(selected)} 个账号")
+            return selected
         elif account_strategy == "round_robin":
             # 轮询选择，这里简化处理，选择前几个
-            return accounts[:min(len(accounts), 2)]
+            selected = valid_accounts[:min(len(valid_accounts), 2)]
+            utils.logger.info(f"轮询选择 {len(selected)} 个账号")
+            return selected
         elif account_strategy == "priority":
-            # 优先级选择：已登录 > 高成功率 > 最近使用
-            return accounts[:min(len(accounts), 2)]
+            # 优先级选择：有效token > 最近使用
+            selected = valid_accounts[:min(len(valid_accounts), 2)]
+            utils.logger.info(f"优先级选择 {len(selected)} 个账号")
+            return selected
         elif account_strategy == "smart":
-            # 智能选择：综合考虑登录状态、成功率、使用频率
-            smart_accounts = []
-            for account in accounts:
-                if account.get('login_status') == 'logged_in':
-                    smart_accounts.append(account)
-                if len(smart_accounts) >= 2:
-                    break
-            return smart_accounts if smart_accounts else accounts[:1]
+            # 智能选择：综合考虑token有效性、使用频率
+            # 按token创建时间排序，选择最新的
+            smart_accounts = sorted(valid_accounts, 
+                                 key=lambda x: x.get('token_created_at', datetime.min), 
+                                 reverse=True)
+            selected = smart_accounts[:min(len(smart_accounts), 2)]
+            utils.logger.info(f"智能选择 {len(selected)} 个账号")
+            return selected
         elif account_strategy == "single":
             # 单账号使用
-            return accounts[:1]
+            selected = valid_accounts[:1]
+            utils.logger.info(f"单账号选择 {len(selected)} 个账号")
+            return selected
         else:
-            return accounts[:1]  # 默认选择第一个
+            # 默认选择第一个
+            selected = valid_accounts[:1]
+            utils.logger.info(f"默认选择 {len(selected)} 个账号")
+            return selected
             
     except Exception as e:
         utils.logger.error(f"获取平台 {platform} 账号失败: {e}")
@@ -410,7 +445,8 @@ async def run_multi_platform_crawler_task(task_id: str, request: MultiPlatformCr
         success_platforms = len([p for p in request.platforms if p not in platform_errors])
         
         if platform_errors:
-            status = "completed_with_errors"
+            # 🆕 修复：缩短状态值以符合数据库字段长度限制
+            status = "completed_with_errors" if len("completed_with_errors") <= 20 else "completed_errors"
             message = f"部分平台执行失败，成功: {success_platforms}/{len(request.platforms)} 个平台"
         else:
             status = "completed"

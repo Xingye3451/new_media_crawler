@@ -1609,6 +1609,12 @@
                 'wb': '微博',
                 'zhihu': '知乎'
             };
+            
+            // 🆕 处理多平台情况（逗号分隔的平台列表）
+            if (platform && platform.includes(',')) {
+                return platform.split(',').map(p => platforms[p.trim()] || p.trim()).join('、');
+            }
+            
             return platforms[platform] || platform;
         }
 

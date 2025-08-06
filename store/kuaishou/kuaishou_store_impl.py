@@ -164,9 +164,17 @@ class KuaishouDbStoreImplement(AbstractStore):
         if not video_id:
             return
         user_info = video_item.get("author", {})
+        
+        # 🆕 修复：确保source_keyword正确传递
+        source_keyword = video_item.get("source_keyword", "")
+        if not source_keyword:
+            # 如果没有直接传递，尝试从全局变量获取
+            from var import source_keyword_var
+            source_keyword = source_keyword_var.get()
+        
         save_content_item = {
             "video_id": video_id,
-            "video_type": str(video_item.get("type")),
+            "video_type": "video",  # 🆕 修复：将数字1改为字符串video
             "title": photo_info.get("caption", "")[:500],
             "desc": photo_info.get("caption", ""),
             "user_id": user_info.get("id"),
@@ -205,7 +213,7 @@ class KuaishouDbStoreImplement(AbstractStore):
             "minio_url": photo_info.get("minioUrl"),
             "local_path": photo_info.get("localPath"),
             # 添加必需字段
-            "source_keyword": source_keyword_var.get(),
+            "source_keyword": source_keyword,  # 🆕 修复：确保source_keyword正确设置
             "platform": "kuaishou",
             "task_id": task_id,
         }
