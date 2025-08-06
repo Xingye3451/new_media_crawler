@@ -44,6 +44,9 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
             '-L',  # 跟随重定向
             '-o', file_path,  # 输出文件
             '--compressed',  # 支持压缩
+            '--retry', '3',  # 🆕 添加重试机制
+            '--retry-delay', '1',  # 🆕 重试延迟1秒
+            '--retry-max-time', '10',  # 🆕 最大重试时间10秒
             '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             '-H', 'Accept: */*' if is_video else 'image/webp,image/apng,image/*,*/*;q=0.8',
             '-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8',
@@ -65,6 +68,9 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
             curl_cmd.extend([
                 '-H', 'Referer: https://www.xiaohongshu.com/',
                 '-H', 'Origin: https://www.xiaohongshu.com',
+                '-H', 'X-Requested-With: XMLHttpRequest',
+                '-H', 'Cache-Control: no-cache',
+                '-H', 'Pragma: no-cache',
             ])
         else:
             parsed_url = urlparse(url)
@@ -93,22 +99,34 @@ def download_with_curl(url: str, file_path: str, is_video: bool = True):
         else:
             logger.error(f"curl下载失败，返回码: {result.returncode}")
             logger.error(f"错误输出: {result.stderr}")
+            logger.error(f"标准输出: {result.stdout}")
             logger.error(f"文件存在: {os.path.exists(file_path)}")
             if os.path.exists(file_path):
                 logger.error(f"文件大小: {os.path.getsize(file_path)} 字节")
-            # 检查下载的文件内容
-            if os.path.exists(file_path):
+                # 🆕 检查下载的文件内容
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read(200)
+                        content = f.read(500)
                         if '403' in content or 'Forbidden' in content:
                             logger.error("下载的是403错误页面，不是视频文件")
-                except:
+                        elif '404' in content or 'Not Found' in content:
+                            logger.error("下载的是404错误页面，文件不存在")
+                        elif '500' in content or 'Internal Server Error' in content:
+                            logger.error("下载的是500错误页面，服务器内部错误")
+                        else:
+                            logger.error(f"下载的内容前500字符: {content[:200]}...")
+                except UnicodeDecodeError:
                     # 如果文件是二进制文件，检查文件头
                     with open(file_path, 'rb') as f:
-                        header = f.read(10)
+                        header = f.read(20)
                         if header.startswith(b'<!DOCTYPE') or header.startswith(b'<html'):
                             logger.error("下载的是HTML页面，不是视频文件")
+                        elif header.startswith(b'\xff\xd8\xff'):  # JPEG文件头
+                            logger.info("下载的是有效的JPEG图片")
+                        elif header.startswith(b'\x89PNG'):  # PNG文件头
+                            logger.info("下载的是有效的PNG图片")
+                        else:
+                            logger.error(f"未知的文件格式，文件头: {header.hex()}")
             return False
             
     except Exception as e:
@@ -232,11 +250,17 @@ async def curl_proxy_thumbnail(
                     }
                 )
             else:
-                logger.error(f"缩略图文件无效: {thumbnail_path}, 大小: {os.path.getsize(thumbnail_path) if os.path.exists(thumbnail_path) else 0} 字节")
-                raise HTTPException(status_code=500, detail="缩略图文件无效")
+                file_size = os.path.getsize(thumbnail_path) if os.path.exists(thumbnail_path) else 0
+                logger.error(f"缩略图文件无效: {thumbnail_path}, 大小: {file_size} 字节")
+                # 🆕 提供更详细的错误信息
+                error_detail = f"缩略图文件无效，大小: {file_size} 字节"
+                if file_size < 100:
+                    error_detail += "，文件太小，可能是错误页面"
+                raise HTTPException(status_code=500, detail=error_detail)
         else:
             logger.error(f"缩略图下载失败: {url}")
-            raise HTTPException(status_code=500, detail="缩略图下载失败")
+            # 🆕 提供更详细的错误信息
+            raise HTTPException(status_code=500, detail=f"缩略图下载失败: {url}")
         
     except Exception as e:
         logger.error(f"Curl缩略图代理失败: {str(e)}")

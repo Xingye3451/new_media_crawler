@@ -1626,22 +1626,19 @@
                 console.log('当前任务信息:', taskInfo);
                 console.log('当前视频数据:', videos);
 
-                // 获取正确的平台信息
-                const correctPlatform = taskInfo.task_info?.platform || 'unknown';
-                
                 // 如果creatorId是undefined，尝试从视频数据中查找
                 let correctCreatorId = creatorId;
                 let correctCreatorName = creatorName;
                 
                 if (creatorId === 'undefined' || !creatorId) {
                     // 从当前视频数据中查找匹配的创作者
-                    const currentVideo = videos.find(v => 
+                    const matchedVideo = videos.find(v => 
                         (v.nickname || v.user_name || v.author_name) === creatorName
                     );
                     
-                    if (currentVideo) {
-                        correctCreatorId = currentVideo.author_id || currentVideo.user_id || currentVideo.uid || currentVideo.user_id;
-                        correctCreatorName = currentVideo.author_name || currentVideo.nickname || currentVideo.user_name || creatorName;
+                    if (matchedVideo) {
+                        correctCreatorId = matchedVideo.author_id || matchedVideo.user_id || matchedVideo.uid || matchedVideo.user_id;
+                        correctCreatorName = matchedVideo.author_name || matchedVideo.nickname || matchedVideo.user_name || creatorName;
                     }
                 }
 
@@ -1650,7 +1647,7 @@
                     return;
                 }
 
-                // 从当前视频数据中获取完整的创作者信息
+                // 🆕 从当前视频数据中获取完整的创作者信息
                 const currentVideo = videos.find(v => 
                     (v.author_id || v.user_id || v.uid) === correctCreatorId || 
                     (v.nickname || v.user_name || v.author_name) === correctCreatorName
@@ -1660,6 +1657,9 @@
                     alert('无法获取创作者信息，请稍后重试');
                     return;
                 }
+
+                // 🆕 使用视频数据中的准确平台信息，而不是任务级别的多平台信息
+                const correctPlatform = currentVideo.platform || getVideoPlatformFromData(currentVideo) || 'unknown';
 
                 // 构建完整的创作者数据
                 const creatorData = {
