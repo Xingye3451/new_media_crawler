@@ -132,26 +132,44 @@ async def stream_direct_video(
             "Sec-Fetch-Site": "cross-site"
         }
         
-        # 根据平台设置不同的Referer
-        if platform == "xhs":
+        # 🆕 修复：平台标准化处理
+        platform_mapping = {
+            'bili': 'bilibili',
+            'bilibili': 'bilibili',
+            'ks': 'kuaishou', 
+            'kuaishou': 'kuaishou',
+            'dy': 'douyin',
+            'douyin': 'douyin',
+            'xhs': 'xiaohongshu',
+            'xiaohongshu': 'xiaohongshu',
+            'wb': 'weibo',
+            'weibo': 'weibo',
+            'zhihu': 'zhihu'
+        }
+        
+        # 标准化平台名称
+        normalized_platform = platform_mapping.get(platform.lower(), platform.lower())
+        
+        # 根据标准化平台设置不同的Referer
+        if normalized_platform == "xiaohongshu":
             headers.update({
                 "Referer": "https://www.xiaohongshu.com/",
                 "Origin": "https://www.xiaohongshu.com"
             })
-            logger.info(f"识别为小红书平台: {platform}")
-        elif platform == "dy":
+            logger.info(f"识别为小红书平台: {normalized_platform}")
+        elif normalized_platform == "douyin":
             headers.update({
                 "Referer": "https://www.douyin.com/",
                 "Origin": "https://www.douyin.com"
             })
-            logger.info(f"识别为抖音平台: {platform}")
-        elif platform == "ks":
+            logger.info(f"识别为抖音平台: {normalized_platform}")
+        elif normalized_platform == "kuaishou":
             headers.update({
                 "Referer": "https://www.kuaishou.com/",
                 "Origin": "https://www.kuaishou.com"
             })
-            logger.info(f"识别为快手平台: {platform}")
-        elif platform == "bili":
+            logger.info(f"识别为快手平台: {normalized_platform}")
+        elif normalized_platform == "bilibili":
             headers.update({
                 "Referer": "https://www.bilibili.com/",
                 "Origin": "https://www.bilibili.com",
@@ -161,32 +179,32 @@ async def stream_direct_video(
                 "Cache-Control": "no-cache",
                 "Pragma": "no-cache"
             })
-            logger.info(f"识别为B站平台: {platform}")
-        elif platform == "wb":
+            logger.info(f"识别为B站平台: {normalized_platform}")
+        elif normalized_platform == "weibo":
             headers.update({
                 "Referer": "https://weibo.com/",
                 "Origin": "https://weibo.com"
             })
-            logger.info(f"识别为微博平台: {platform}")
-        elif platform == "zhihu":
+            logger.info(f"识别为微博平台: {normalized_platform}")
+        elif normalized_platform == "zhihu":
             headers.update({
                 "Referer": "https://www.zhihu.com/",
                 "Origin": "https://www.zhihu.com"
             })
-            logger.info(f"识别为知乎平台: {platform}")
+            logger.info(f"识别为知乎平台: {normalized_platform}")
         else:
             # 默认使用Google的Referer
             headers.update({
                 "Referer": "https://www.google.com/",
                 "Origin": "https://www.google.com"
             })
-            logger.info(f"使用默认Referer，平台: {platform}")
+            logger.info(f"使用默认Referer，平台: {normalized_platform}")
         
         async def video_stream():
             """视频流生成器"""
             # B站特殊处理：先尝试处理403错误
             final_url = decoded_url
-            if platform == "bili" or 'bilibili' in decoded_url or 'bilivideo' in decoded_url:
+            if normalized_platform == "bilibili" or 'bilibili' in decoded_url or 'bilivideo' in decoded_url:
                 try:
                     from services.bilibili_video_service import bilibili_video_service
                     processed_url = await bilibili_video_service.get_video_url_with_retry(decoded_url)
@@ -199,7 +217,7 @@ async def stream_direct_video(
                     logger.warning(f"B站视频URL处理异常: {e}")
             
             # 快手特殊处理：处理m3u8和mp4格式视频
-            elif platform == "ks" or 'kuaishou' in decoded_url or '.m3u8' in decoded_url:
+            elif normalized_platform == "kuaishou" or 'kuaishou' in decoded_url or '.m3u8' in decoded_url:
                 try:
                     from services.kuaishou_video_service import kuaishou_video_service
                     if '.m3u8' in decoded_url:

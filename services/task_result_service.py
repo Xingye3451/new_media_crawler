@@ -518,7 +518,7 @@ class TaskResultService:
                     'video_url': row.get('video_download_url') or row.get('video_url') or row.get('video_play_url'),
                     'cover_url': row.get('cover_url'),
                     'aweme_url': row.get('content_id'),  # 使用content_id作为URL标识
-                    'platform': platform,
+                    'platform': row.get('platform'),  # 🆕 使用unified_content表中的platform字段
                     'task_id': task_id
                 }
                 videos.append(video_data)

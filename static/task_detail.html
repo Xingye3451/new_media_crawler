@@ -225,6 +225,54 @@
             font-size: 1.5em;
         }
 
+        /* 🆕 平台标注样式 */
+        .platform-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            color: white;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .platform-douyin {
+            background: linear-gradient(45deg, #ff0050, #ff6b9d);
+        }
+
+        .platform-xiaohongshu {
+            background: linear-gradient(45deg, #ff2442, #ff6b7a);
+        }
+
+        .platform-kuaishou {
+            background: linear-gradient(45deg, #ff6600, #ff9933);
+        }
+
+        .platform-bilibili {
+            background: linear-gradient(45deg, #00a1d6, #23ade5);
+        }
+
+        .platform-weibo {
+            background: linear-gradient(45deg, #e6162d, #ff6b7a);
+        }
+
+        .platform-zhihu {
+            background: linear-gradient(45deg, #0084ff, #00a1d6);
+        }
+
+        .platform-default {
+            background: linear-gradient(45deg, #666, #999);
+        }
+
+        .platform-info {
+            color: #667eea;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
         .video-info {
             padding: 15px;
         }
@@ -712,36 +760,67 @@
         let videos = [];
         let taskInfo = {};
 
+        // 全局错误处理
+        window.addEventListener('error', function(e) {
+            console.error('❌ 全局JavaScript错误:', e.error);
+            console.error('❌ 错误详情:', e.message);
+            console.error('❌ 错误位置:', e.filename, ':', e.lineno);
+        });
+
+        // Promise错误处理
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('❌ 未处理的Promise错误:', e.reason);
+            e.preventDefault();
+        });
+
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
-            // 从URL获取任务ID
-            const urlParams = new URLSearchParams(window.location.search);
-            taskId = urlParams.get('task_id');
+            console.log('🚀 页面开始初始化...');
             
-            if (!taskId) {
-                alert('缺少任务ID参数');
-                window.location.href = '/static/task_results.html';
-                return;
-            }
+            try {
+                // 从URL获取任务ID
+                const urlParams = new URLSearchParams(window.location.search);
+                taskId = urlParams.get('task_id');
+                
+                console.log('🔍 获取到任务ID:', taskId);
+                
+                if (!taskId) {
+                    console.error('❌ 缺少任务ID参数');
+                    alert('缺少任务ID参数');
+                    window.location.href = '/static/task_results.html';
+                    return;
+                }
 
-            loadTaskDetail();
-            loadVideos();
+                console.log('📋 开始加载任务详情...');
+                loadTaskDetail();
+                console.log('📹 开始加载视频列表...');
+                loadVideos();
+            } catch (error) {
+                console.error('❌ 页面初始化失败:', error);
+                alert('页面初始化失败，请刷新重试');
+            }
         });
 
         // 加载任务详情
         async function loadTaskDetail() {
             try {
+                console.log('🔍 开始请求任务详情API...');
                 const response = await fetch(`/api/v1/task-results/${taskId}`);
+                console.log('📡 API响应状态:', response.status);
+                
                 const data = await response.json();
+                console.log('📊 API返回数据:', data);
                 
                 if (data.code === 200) {
                     taskInfo = data.data;
+                    console.log('✅ 任务详情加载成功:', taskInfo);
                     renderTaskInfo();
                 } else {
+                    console.error('❌ 加载任务详情失败:', data.message);
                     alert('加载任务详情失败');
                 }
             } catch (error) {
-                console.error('加载任务详情失败:', error);
+                console.error('❌ 加载任务详情失败:', error);
                 alert('网络错误');
             }
         }
@@ -852,9 +931,10 @@
             try {
                 console.log('🔍 开始加载视频列表，taskId:', taskId, 'page:', currentPage, 'pageSize:', pageSize);
                 const response = await fetch(`/api/v1/task-results/${taskId}/videos?page=${currentPage}&page_size=${pageSize}`);
-                const data = await response.json();
+                console.log('📡 视频API响应状态:', response.status);
                 
-                console.log('📊 API返回数据:', data);
+                const data = await response.json();
+                console.log('📊 视频API返回数据:', data);
                 
                 if (data.code === 200) {
                     videos = data.data.videos || [];
@@ -898,18 +978,27 @@
             const grid = document.getElementById('videoGrid');
 
             videos.forEach(video => {
+                // 🆕 直接使用unified_content表中的platform字段
+                const videoPlatform = video.platform;
+                const platformText = getPlatformText(videoPlatform);
+                const platformBadgeClass = getPlatformBadgeClass(videoPlatform);
+                
                 const videoCard = document.createElement('div');
                 videoCard.className = 'video-card';
                 videoCard.innerHTML = `
                     <div class="video-thumbnail" onclick="previewVideo('${video.aweme_id || video.note_id || video.video_id || video.id}')">
                         ${video.cover_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" onerror="handleThumbnailError(this)">` : ''}
                         <div class="play-icon">▶</div>
+                        <!-- 🆕 平台标注 -->
+                        <div class="platform-badge ${platformBadgeClass}">${platformText}</div>
                     </div>
                     <div class="video-info">
                         <div class="video-title">${video.desc || video.title || '无标题'}</div>
                         <div class="video-meta">
                             <span>@${video.nickname || video.user_name || '未知用户'}</span>
                             <span>${formatDate(video.create_time)}</span>
+                            <!-- 🆕 平台信息 -->
+                            <span class="platform-info">📱 ${platformText}</span>
                         </div>
                         <div class="video-stats">
                             <div class="stat-item">
@@ -944,17 +1033,26 @@
             const list = document.getElementById('videoList');
 
             videos.forEach(video => {
+                // 🆕 直接使用unified_content表中的platform字段
+                const videoPlatform = video.platform;
+                const platformText = getPlatformText(videoPlatform);
+                const platformBadgeClass = getPlatformBadgeClass(videoPlatform);
+                
                 const listItem = document.createElement('div');
                 listItem.className = 'video-list-item';
                 listItem.innerHTML = `
                     <div class="list-thumbnail">
                         ${video.cover_url ? `<img src="${getThumbnail(video)}" alt="${video.desc || video.title}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 5px;" onerror="handleThumbnailError(this)">` : '📹'}
+                        <!-- 🆕 平台标注 -->
+                        <div class="platform-badge ${platformBadgeClass}">${platformText}</div>
                     </div>
                     <div class="list-content">
                         <div class="video-title">${video.desc || video.title || '无标题'}</div>
                         <div class="video-meta">
                             <span>@${video.nickname || video.user_name || '未知用户'}</span>
                             <span>${formatDate(video.create_time)}</span>
+                            <!-- 🆕 平台信息 -->
+                            <span class="platform-info">📱 ${platformText}</span>
                         </div>
                         <div class="video-stats">
                             <div class="stat-item">
@@ -1036,13 +1134,18 @@
 
             const modalContent = document.getElementById('modalContent');
             
+            // 🆕 修复：使用unified_content表中的platform字段来识别平台
+            // 从视频数据中获取准确的平台信息
+            const videoPlatform = video.platform || getVideoPlatformFromData(video);
+            console.log('🔍 视频平台识别:', videoPlatform);
+            
             // 使用新的直接流式传输API播放视频
             let videoSrc = '';
             if (video.video_url || video.video_play_url) {
                 // 优先使用video_play_url，如果没有则使用video_url
                 const videoUrl = video.video_play_url || video.video_url;
                 const encodedUrl = encodeURIComponent(videoUrl);
-                const platform = taskInfo.task_info?.platform || 'unknown';
+                const platform = videoPlatform; // 🆕 使用视频数据中的准确平台
                 const contentId = video.aweme_id || video.note_id || video.video_id || video.id;
                 
                 console.log('🔍 视频URL信息:', {
@@ -1101,8 +1204,8 @@
                         </video>
                         <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
                             💡 使用直接流式传输，实时播放视频内容
-                            ${taskInfo.task_info?.platform === 'bili' || taskInfo.task_info?.platform === 'bilibili' ? '<br>🛡️ B站视频已启用反爬虫保护' : ''}
-                            ${taskInfo.task_info?.platform === 'ks' || taskInfo.task_info?.platform === 'kuaishou' ? '<br>🎬 快手视频已启用m3u8流转换<br>⏱️ 由于快手特殊格式（多文件整合），加载可能较慢，请耐心等待' : ''}
+                            ${videoPlatform === 'bili' || videoPlatform === 'bilibili' ? '<br>🛡️ B站视频已启用反爬虫保护' : ''}
+                            ${videoPlatform === 'ks' || videoPlatform === 'kuaishou' ? '<br>🎬 快手视频已启用m3u8流转换<br>⏱️ 由于快手特殊格式（多文件整合），加载可能较慢，请耐心等待' : ''}
                         </div>
                         <div style="margin-top: 5px; font-size: 0.8em; color: #999;">
                             调试信息: ${videoSrc}
@@ -1125,6 +1228,37 @@
             document.getElementById('videoModal').classList.add('show');
         }
 
+        // 🆕 新增：从视频数据中获取准确的平台信息
+        function getVideoPlatformFromData(video) {
+            // 优先使用video.platform字段
+            if (video.platform) {
+                return video.platform;
+            }
+            
+            // 根据视频URL特征判断平台
+            const videoUrl = video.video_url || video.video_play_url || '';
+            if (videoUrl.includes('bilibili') || videoUrl.includes('bilivideo')) {
+                return 'bilibili';
+            } else if (videoUrl.includes('kuaishou') || videoUrl.includes('.m3u8')) {
+                return 'kuaishou';
+            } else if (videoUrl.includes('douyin')) {
+                return 'douyin';
+            } else if (videoUrl.includes('xiaohongshu')) {
+                return 'xiaohongshu';
+            }
+            
+            // 根据内容ID特征判断
+            const contentId = video.aweme_id || video.note_id || video.video_id || video.id || '';
+            if (contentId.startsWith('BV') || contentId.startsWith('av')) {
+                return 'bilibili';
+            } else if (contentId.length > 20) {
+                return 'kuaishou';
+            }
+            
+            // 默认返回任务平台（向后兼容）
+            return (taskInfo && taskInfo.task_info && taskInfo.task_info.platform) ? taskInfo.task_info.platform : 'unknown';
+        }
+
         // 下载单个视频
         async function downloadVideo(videoId) {
             try {
@@ -1142,13 +1276,16 @@
                     return;
                 }
 
+                // 🆕 修复：使用视频数据中的准确平台信息
+                const videoPlatform = video.platform || getVideoPlatformFromData(video);
+                console.log('🔍 下载视频平台识别:', videoPlatform);
+
                 // 显示下载中提示
                 const downloadBtn = event.target;
                 const originalText = downloadBtn.textContent;
-                const platform = taskInfo.task_info?.platform || 'unknown';
                 
                 // 快手特殊提示
-                if (platform === 'ks' || platform === 'kuaishou') {
+                if (videoPlatform === 'ks' || videoPlatform === 'kuaishou') {
                     downloadBtn.textContent = '下载中（快手视频较慢）...';
                     // 显示详细提示
                     if (confirm('⏱️ 快手视频下载提示\n\n由于快手使用特殊格式（m3u8多文件整合），下载过程会比较慢，请耐心等待。\n\n是否继续下载？')) {
@@ -1163,7 +1300,7 @@
 
                 // 生成文件名
                 const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
-                const filename = `${taskInfo.task_info?.platform || 'unknown'}_${videoId}_${timestamp}.mp4`;
+                const filename = `${videoPlatform}_${videoId}_${timestamp}.mp4`;
 
                 // 创建下载链接
                 const response = await fetch('/api/v1/videos/download', {
@@ -1174,7 +1311,7 @@
                     body: JSON.stringify({
                         video_url: video.video_url,
                         video_id: videoId,
-                        platform: taskInfo.task_info?.platform || 'unknown',
+                        platform: videoPlatform, // 🆕 使用视频数据中的准确平台
                         download_type: 'local'
                     })
                 });
@@ -1239,9 +1376,12 @@
                     const videoId = video.aweme_id || video.note_id || video.video_id;
                     if (videoId && video.video_url) {
                         try {
+                            // 🆕 修复：使用视频数据中的准确平台信息
+                            const videoPlatform = video.platform || getVideoPlatformFromData(video);
+                            
                             // 生成文件名
                             const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
-                            const filename = `${taskInfo.task_info?.platform || 'unknown'}_${videoId}_${timestamp}.mp4`;
+                            const filename = `${videoPlatform}_${videoId}_${timestamp}.mp4`;
                             
                             const response = await fetch('/api/v1/videos/download', {
                                 method: 'POST',
@@ -1251,7 +1391,7 @@
                                 body: JSON.stringify({
                                     video_url: video.video_url,
                                     video_id: videoId,
-                                    platform: taskInfo.task_info?.platform || 'unknown',
+                                    platform: videoPlatform, // 🆕 使用视频数据中的准确平台
                                     download_type: 'local'
                                 })
                             });
@@ -1363,7 +1503,13 @@
             
             // 检查是否为m3u8格式
             const isM3u8 = video.src.includes('.m3u8');
-            const platform = taskInfo.task_info?.platform || 'unknown';
+            
+            // 🆕 修复：从视频数据中获取准确的平台信息
+            const videoId = video.dataset.videoId;
+            const videoData = videos.find(v => 
+                v.aweme_id === videoId || v.note_id === videoId || v.video_id === videoId || v.id === videoId
+            );
+            const videoPlatform = videoData ? (videoData.platform || getVideoPlatformFromData(videoData)) : 'unknown';
             
             let errorMessage = `
                 <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
@@ -1376,7 +1522,7 @@
                         <li>反爬虫保护机制</li>
                         ${isM3u8 ? '<li>m3u8格式视频转换失败</li>' : ''}
                     </ul>
-                    ${isM3u8 && platform === 'ks' ? `
+                    ${isM3u8 && videoPlatform === 'ks' ? `
                         <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
                             <p style="color: #856404; margin: 0;"><strong>🎬 快手m3u8视频提示：</strong></p>
                             <p style="color: #856404; margin: 5px 0; font-size: 0.9em;">
@@ -1388,10 +1534,10 @@
                         </div>
                     ` : ''}
                     <p style="color: #999; font-size: 0.8em; margin-top: 10px;">视频URL: ${video.src}</p>
-                    <p style="color: #999; font-size: 0.8em;">平台: ${platform}</p>
+                    <p style="color: #999; font-size: 0.8em;">平台: ${videoPlatform}</p>
                     <div style="margin-top: 15px;">
-                        <button class="btn btn-primary" onclick="downloadVideo('${video.dataset.videoId || ''}')">📥 下载视频</button>
-                        <button class="btn btn-info" onclick="addToFavorites('${video.dataset.videoId || ''}')" style="margin-left: 10px;">⭐ 收藏视频</button>
+                        <button class="btn btn-primary" onclick="downloadVideo('${videoId || ''}')">📥 下载视频</button>
+                        <button class="btn btn-info" onclick="addToFavorites('${videoId || ''}')" style="margin-left: 10px;">⭐ 收藏视频</button>
                     </div>
                 </div>
             `;
@@ -1412,8 +1558,12 @@
                     return;
                 }
 
+                // 🆕 修复：使用视频数据中的准确平台信息
+                const videoPlatform = video.platform || getVideoPlatformFromData(video);
+                console.log('🔍 收藏视频平台识别:', videoPlatform);
+
                 const favoriteData = {
-                    platform: taskInfo.task_info?.platform || 'unknown',
+                    platform: videoPlatform, // 🆕 使用视频数据中的准确平台
                     content_id: videoId,
                     task_id: taskId,
                     original_url: video.video_url || '',
@@ -1432,8 +1582,7 @@
                 };
 
                 // 快手特殊提示
-                const platform = taskInfo.task_info?.platform || 'unknown';
-                if (platform === 'ks' || platform === 'kuaishou') {
+                if (videoPlatform === 'ks' || videoPlatform === 'kuaishou') {
                     if (confirm('⏱️ 快手视频收藏提示\n\n由于快手使用特殊格式（m3u8多文件整合），下载过程会比较慢，请耐心等待。\n\n是否继续收藏？')) {
                         // 用户确认继续
                     } else {
@@ -1452,7 +1601,7 @@
                 const data = await response.json();
                 if (data.code === 200) {
                     if (data.data.download_status === 'downloading') {
-                        if (platform === 'ks' || platform === 'kuaishou') {
+                        if (videoPlatform === 'ks' || videoPlatform === 'kuaishou') {
                             alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n⏱️ 由于快手特殊格式，下载过程较慢，请耐心等待。\n\n您可以在"我的收藏"页面查看下载进度。');
                         } else {
                             alert('✅ 收藏成功！\n\n视频已添加到您的收藏列表，正在下载到MinIO存储...\n\n您可以在"我的收藏"页面查看下载进度。');
@@ -1602,12 +1751,19 @@
 
         function getPlatformText(platform) {
             const platforms = {
+                // 标准化平台名称映射
+                'douyin': '抖音',
+                'kuaishou': '快手',
+                'bilibili': '哔哩哔哩',
+                'xiaohongshu': '小红书',
+                'weibo': '微博',
+                'zhihu': '知乎',
+                // 兼容旧格式
                 'dy': '抖音',
                 'xhs': '小红书',
                 'ks': '快手',
                 'bili': '哔哩哔哩',
-                'wb': '微博',
-                'zhihu': '知乎'
+                'wb': '微博'
             };
             
             // 🆕 处理多平台情况（逗号分隔的平台列表）
@@ -1616,6 +1772,27 @@
             }
             
             return platforms[platform] || platform;
+        }
+
+        // 🆕 新增：获取平台徽章样式类
+        function getPlatformBadgeClass(platform) {
+            const platformClasses = {
+                // 标准化平台名称映射
+                'douyin': 'platform-douyin',
+                'kuaishou': 'platform-kuaishou',
+                'bilibili': 'platform-bilibili',
+                'xiaohongshu': 'platform-xiaohongshu',
+                'weibo': 'platform-weibo',
+                'zhihu': 'platform-zhihu',
+                // 兼容旧格式
+                'dy': 'platform-douyin',
+                'xhs': 'platform-xiaohongshu',
+                'ks': 'platform-kuaishou',
+                'bili': 'platform-bilibili',
+                'wb': 'platform-weibo'
+            };
+            
+            return platformClasses[platform] || 'platform-default';
         }
 
         function getStatusText(status) {

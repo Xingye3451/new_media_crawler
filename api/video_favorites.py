@@ -252,9 +252,27 @@ async def download_favorite_video(file_hash: str):
         
         # 流式下载
         async def video_stream():
+            # 🆕 修复：平台标准化处理
+            platform_mapping = {
+                'bili': 'bilibili',
+                'bilibili': 'bilibili',
+                'ks': 'kuaishou', 
+                'kuaishou': 'kuaishou',
+                'dy': 'douyin',
+                'douyin': 'douyin',
+                'xhs': 'xiaohongshu',
+                'xiaohongshu': 'xiaohongshu',
+                'wb': 'weibo',
+                'weibo': 'weibo',
+                'zhihu': 'zhihu'
+            }
+            
+            # 标准化平台名称
+            normalized_platform = platform_mapping.get(file_record.get("platform", "").lower(), file_record.get("platform", "").lower())
+            
             # B站特殊处理：先尝试处理403错误
             final_download_url = download_url
-            if file_record.get("platform") == "bilibili" or 'bilibili' in download_url or 'bilivideo' in download_url:
+            if normalized_platform == "bilibili" or 'bilibili' in download_url or 'bilivideo' in download_url:
                 try:
                     from services.bilibili_video_service import bilibili_video_service
                     processed_url = await bilibili_video_service.get_video_url_with_retry(download_url)
@@ -267,7 +285,7 @@ async def download_favorite_video(file_hash: str):
                     logger.warning(f"B站视频URL处理异常: {e}")
             
             # 快手特殊处理：处理m3u8和mp4格式视频
-            elif file_record.get("platform") == "kuaishou" or 'kuaishou' in download_url or '.m3u8' in download_url:
+            elif normalized_platform == "kuaishou" or 'kuaishou' in download_url or '.m3u8' in download_url:
                 try:
                     from services.kuaishou_video_service import kuaishou_video_service
                     if '.m3u8' in download_url:
@@ -302,8 +320,8 @@ async def download_favorite_video(file_hash: str):
                 "Connection": "keep-alive"
             }
             
-            # 根据平台设置特殊请求头
-            if file_record.get("platform") == "bilibili":
+            # 根据标准化平台设置特殊请求头
+            if normalized_platform == "bilibili":
                 headers.update({
                     "Referer": "https://www.bilibili.com/",
                     "Origin": "https://www.bilibili.com",
@@ -313,7 +331,7 @@ async def download_favorite_video(file_hash: str):
                     "Cache-Control": "no-cache",
                     "Pragma": "no-cache"
                 })
-            elif file_record.get("platform") == "kuaishou":
+            elif normalized_platform == "kuaishou":
                 headers.update({
                     "Referer": "https://www.kuaishou.com/",
                     "Origin": "https://www.kuaishou.com",
