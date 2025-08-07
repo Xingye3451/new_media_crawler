@@ -5,7 +5,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    container_name: mediacrawler-api
+      args:
+        - VERSION=${VERSION:-v1.0.0}
+    image: mediacrawler-api:${VERSION:-v1.0.0}
+    container_name: mediacrawler-api-${VERSION:-v1.0.0}
     ports:
       - "8100:8100"    # API服务端口
       - "6080:6080"    # noVNC Web界面端口
@@ -14,10 +17,12 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config:ro  # 挂载配置文件（只读）
+      - ./VERSION:/app/VERSION:ro  # 挂载版本文件（只读）
     environment:
       - PYTHONPATH=/app
       - TZ=Asia/Shanghai
       - DISPLAY=:1
+      - APP_VERSION=${VERSION:-v1.0.0}  # 应用版本环境变量
       # VNC配置
       - VNC_PASSWORD=mediacrawler123
       - VNC_URL=http://localhost:6080/vnc.html  # 外部访问时修改为实际IP
@@ -42,32 +47,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    labels:
+      - "com.mediacrawler.version=${VERSION:-v1.0.0}"
+      - "com.mediacrawler.app=api"
+      - "com.mediacrawler.environment=production"
 
-  # 可选：添加Redis用于任务队列（如果需要）
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: mediacrawler-redis
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
-  #   restart: unless-stopped
-
-  # 可选：添加MySQL数据库（如果需要）
-  # mysql:
-  #   image: mysql:8.0
-  #   container_name: mediacrawler-mysql
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: root123
-  #     MYSQL_DATABASE: mediacrawler
-  #     MYSQL_USER: crawler
-  #     MYSQL_PASSWORD: crawler123
-  #   ports:
-  #     - "3306:3306"
-  #   volumes:
-  #     - mysql_data:/var/lib/mysql
-  #   restart: unless-stopped
-
-volumes:
-  # redis_data:
-  # mysql_data: 

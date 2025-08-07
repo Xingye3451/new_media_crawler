@@ -29,11 +29,45 @@ from api.routes import api_router
 # 预留：导入认证中间件
 from middleware.auth_middleware import auth_middleware, enable_auth_middleware, disable_auth_middleware
 
+def get_app_version():
+    """获取应用版本信息"""
+    try:
+        # 首先尝试从环境变量获取版本
+        env_version = os.environ.get('APP_VERSION')
+        if env_version:
+            return env_version
+        
+        # 然后尝试从 VERSION 文件读取
+        version_file = Path("VERSION")
+        if version_file.exists():
+            with open(version_file, 'r', encoding='utf-8') as f:
+                version = f.read().strip()
+                return version
+        
+        # 最后使用默认版本
+        return "v1.0.0"
+    except Exception as e:
+        utils.logger.warning(f"无法读取版本信息: {e}")
+        return "v1.0.0"
+
+def get_build_info():
+    """获取构建信息"""
+    return {
+        "version": get_app_version(),
+        "build_date": os.environ.get('BUILD_DATE', 'unknown'),
+        "git_commit": os.environ.get('VCS_REF', 'unknown'),
+        "environment": os.environ.get('ENV', 'development')
+    }
+
+# 获取版本信息
+app_version = get_app_version()
+build_info = get_build_info()
+
 # 创建FastAPI应用
 app = FastAPI(
     title="MediaCrawler API",
     description="多平台媒体内容爬虫API服务",
-    version="1.0.0",
+    version=app_version,
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -177,7 +211,13 @@ app.include_router(api_router, prefix="/api")
 async def startup_event():
     """应用启动时的初始化"""
     try:
+        # 显示版本信息
         utils.logger.info("🚀 MediaCrawler API 服务启动中...")
+        utils.logger.info(f"📦 版本信息:")
+        utils.logger.info(f"   - 应用版本: {build_info['version']}")
+        utils.logger.info(f"   - 构建日期: {build_info['build_date']}")
+        utils.logger.info(f"   - Git提交: {build_info['git_commit']}")
+        utils.logger.info(f"   - 运行环境: {build_info['environment']}")
         
         # 初始化数据库连接
         await db.init_db()
@@ -305,12 +345,25 @@ async def api_info():
     """API信息路径 - 返回API信息"""
     return {
         "name": "MediaCrawler API",
-        "version": "1.0.0",
+        "version": build_info['version'],
         "description": "多平台媒体内容爬虫API服务",
         "status": "running",
         "timestamp": datetime.now().isoformat(),
+        "build_info": build_info,
         "docs": "/docs",
         "redoc": "/redoc"
+    }
+
+# 版本信息路径
+@app.get("/version")
+async def version_info():
+    """版本信息路径 - 返回详细的版本信息"""
+    return {
+        "version": build_info['version'],
+        "build_date": build_info['build_date'],
+        "git_commit": build_info['git_commit'],
+        "environment": build_info['environment'],
+        "timestamp": datetime.now().isoformat()
     }
 
 # 健康检查
@@ -364,6 +417,7 @@ async def health_check():
         
         return {
             "status": overall_status,
+            "version": build_info['version'],
             "timestamp": datetime.now().isoformat(),
             "components": {
                 "database": db_status,
@@ -375,6 +429,7 @@ async def health_check():
         utils.logger.error(f"健康检查失败: {e}")
         return {
             "status": "error",
+            "version": build_info['version'],
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
@@ -382,6 +437,16 @@ async def health_check():
 # 主函数
 if __name__ == "__main__":
     import uvicorn
+    
+    # 显示启动信息
+    print("=" * 60)
+    print("🚀 MediaCrawler API 服务器")
+    print("=" * 60)
+    print(f"📦 版本: {build_info['version']}")
+    print(f"🔧 构建日期: {build_info['build_date']}")
+    print(f"📝 Git提交: {build_info['git_commit']}")
+    print(f"🌍 环境: {build_info['environment']}")
+    print("=" * 60)
     
     # 启动服务器
     uvicorn.run(
