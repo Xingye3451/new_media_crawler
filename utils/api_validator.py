@@ -41,8 +41,28 @@ class APILoginValidator:
         return "; ".join([f"{c['name']}={c['value']}" for c in cookies])
     
     async def verify_xhs_login(self, cookies: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """验证小红书登录状态 - 使用未读消息接口"""
+        """验证小红书登录状态 - 使用未读消息接口 + 关键cookie检查"""
         try:
+            # 首先检查关键登录cookies是否存在
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            important_cookies = ['a1', 'web_session', 'unread']
+            found_important_cookies = []
+            missing_important_cookies = []
+            
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✓ 小红书重要cookie: {cookie_name}")
+                else:
+                    missing_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✗ 小红书缺少重要cookie: {cookie_name}")
+            
+            # 如果缺少关键cookies，直接返回未登录
+            if len(found_important_cookies) < 2:
+                utils.logger.warning(f"小红书缺少关键cookies: {missing_important_cookies}")
+                return {"is_logged_in": False, "message": f"缺少关键cookies: {missing_important_cookies}"}
+            
             cookie_str = self._build_cookie_string(cookies)
             
             # 小红书未读消息API - 更简单有效的验证方式
@@ -115,11 +135,31 @@ class APILoginValidator:
             return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
     
     async def verify_douyin_login(self, cookies: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """验证抖音登录状态 - 使用ttwid/check接口"""
+        """验证抖音登录状态 - 使用ttwid/check接口 + 关键cookie检查"""
         try:
+            # 首先检查关键登录cookies是否存在
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            important_cookies = ['sessionid', 'passport_csrf_token', 'LOGIN_STATUS']
+            found_important_cookies = []
+            missing_important_cookies = []
+            
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✓ 抖音重要cookie: {cookie_name}")
+                else:
+                    missing_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✗ 抖音缺少重要cookie: {cookie_name}")
+            
+            # 如果缺少关键cookies，直接返回未登录
+            if len(found_important_cookies) < 2:
+                utils.logger.warning(f"抖音缺少关键cookies: {missing_important_cookies}")
+                return {"is_logged_in": False, "message": f"缺少关键cookies: {missing_important_cookies}"}
+            
             cookie_str = self._build_cookie_string(cookies)
             
-            # 抖音登录验证API - 更简单有效的验证方式
+            # 抖音登录验证API
             url = DOUYIN_TTWID_CHECK_URL
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -184,8 +224,28 @@ class APILoginValidator:
             return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
     
     async def verify_kuaishou_login(self, cookies: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """验证快手登录状态 - 使用checkLoginQuery GraphQL接口"""
+        """验证快手登录状态 - 使用checkLoginQuery GraphQL接口 + 关键cookie检查"""
         try:
+            # 首先检查关键登录cookies是否存在
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            important_cookies = ['passToken', 'userId', 'did', 'kuaishou.server.webday7_st']
+            found_important_cookies = []
+            missing_important_cookies = []
+            
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✓ 快手重要cookie: {cookie_name}")
+                else:
+                    missing_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✗ 快手缺少重要cookie: {cookie_name}")
+            
+            # 如果缺少关键cookies，直接返回未登录
+            if len(found_important_cookies) < 2:
+                utils.logger.warning(f"快手缺少关键cookies: {missing_important_cookies}")
+                return {"is_logged_in": False, "message": f"缺少关键cookies: {missing_important_cookies}"}
+            
             cookie_str = self._build_cookie_string(cookies)
             
             # 快手GraphQL API
@@ -261,8 +321,28 @@ class APILoginValidator:
             return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
     
     async def verify_bilibili_login(self, cookies: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """验证B站登录状态"""
+        """验证B站登录状态 - 使用nav API + 关键cookie检查"""
         try:
+            # 首先检查关键登录cookies是否存在
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            important_cookies = ['SESSDATA', 'DedeUserID', 'bili_jct']
+            found_important_cookies = []
+            missing_important_cookies = []
+            
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✓ B站重要cookie: {cookie_name}")
+                else:
+                    missing_important_cookies.append(cookie_name)
+                    utils.logger.debug(f"✗ B站缺少重要cookie: {cookie_name}")
+            
+            # 如果缺少关键cookies，直接返回未登录
+            if len(found_important_cookies) < 2:
+                utils.logger.warning(f"B站缺少关键cookies: {missing_important_cookies}")
+                return {"is_logged_in": False, "message": f"缺少关键cookies: {missing_important_cookies}"}
+            
             cookie_str = self._build_cookie_string(cookies)
             
             # B站用户信息API

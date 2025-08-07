@@ -4730,178 +4730,90 @@ async def detect_login_success(platform: str, cookies: list, current_url: str) -
         # 基于cookies检测
         cookie_names = [cookie['name'] for cookie in cookies]
         
-        # 抖音平台：只使用两个验证方式
+        # 抖音平台：使用api_validator.py中的验证方法
         if platform == "dy":
-            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-            login_indicators = []
-            
-            # 1. 检查重要的cookies是否存在
-            important_cookies = ['sessionid', 'ttwid', 'passport_csrf_token', 'LOGIN_STATUS']
-            found_important_cookies = 0
-            
-            for cookie_name in important_cookies:
-                cookie_value = cookie_dict.get(cookie_name, '')
-                if cookie_value and len(cookie_value) > 10:
-                    found_important_cookies += 1
-                    utils.logger.info(f"✓ 抖音重要cookie: {cookie_name}")
-            
-            if found_important_cookies >= 2:  # 至少2个重要cookies
-                login_indicators.append("important_cookies")
-                utils.logger.info(f"✓ 抖音重要cookies验证通过: {found_important_cookies}个")
-            
-            # 2. API验证
             try:
                 from utils.api_validator import verify_login_by_api
                 api_result = await verify_login_by_api("dy", cookies)
                 
                 if api_result.get('is_logged_in') == True:
-                    login_indicators.append("api_verification")
-                    utils.logger.info("✓ 抖音API验证通过")
+                    utils.logger.info("✅ 抖音登录检测成功！API验证通过")
+                    utils.logger.info(f"   验证消息: {api_result.get('message', '')}")
+                    return True
                 else:
-                    utils.logger.warning(f"抖音API验证失败: {api_result.get('message', '未知错误')}")
+                    utils.logger.debug(f"抖音登录检测中... API验证失败: {api_result.get('message', '未知错误')}")
+                    return False
             except Exception as e:
                 utils.logger.error(f"抖音API验证异常: {e}")
-            
-            # 需要同时满足两个条件
-            if len(login_indicators) >= 2:
-                utils.logger.info(f"✅ 抖音登录检测成功！满足条件: {', '.join(login_indicators)}")
-                return True
-            else:
-                utils.logger.debug(f"抖音登录检测中... 当前满足条件({len(login_indicators)}): {login_indicators}")
                 return False
         
-        # 快手平台：使用新的getCdns API验证
+        # 快手平台：使用api_validator.py中的验证方法
         elif platform == "ks":
-            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-            login_indicators = []
-            
-            # 1. 检查重要的cookies是否存在
-            important_cookies = ['passToken', 'userId', 'did', 'kuaishou.server.webday7_st']
-            found_important_cookies = 0
-            
-            for cookie_name in important_cookies:
-                cookie_value = cookie_dict.get(cookie_name, '')
-                if cookie_value and len(cookie_value) > 10:
-                    found_important_cookies += 1
-                    utils.logger.info(f"✓ 快手重要cookie: {cookie_name}")
-            
-            if found_important_cookies >= 2:  # 至少2个重要cookies
-                login_indicators.append("important_cookies")
-                utils.logger.info(f"✓ 快手重要cookies验证通过: {found_important_cookies}个")
-            
-            # 2. API验证
             try:
                 from utils.api_validator import verify_login_by_api
                 api_result = await verify_login_by_api("ks", cookies)
                 
                 if api_result.get('is_logged_in') == True:
-                    login_indicators.append("api_verification")
-                    utils.logger.info("✓ 快手checkLoginQuery API验证通过")
+                    utils.logger.info("✅ 快手登录检测成功！API验证通过")
+                    utils.logger.info(f"   验证消息: {api_result.get('message', '')}")
+                    return True
                 else:
-                    utils.logger.warning(f"快手checkLoginQuery API验证失败: {api_result.get('message', '未知错误')}")
+                    utils.logger.debug(f"快手登录检测中... API验证失败: {api_result.get('message', '未知错误')}")
+                    return False
             except Exception as e:
-                utils.logger.error(f"快手checkLoginQuery API验证异常: {e}")
-            
-            # 需要同时满足两个条件
-            if len(login_indicators) >= 2:
-                utils.logger.info(f"✅ 快手登录检测成功！满足条件: {', '.join(login_indicators)}")
-                return True
-            else:
-                utils.logger.debug(f"快手登录检测中... 当前满足条件({len(login_indicators)}): {login_indicators}")
+                utils.logger.error(f"快手API验证异常: {e}")
                 return False
         
-        # B站平台的特殊严格检测
+        # B站平台：使用api_validator.py中的验证方法
         elif platform == "bili":
-            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-            
-            # 打印所有cookies用于调试
-            utils.logger.info(f"🔍 [B站调试] 所有cookies ({len(cookie_dict)}个):")
-            for name, value in cookie_dict.items():
-                utils.logger.info(f"   - {name}: {value[:30]}..." if len(value) > 30 else f"   - {name}: {value}")
-            
-            # 核心认证cookies（必须全部存在）
-            core_cookies = ['SESSDATA', 'DedeUserID', 'bili_jct']
-            core_found = 0
-            missing_core = []
-            
-            for cookie_name in core_cookies:
-                if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                    cookie_value = cookie_dict[cookie_name]
-                    # 不同cookie的最小长度要求
-                    min_length = 32 if cookie_name == 'bili_jct' else 8 if cookie_name == 'DedeUserID' else 50
-                    
-                    if len(cookie_value) >= min_length:
-                        core_found += 1
-                        utils.logger.info(f"✅ B站核心cookie {cookie_name}: {cookie_value[:20]}...")
-                    else:
-                        utils.logger.warning(f"⚠️ B站核心cookie {cookie_name} 值太短: {cookie_value}")
-                        missing_core.append(f"{cookie_name}(值太短)")
+            try:
+                from utils.api_validator import verify_login_by_api
+                api_result = await verify_login_by_api("bili", cookies)
+                
+                if api_result.get('is_logged_in') == True:
+                    utils.logger.info("✅ B站登录检测成功！API验证通过")
+                    utils.logger.info(f"   验证消息: {api_result.get('message', '')}")
+                    return True
                 else:
-                    utils.logger.warning(f"⚠️ B站核心cookie {cookie_name} 不存在")
-                    missing_core.append(f"{cookie_name}(不存在)")
-            
-            # 严格验证：核心cookies必须全部存在
-            if core_found == len(core_cookies):
-                utils.logger.info(f"✅ B站登录检测成功！核心认证({core_found}/{len(core_cookies)})")
-                return True
-            else:
-                utils.logger.debug(f"B站登录检测中... 核心认证({core_found}/{len(core_cookies)})")
-                if missing_core:
-                    utils.logger.debug(f"缺少核心cookies: {missing_core}")
+                    utils.logger.debug(f"B站登录检测中... API验证失败: {api_result.get('message', '未知错误')}")
+                    return False
+            except Exception as e:
+                utils.logger.error(f"B站API验证异常: {e}")
                 return False
         
-        # 小红书的严格检测（仅核心cookies + 强指标）
+        # 小红书平台：使用api_validator.py中的验证方法
         elif platform == "xhs":
-            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-            
-            # 检查核心认证cookies（更严格的要求）
-            core_cookies = ['a1', 'web_session']
-            core_found = 0
-            for cookie_name in core_cookies:
-                if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                    cookie_value = cookie_dict[cookie_name]
-                    min_length = 40 if cookie_name == 'a1' else 30
-                    if len(cookie_value) >= min_length:
-                        core_found += 1
-                        utils.logger.info(f"✅ 小红书核心cookie {cookie_name}: {cookie_value[:20]}...")
-            
-            # 检查强登录指标（必须存在）
-            unread_cookie = cookie_dict.get('unread', '')
-            has_strong_indicator = unread_cookie and ('ub' in unread_cookie or 'ue' in unread_cookie)
-            
-            # 严格判断：必须同时满足核心cookies AND 强指标
-            if core_found >= 2 and has_strong_indicator:
-                utils.logger.info(f"✅ 小红书登录检测成功（严格模式）！核心({core_found}/2) + 强指标")
-                return True
-            else:
-                utils.logger.debug(f"小红书登录检测失败 - 核心({core_found}/2), 强指标({has_strong_indicator}) [需要两者都满足]")
+            try:
+                from utils.api_validator import verify_login_by_api
+                api_result = await verify_login_by_api("xhs", cookies)
+                
+                if api_result.get('is_logged_in') == True:
+                    utils.logger.info("✅ 小红书登录检测成功！API验证通过")
+                    utils.logger.info(f"   验证消息: {api_result.get('message', '')}")
+                    return True
+                else:
+                    utils.logger.debug(f"小红书登录检测中... API验证失败: {api_result.get('message', '未知错误')}")
+                    return False
+            except Exception as e:
+                utils.logger.error(f"小红书API验证异常: {e}")
                 return False
         
-        # 其他平台的关键cookie检测
+        # 其他平台：使用api_validator.py中的验证方法（如果支持）
         else:
-            key_cookies = {
-                "wb": ["SUB", "login_sid_t"],
-                "tieba": ["BDUSS", "STOKEN"],
-                "zhihu": ["z_c0", "q_c1"]
-            }
-            
-            platform_key_cookies = key_cookies.get(platform, [])
-            
-            # 检查是否有关键cookies
-            for key_cookie in platform_key_cookies:
-                if key_cookie in cookie_names:
-                    # 验证cookie值不为空
-                    cookie_value = None
-                    for cookie in cookies:
-                        if cookie['name'] == key_cookie:
-                            cookie_value = cookie['value']
-                            break
-                    
-                    if cookie_value and len(cookie_value) > 10:  # 确保cookie有实际的值
-                        utils.logger.info(f"检测到平台 {platform} 的关键cookie: {key_cookie} (有效值)")
-                        return True
-                    else:
-                        utils.logger.info(f"发现关键cookie {key_cookie} 但值无效: {cookie_value}")
+            try:
+                from utils.api_validator import verify_login_by_api
+                api_result = await verify_login_by_api(platform, cookies)
+                
+                if api_result.get('is_logged_in') == True:
+                    utils.logger.info(f"✅ {platform} 登录检测成功！API验证通过")
+                    utils.logger.info(f"   验证消息: {api_result.get('message', '')}")
+                    return True
+                else:
+                    utils.logger.debug(f"{platform} 登录检测中... API验证失败: {api_result.get('message', '未知错误')}")
+                    return False
+            except Exception as e:
+                utils.logger.debug(f"{platform} API验证异常，使用URL检测: {e}")
+                # 如果API验证不支持，继续使用URL检测
         
         # 基于URL检测（登录后通常会跳转到主页或个人页面）
         success_url_patterns = {
