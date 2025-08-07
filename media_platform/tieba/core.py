@@ -20,7 +20,33 @@ from playwright.async_api import (BrowserContext, BrowserType, Page,
 
 import config
 from base.base_crawler import AbstractCrawler
-from model.m_baidu_tieba import TiebaCreator, TiebaNote
+from pydantic import BaseModel, Field
+
+class TiebaNote(BaseModel):
+    """贴吧帖子"""
+    note_id: str = Field(default="", description="帖子ID")
+    title: str = Field(default="", description="帖子标题")
+    content: str = Field(default="", description="帖子内容")
+    author_id: str = Field(default="", description="作者ID")
+    author_name: str = Field(default="", description="作者名称")
+    tieba_name: str = Field(default="", description="贴吧名称")
+    publish_time: int = Field(default=0, description="发布时间")
+    like_count: int = Field(default=0, description="点赞数")
+    comment_count: int = Field(default=0, description="评论数")
+    share_count: int = Field(default=0, description="分享数")
+    view_count: int = Field(default=0, description="浏览数")
+    source_keyword: str = Field(default="", description="来源关键词")
+    note_url: str = Field(default="", description="帖子链接")
+
+class TiebaCreator(BaseModel):
+    """贴吧创作者"""
+    user_id: str = Field(default="", description="用户ID")
+    user_name: str = Field(default="", description="用户名称")
+    user_avatar: str = Field(default="", description="用户头像")
+    follows: int = Field(default=0, description="关注数")
+    fans: int = Field(default=0, description="粉丝数")
+    post_count: int = Field(default=0, description="发帖数")
+    source_keyword: str = Field(default="", description="来源关键词")
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import tieba as tieba_store
 from tools import utils

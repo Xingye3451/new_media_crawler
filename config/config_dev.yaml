@@ -1,6 +1,35 @@
 # 开发环境配置文件
 # 使用方式: ENV=development python main.py
 
+# ==================== 日志配置 ====================
+logging:
+  # 日志级别
+  level: "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # 日志文件配置
+  file_enabled: true
+  file_path: "./logs"
+  file_name_pattern: "mediacrawler_{date}.log"
+  file_encoding: "utf-8"
+  
+  # 日志保留策略
+  retention_days: 15  # 保留15天，半个月后自动删除
+  max_file_size_mb: 100  # 单个日志文件最大100MB
+  max_files_count: 10  # 最多保留10个日志文件
+  
+  # 日志格式
+  format: "%(asctime)s %(name)s %(levelname)s (%(filename)s:%(lineno)d) - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # 输出配置
+  console_enabled: true
+  file_enabled: true
+  
+  # 特殊日志配置
+  crawler_log_level: "DEBUG"  # 爬虫相关日志级别
+  api_log_level: "DEBUG"      # API相关日志级别
+  db_log_level: "INFO"        # 数据库相关日志级别
+
 # ==================== 代理配置 ====================
 proxy:
   # 代理提供商配置

@@ -22,7 +22,7 @@ import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 
-from tools import utils
+import logging
 
 
 class ConfigSource(Enum):
@@ -411,9 +411,9 @@ class ConfigManager:
                 with open(yaml_file, 'r', encoding='utf-8') as f:
                     yaml_config = yaml.safe_load(f)
                     self._flatten_dict(yaml_config, self._config_cache)
-                    utils.logger.info(f"Loaded YAML config from {yaml_file}")
+                    logging.getLogger(__name__).info(f"Loaded YAML config from {yaml_file}")
             except Exception as e:
-                utils.logger.error(f"Failed to load YAML config: {e}")
+                logging.getLogger(__name__).error(f"Failed to load YAML config: {e}")
     
     def _load_json_config(self):
         """从JSON配置文件加载配置"""
@@ -426,9 +426,9 @@ class ConfigManager:
                 with open(json_file, 'r', encoding='utf-8') as f:
                     json_config = json.load(f)
                     self._flatten_dict(json_config, self._config_cache)
-                    utils.logger.info(f"Loaded JSON config from {json_file}")
+                    logging.getLogger(__name__).info(f"Loaded JSON config from {json_file}")
             except Exception as e:
-                utils.logger.error(f"Failed to load JSON config: {e}")
+                logging.getLogger(__name__).error(f"Failed to load JSON config: {e}")
     
     def _flatten_dict(self, d: Dict, target: Dict, prefix: str = ""):
         """将嵌套字典扁平化"""

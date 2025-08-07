@@ -22,7 +22,13 @@ from tenacity import RetryError
 import config
 from base.base_crawler import AbstractCrawler
 # 移除对配置的依赖，改为从前端传入参数
-from model.m_xiaohongshu import NoteUrlInfo
+from pydantic import BaseModel, Field
+
+class NoteUrlInfo(BaseModel):
+    """小红书笔记URL信息"""
+    note_id: str = Field(title="note id")
+    xsec_token: str = Field(title="xsec token")
+    xsec_source: str = Field(title="xsec source")
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import xhs as xhs_store
 from tools import utils

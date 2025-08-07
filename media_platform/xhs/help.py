@@ -15,7 +15,13 @@ import random
 import time
 import urllib.parse
 
-from model.m_xiaohongshu import NoteUrlInfo
+from pydantic import BaseModel, Field
+
+class NoteUrlInfo(BaseModel):
+    """小红书笔记URL信息"""
+    note_id: str = Field(title="note id")
+    xsec_token: str = Field(title="xsec token")
+    xsec_source: str = Field(title="xsec source")
 from tools.crawler_util import extract_url_params_to_dict
 
 

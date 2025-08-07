@@ -8,7 +8,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import ValidationError as RequestValidationError
-from datetime import datetime
+from datetime import datetime, timedelta
+import asyncio
+import os
+from pathlib import Path
 
 import utils
 import db
@@ -52,10 +55,93 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/images", StaticFiles(directory="static/images"), name="images")
 
 
-
 # 全局变量
 task_status = {}
 multi_platform_task_status = {}
+
+
+async def cleanup_old_logs():
+    """清理过期的日志文件"""
+    try:
+        logs_dir = Path("logs")
+        if not logs_dir.exists():
+            return
+        
+        # 从配置文件读取保留天数
+        retention_days = 15  # 默认值
+        try:
+            from config.config_manager import config_manager
+            retention_days = config_manager.get("logging.retention_days", 15)
+        except Exception as e:
+            utils.logger.warning(f"无法从配置文件读取日志保留天数，使用默认值15天: {e}")
+        
+        cutoff_date = datetime.now() - timedelta(days=retention_days)
+        deleted_count = 0
+        total_size = 0
+        
+        utils.logger.info(f"开始清理过期日志文件，保留天数: {retention_days}")
+        
+        for log_file in logs_dir.glob("*.log"):
+            try:
+                # 尝试从文件名中提取日期
+                file_date_str = log_file.stem.split('_')[-1] if '_' in log_file.stem else None
+                should_delete = False
+                
+                if file_date_str:
+                    try:
+                        file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+                        should_delete = file_date < cutoff_date
+                    except ValueError:
+                        # 如果无法解析日期，使用文件修改时间
+                        file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                        should_delete = file_mtime < cutoff_date
+                else:
+                    # 如果文件名中没有日期，使用文件修改时间
+                    file_mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                    should_delete = file_mtime < cutoff_date
+                
+                if should_delete:
+                    file_size = log_file.stat().st_size
+                    log_file.unlink()
+                    deleted_count += 1
+                    total_size += file_size
+                    utils.logger.info(f"已删除过期日志文件: {log_file.name} (大小: {file_size / 1024 / 1024:.2f}MB)")
+                
+            except Exception as e:
+                utils.logger.error(f"处理日志文件 {log_file} 时出错: {e}")
+        
+        if deleted_count > 0:
+            utils.logger.info(f"日志清理完成，共删除 {deleted_count} 个过期文件，释放空间: {total_size / 1024 / 1024:.2f}MB")
+        else:
+            utils.logger.info("没有需要清理的过期日志文件")
+            
+    except Exception as e:
+        utils.logger.error(f"清理日志文件时出错: {e}")
+
+
+async def log_cleanup_scheduler():
+    """日志清理定时任务"""
+    while True:
+        try:
+            # 计算到下一个凌晨的时间
+            now = datetime.now()
+            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)  # 凌晨2点执行
+            if next_run <= now:
+                next_run += timedelta(days=1)
+            
+            # 等待到下次执行时间
+            wait_seconds = (next_run - now).total_seconds()
+            utils.logger.info(f"日志清理定时任务将在 {next_run.strftime('%Y-%m-%d %H:%M:%S')} 执行")
+            await asyncio.sleep(wait_seconds)
+            
+            # 执行日志清理
+            await cleanup_old_logs()
+            
+        except Exception as e:
+            utils.logger.error(f"日志清理定时任务出错: {e}")
+            # 出错后等待1小时再重试
+            await asyncio.sleep(3600)
+
 
 # 异常处理器
 @app.exception_handler(RequestValidationError)
@@ -119,6 +205,13 @@ async def startup_event():
             utils.logger.info("✅ 任务隔离管理器初始化完成")
         except Exception as e:
             utils.logger.warning(f"⚠️ 任务隔离管理器初始化失败: {e}")
+        
+        # 🆕 启动日志清理定时任务
+        try:
+            asyncio.create_task(log_cleanup_scheduler())
+            utils.logger.info("✅ 日志清理定时任务已启动（每天凌晨2点执行）")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 日志清理定时任务启动失败: {e}")
         
         # 加载配置
         from config.env_config_loader import config_loader
