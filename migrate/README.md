@@ -2,7 +2,7 @@
 
 ## 概述
 
-MediaCrawler 数据库迁移系统提供了完整的数据库版本管理功能，支持全量迁移和增量迁移，确保数据库结构的版本控制和一致性。
+MediaCrawler 数据库迁移系统提供了完整的数据库版本管理功能，支持全量迁移、增量迁移、回滚功能和执行日志记录，确保数据库结构的版本控制和一致性。
 
 ## 目录结构
 
@@ -19,7 +19,14 @@ migrate/
 │   │   └── v1.0.0/        # 版本目录
 │   └── dml/                # 数据操作语言
 │       └── v1.0.0/
+├── rollback/               # 回滚迁移
+│   ├── ddl/                # 数据定义语言
+│   │   └── v1.0.0/        # 版本目录
+│   └── dml/                # 数据操作语言
+│       └── v1.0.0/
 ├── migrate.py              # 迁移工具脚本
+├── run_migration.sh        # 一键迁移脚本
+├── migration_history.json  # 迁移执行日志
 └── README.md               # 本文档
 ```
 
@@ -123,6 +130,23 @@ python migrate/migrate.py --config config/config_prod.yaml --type full --version
 python migrate/migrate.py --type incremental --version v1.0.1
 ```
 
+### 5. 回滚迁移
+
+```bash
+# 回滚到指定版本
+python migrate/migrate.py --rollback v1.0.0
+
+# 查看当前数据库版本
+python migrate/migrate.py --check
+```
+
+### 6. 查看迁移历史
+
+```bash
+# 查看迁移执行历史
+python migrate/migrate.py --history
+```
+
 ## 命令行参数
 
 | 参数 | 说明 | 默认值 |
@@ -134,6 +158,48 @@ python migrate/migrate.py --type incremental --version v1.0.1
 | `--backup-path` | 备份目录路径 | `./backups` |
 | `--check` | 检查数据库状态 | `False` |
 | `--dry-run` | 干运行（显示执行计划） | `False` |
+| `--validate` | 验证迁移文件 | `False` |
+| `--get-version` | 获取当前项目版本 | `False` |
+| `--rollback` | 回滚到指定版本 | `None` |
+| `--history` | 显示迁移历史 | `False` |
+
+## 一键脚本使用
+
+### 基本迁移
+
+```bash
+# 使用 VERSION 文件版本进行迁移
+./migrate/run_migration.sh
+
+# 指定版本迁移
+./migrate/run_migration.sh -v v1.0.1
+
+# 增量迁移
+./migrate/run_migration.sh -t incremental -v v1.0.1
+```
+
+### 回滚功能
+
+```bash
+# 回滚到指定版本
+./migrate/run_migration.sh -r v1.0.0
+
+# 查看迁移历史
+./migrate/run_migration.sh -H
+```
+
+### 验证和检查
+
+```bash
+# 验证迁移文件
+./migrate/run_migration.sh -V
+
+# 检查数据库状态
+./migrate/run_migration.sh -s
+
+# 干运行（查看执行计划）
+./migrate/run_migration.sh -d
+```
 
 ## 配置文件要求
 
@@ -155,12 +221,35 @@ database:
 pip install mysql-connector-python pyyaml
 ```
 
+## 新功能特性
+
+### 1. 迁移回滚功能
+
+- **自动版本检测**：自动检测当前数据库版本
+- **安全回滚**：回滚前自动创建备份
+- **版本记录**：在数据库中记录版本变更历史
+- **回滚文件**：支持自定义回滚SQL文件
+
+### 2. 执行日志记录
+
+- **详细日志**：记录每次迁移的详细信息
+- **JSON格式**：使用JSON格式存储，便于解析
+- **执行时间**：记录迁移执行时间
+- **错误追踪**：详细记录错误信息和失败原因
+
+### 3. 数据库版本管理
+
+- **版本表**：自动创建 `migration_versions` 表
+- **版本追踪**：记录每次迁移的版本信息
+- **状态管理**：支持迁移状态管理（成功/失败/进行中）
+
 ## 安全注意事项
 
 1. **备份重要**：在生产环境执行迁移前，务必创建数据库备份
 2. **权限控制**：确保数据库用户具有足够的权限执行DDL操作
 3. **测试环境**：建议先在测试环境验证迁移脚本
 4. **版本控制**：迁移文件应纳入版本控制系统
+5. **回滚测试**：在生产环境使用回滚功能前，务必在测试环境验证
 
 ## 故障排除
 
@@ -179,11 +268,17 @@ pip install mysql-connector-python pyyaml
    - 确保数据库支持utf8mb4字符集
    - 检查表创建语句的字符集设置
 
+4. **回滚失败**
+   - 检查回滚文件是否存在
+   - 确认回滚文件语法正确
+   - 验证目标版本的有效性
+
 ### 日志文件
 
 迁移工具会生成详细的日志文件：
 - 控制台输出：实时显示执行状态
 - 文件日志：`migrate.log` 包含详细执行记录
+- 历史日志：`migration_history.json` 包含迁移历史记录
 
 ## 版本管理规范
 
@@ -196,14 +291,16 @@ pip install mysql-connector-python pyyaml
 
 - DDL文件：`01_create_tables.sql`、`02_add_indexes.sql`
 - DML文件：`01_insert_initial_data.sql`、`02_update_data.sql`
+- 回滚文件：`01_rollback_tables.sql`、`02_rollback_indexes.sql`
 
 ### 版本升级流程
 
 1. 创建新版本目录
 2. 编写迁移脚本
-3. 测试迁移脚本
-4. 更新文档
-5. 执行迁移
+3. 编写回滚脚本
+4. 测试迁移和回滚脚本
+5. 更新文档
+6. 执行迁移
 
 ## 扩展功能
 
@@ -227,6 +324,25 @@ success = migrator.run_migration("full", "v1.0.0")
 for version in v1.0.0 v1.0.1 v1.1.0; do
     python migrate/migrate.py --type incremental --version $version
 done
+```
+
+### 自动化部署
+
+可以集成到CI/CD流程中：
+
+```bash
+# 自动化迁移脚本
+#!/bin/bash
+set -e
+
+# 检查当前版本
+current_version=$(python migrate/migrate.py --get-version)
+target_version="v1.0.1"
+
+# 执行迁移
+if [ "$current_version" != "$target_version" ]; then
+    python migrate/migrate.py --type incremental --version $target_version --backup
+fi
 ```
 
 ## 联系支持

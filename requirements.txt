@@ -10,6 +10,7 @@ playwright==1.40.0
 # 数据库
 aiomysql==0.2.0
 pymysql==1.1.0
+mysql-connector-python==9.4.0
 
 # 文件处理
 aiofiles==23.2.1
