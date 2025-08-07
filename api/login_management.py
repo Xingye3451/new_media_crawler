@@ -620,10 +620,43 @@ async def check_platform_login_status(request: LoginCheckRequest):
                 }
             else:
                 utils.logger.info(f"[CHECK] 验证失败: {account['account_name']} 未登录，原因: {verification_result.get('message')}")
-                # 🆕 临时注释：实际验证失败，将token设为无效
-                # update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
-                # await db.execute(update_query, request.account_id, request.platform)
-                utils.logger.warning(f"[CHECK] 临时跳过token无效化处理，保持token有效状态")
+                
+                # 🆕 修复：根据验证结果决定是否将token设为无效
+                verification_message = verification_result.get('message', '')
+                is_logged_in = verification_result.get('is_logged_in', False)
+                
+                # 如果API验证返回None（未知状态），保持token有效
+                if is_logged_in is None:
+                    utils.logger.warning(f"[CHECK] API验证返回未知状态，保持token有效")
+                    return {
+                        "code": 200,
+                        "message": f"账号 {account['account_name']} 登录状态未知：{verification_result.get('message', 'API验证失败')}",
+                        "data": {
+                            "platform": request.platform,
+                            "status": "unknown",
+                            "account_info": account_info,
+                            "last_login_time": token['created_at'].isoformat() if token['created_at'] else None,
+                            "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None,
+                            "verification_message": verification_result.get('message', 'API验证失败')
+                        }
+                    }
+                elif (is_logged_in is False and 
+                      ("登录已过期" in verification_message or 
+                       "无登录信息" in verification_message or 
+                       "API请求失败" in verification_message or
+                       "访问被拒绝" in verification_message or
+                       "网络请求异常" in verification_message or
+                       "API验证失败" in verification_message or
+                       "API响应解析失败" in verification_message or
+                       "checkLoginQuery API验证失败" in verification_message or
+                       "小红书API验证失败" in verification_message or
+                       "抖音API验证失败" in verification_message or
+                       "B站API验证失败" in verification_message)):
+                    utils.logger.warning(f"[CHECK] 登录验证失败，将token设为无效: {verification_message}")
+                    update_query = "UPDATE login_tokens SET is_valid = 0 WHERE account_id = %s AND platform = %s"
+                    await db.execute(update_query, request.account_id, request.platform)
+                else:
+                    utils.logger.warning(f"[CHECK] 其他验证失败，保持token有效状态: {verification_message}")
                 
                 return {
                     "code": 200,
@@ -633,7 +666,8 @@ async def check_platform_login_status(request: LoginCheckRequest):
                         "status": "not_logged_in",
                         "account_info": account_info,
                         "last_login_time": token['created_at'].isoformat() if token['created_at'] else None,
-                        "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None
+                        "expires_at": token['expires_at'].isoformat() if token['expires_at'] else None,
+                        "verification_message": verification_result.get('message', '验证失败')
                     }
                 }
         
@@ -2797,36 +2831,40 @@ async def handle_douyin_login(session_id: str, browser_context, page):
                 ttwid = cookie_dict.get('ttwid', '')
                 passport_csrf_token = cookie_dict.get('passport_csrf_token', '')
                 
-                # 更严格的登录状态判断
+                # 🎯 简化：只使用两个验证方式
                 is_logged_in = False
                 login_indicators = []
                 
-                # 检查多个条件，需要满足多个才认为真正登录
-                if has_user_login == "1":
-                    login_indicators.append("localStorage_HasUserLogin")
-                    utils.logger.info("✓ localStorage中HasUserLogin=1")
+                # 1. 检查重要的cookies是否存在
+                important_cookies = ['sessionid', 'ttwid', 'passport_csrf_token', 'LOGIN_STATUS']
+                found_important_cookies = 0
                 
-                if login_status == "1":
-                    login_indicators.append("cookie_LOGIN_STATUS")
-                    utils.logger.info("✓ Cookie中LOGIN_STATUS=1")
+                for cookie_name in important_cookies:
+                    cookie_value = cookie_dict.get(cookie_name, '')
+                    if cookie_value and len(cookie_value) > 10:
+                        found_important_cookies += 1
+                        utils.logger.info(f"✓ 检测到重要cookie: {cookie_name}")
                 
-                if ttwid and len(ttwid) > 10:
-                    login_indicators.append("cookie_ttwid")
-                    utils.logger.info(f"✓ 检测到ttwid cookie: {ttwid[:10]}...")
+                if found_important_cookies >= 2:  # 至少2个重要cookies
+                    login_indicators.append("important_cookies")
+                    utils.logger.info(f"✓ 重要cookies验证通过: {found_important_cookies}个")
                 
-                if passport_csrf_token:
-                    login_indicators.append("cookie_csrf_token")
-                    utils.logger.info("✓ 检测到passport_csrf_token")
+                # 2. API验证
+                try:
+                    from utils.api_validator import verify_login_by_api
+                    api_result = await verify_login_by_api("dy", current_cookies)
+                    
+                    if api_result.get('is_logged_in') == True:
+                        login_indicators.append("api_verification")
+                        utils.logger.info("✓ API验证通过")
+                    else:
+                        utils.logger.warning(f"API验证失败: {api_result.get('message', '未知错误')}")
+                except Exception as e:
+                    utils.logger.error(f"API验证异常: {e}")
                 
-                # 检查URL是否跳转到登录后的页面
-                if any(keyword in current_url.lower() for keyword in ["user", "profile", "creator", "home"]):
-                    if "login" not in current_url.lower():  # 确保不是登录页面
-                        login_indicators.append("url_redirect")
-                        utils.logger.info(f"✓ URL跳转到登录后页面: {current_url}")
-                
-                # 需要至少2个指标才认为登录成功，避免误判
+                # 需要同时满足两个条件
                 if len(login_indicators) >= 2:
-                    utils.logger.info(f"✅ 登录成功！满足{len(login_indicators)}个条件: {', '.join(login_indicators)}")
+                    utils.logger.info(f"✅ 登录成功！满足条件: {', '.join(login_indicators)}")
                     is_logged_in = True
                 else:
                     utils.logger.debug(f"登录检测中... 当前满足条件: {login_indicators}")
@@ -3090,66 +3128,44 @@ async def handle_kuaishou_login(session_id: str, browser_context, page):
         session_data["message"] = f"快手登录失败: {str(e)}"
 
 async def detect_kuaishou_login_success(cookies: list, current_url: str, page) -> bool:
-    """检测快手登录是否成功（宽松模式 - 临时调整）"""
+    """检测快手登录是否成功 - 使用新的getCdns API验证"""
     try:
         cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
         login_indicators = []
         
-        # 打印所有cookies用于调试
-        utils.logger.info(f"🔍 [快手专用调试] 所有cookies ({len(cookie_dict)}个):")
-        for name, value in cookie_dict.items():
-            utils.logger.info(f"   - {name}: {value[:30]}..." if len(value) > 30 else f"   - {name}: {value}")
+        # 1. 检查重要的cookies是否存在
+        important_cookies = ['passToken', 'userId', 'did', 'kuaishou.server.webday7_st']
+        found_important_cookies = 0
         
-        # 1. 检查核心认证cookies（降低要求：主要检查passToken）
-        core_auth_cookies = {
-            'passToken': '认证token',
-            'userId': '用户ID'
-        }
+        for cookie_name in important_cookies:
+            cookie_value = cookie_dict.get(cookie_name, '')
+            if cookie_value and len(cookie_value) > 10:
+                found_important_cookies += 1
+                utils.logger.info(f"✓ [快手] 重要cookie: {cookie_name}")
         
-        core_found = 0
-        missing_core = []
-        for cookie_name, description in core_auth_cookies.items():
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) > 10:  # 确保有实际内容
-                    login_indicators.append(f"核心_{cookie_name}")
-                    core_found += 1
-                    utils.logger.info(f"✅ [快手] 核心认证cookie {cookie_name}: {cookie_value[:20]}...")
-                else:
-                    utils.logger.warning(f"⚠️ [快手] 核心cookie {cookie_name} 值太短: {cookie_value}")
-                    missing_core.append(f"{cookie_name}(值太短)")
+        if found_important_cookies >= 2:  # 至少2个重要cookies
+            login_indicators.append("important_cookies")
+            utils.logger.info(f"✓ [快手] 重要cookies验证通过: {found_important_cookies}个")
+        
+        # 2. API验证
+        try:
+            from utils.api_validator import verify_login_by_api
+            api_result = await verify_login_by_api("ks", cookies)
+            
+            if api_result.get('is_logged_in') == True:
+                login_indicators.append("api_verification")
+                utils.logger.info("✓ [快手] checkLoginQuery API验证通过")
             else:
-                utils.logger.warning(f"⚠️ [快手] 核心cookie {cookie_name} 不存在")
-                missing_core.append(f"{cookie_name}(不存在)")
+                utils.logger.warning(f"[快手] checkLoginQuery API验证失败: {api_result.get('message', '未知错误')}")
+        except Exception as e:
+            utils.logger.error(f"[快手] checkLoginQuery API验证异常: {e}")
         
-        # 2. 检查会话cookies
-        session_cookies = [
-            'kuaishou.server.webday7_st',
-            'kuaishou.server.webday7_ph'
-        ]
-        
-        session_found = 0
-        for cookie_name in session_cookies:
-            if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                cookie_value = cookie_dict[cookie_name]
-                if len(cookie_value) > 20:  # 会话token通常较长
-                    login_indicators.append(f"会话_{cookie_name}")
-                    session_found += 1
-                    utils.logger.info(f"✅ [快手] 会话cookie {cookie_name}: {cookie_value[:30]}...")
-        
-        # 3. 临时降低要求：只要有passToken和至少一个会话cookie就认为登录成功
-        passToken_exists = 'passToken' in cookie_dict and len(cookie_dict['passToken']) > 10
-        
-        if passToken_exists and session_found >= 1:
-            utils.logger.info(f"🎉 [快手] 登录检测成功！passToken存在 + 会话({session_found}) + 其他({len(login_indicators) - 1 - session_found})")
-            if missing_core:
-                utils.logger.warning(f"⚠️ [快手] 注意: 缺少以下核心cookies: {missing_core}")
-            utils.logger.info(f"   所有指标: {', '.join(login_indicators)}")
+        # 需要同时满足两个条件
+        if len(login_indicators) >= 2:
+            utils.logger.info(f"🎉 [快手] 登录检测成功！满足条件: {', '.join(login_indicators)}")
             return True
         else:
-            utils.logger.debug(f"🎬 [快手] 登录检测中... passToken: {passToken_exists}, 会话({session_found})")
-            if missing_core:
-                utils.logger.debug(f"   缺少核心cookies: {missing_core}")
+            utils.logger.debug(f"🎬 [快手] 登录检测中... 当前满足条件({len(login_indicators)}): {login_indicators}")
             return False
             
     except Exception as e:
@@ -4714,102 +4730,84 @@ async def detect_login_success(platform: str, cookies: list, current_url: str) -
         # 基于cookies检测
         cookie_names = [cookie['name'] for cookie in cookies]
         
-        # 抖音平台的特殊严格检测逻辑
+        # 抖音平台：只使用两个验证方式
         if platform == "dy":
             cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
             login_indicators = []
             
-            # 1. sessionid 必须存在且有实际值
-            sessionid = cookie_dict.get('sessionid', '')
-            if sessionid and len(sessionid) > 20:
-                login_indicators.append("sessionid")
-                utils.logger.info(f"✓ 抖音sessionid有效: {sessionid[:10]}...")
+            # 1. 检查重要的cookies是否存在
+            important_cookies = ['sessionid', 'ttwid', 'passport_csrf_token', 'LOGIN_STATUS']
+            found_important_cookies = 0
             
-            # 2. 检查其他用户登录相关cookies
-            ttwid = cookie_dict.get('ttwid', '')
-            if ttwid and len(ttwid) > 10:
-                login_indicators.append("ttwid")
-                utils.logger.info(f"✓ 抖音ttwid有效: {ttwid[:10]}...")
-                
-            odin_tt = cookie_dict.get('odin_tt', '')
-            if odin_tt and len(odin_tt) > 10:
-                login_indicators.append("odin_tt")
-                utils.logger.info(f"✓ 抖音odin_tt有效: {odin_tt[:10]}...")
-                
-            login_status_cookie = cookie_dict.get('LOGIN_STATUS', '')
-            if login_status_cookie == "1":
-                login_indicators.append("login_status")
-                utils.logger.info("✓ 抖音LOGIN_STATUS=1")
-                
-            passport_auth_status = cookie_dict.get('passport_auth_status', '')
-            if passport_auth_status and passport_auth_status != "":
-                login_indicators.append("auth_status")
-                utils.logger.info(f"✓ 抖音passport_auth_status有值: {passport_auth_status}")
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies += 1
+                    utils.logger.info(f"✓ 抖音重要cookie: {cookie_name}")
             
-            # 3. URL检查（作为辅助）
-            success_keywords = ["user", "creator", "profile"]
-            if any(keyword in current_url.lower() for keyword in success_keywords) and "login" not in current_url.lower():
-                login_indicators.append("url_redirect")
-                utils.logger.info(f"✓ 抖音URL跳转到登录后页面: {current_url}")
+            if found_important_cookies >= 2:  # 至少2个重要cookies
+                login_indicators.append("important_cookies")
+                utils.logger.info(f"✓ 抖音重要cookies验证通过: {found_important_cookies}个")
             
-            # 抖音需要至少3个指标才认为登录成功，避免误判
-            if len(login_indicators) >= 3:
-                utils.logger.info(f"✅ 抖音登录检测成功！满足{len(login_indicators)}个条件: {', '.join(login_indicators)}")
+            # 2. API验证
+            try:
+                from utils.api_validator import verify_login_by_api
+                api_result = await verify_login_by_api("dy", cookies)
+                
+                if api_result.get('is_logged_in') == True:
+                    login_indicators.append("api_verification")
+                    utils.logger.info("✓ 抖音API验证通过")
+                else:
+                    utils.logger.warning(f"抖音API验证失败: {api_result.get('message', '未知错误')}")
+            except Exception as e:
+                utils.logger.error(f"抖音API验证异常: {e}")
+            
+            # 需要同时满足两个条件
+            if len(login_indicators) >= 2:
+                utils.logger.info(f"✅ 抖音登录检测成功！满足条件: {', '.join(login_indicators)}")
                 return True
             else:
                 utils.logger.debug(f"抖音登录检测中... 当前满足条件({len(login_indicators)}): {login_indicators}")
                 return False
         
-        # 快手平台的特殊严格检测
+        # 快手平台：使用新的getCdns API验证
         elif platform == "ks":
             cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            login_indicators = []
             
-            # 打印所有cookies用于调试
-            utils.logger.info(f"🔍 [快手调试] 所有cookies ({len(cookie_dict)}个):")
-            for name, value in cookie_dict.items():
-                utils.logger.info(f"   - {name}: {value[:30]}..." if len(value) > 30 else f"   - {name}: {value}")
+            # 1. 检查重要的cookies是否存在
+            important_cookies = ['passToken', 'userId', 'did', 'kuaishou.server.webday7_st']
+            found_important_cookies = 0
             
-            # 核心认证cookies（降低要求：主要检查passToken）
-            core_cookies = ['passToken', 'userId']
-            core_found = 0
-            missing_core = []
+            for cookie_name in important_cookies:
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value and len(cookie_value) > 10:
+                    found_important_cookies += 1
+                    utils.logger.info(f"✓ 快手重要cookie: {cookie_name}")
             
-            for cookie_name in core_cookies:
-                if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                    cookie_value = cookie_dict[cookie_name]
-                    if len(cookie_value) > 10:
-                        core_found += 1
-                        utils.logger.info(f"✅ 快手核心cookie {cookie_name}: {cookie_value[:20]}...")
-                    else:
-                        utils.logger.warning(f"⚠️ 快手核心cookie {cookie_name} 值太短: {cookie_value}")
-                        missing_core.append(f"{cookie_name}(值太短)")
+            if found_important_cookies >= 2:  # 至少2个重要cookies
+                login_indicators.append("important_cookies")
+                utils.logger.info(f"✓ 快手重要cookies验证通过: {found_important_cookies}个")
+            
+            # 2. API验证
+            try:
+                from utils.api_validator import verify_login_by_api
+                api_result = await verify_login_by_api("ks", cookies)
+                
+                if api_result.get('is_logged_in') == True:
+                    login_indicators.append("api_verification")
+                    utils.logger.info("✓ 快手checkLoginQuery API验证通过")
                 else:
-                    utils.logger.warning(f"⚠️ 快手核心cookie {cookie_name} 不存在")
-                    missing_core.append(f"{cookie_name}(不存在)")
+                    utils.logger.warning(f"快手checkLoginQuery API验证失败: {api_result.get('message', '未知错误')}")
+            except Exception as e:
+                utils.logger.error(f"快手checkLoginQuery API验证异常: {e}")
             
-            # 会话cookies（至少一个）
-            session_cookies = ['kuaishou.server.webday7_st', 'kuaishou.server.webday7_ph']
-            session_found = 0
-            
-            for cookie_name in session_cookies:
-                if cookie_name in cookie_dict and cookie_dict[cookie_name]:
-                    cookie_value = cookie_dict[cookie_name]
-                    if len(cookie_value) > 20:
-                        session_found += 1
-                        utils.logger.info(f"✅ 快手会话cookie {cookie_name}: {cookie_value[:30]}...")
-            
-            # 临时降低要求：只要有passToken和至少一个会话cookie就认为登录成功
-            passToken_exists = 'passToken' in cookie_dict and len(cookie_dict['passToken']) > 10
-            
-            if passToken_exists and session_found >= 1:
-                utils.logger.info(f"✅ 快手登录检测成功！passToken存在 + 会话({session_found})")
-                if missing_core:
-                    utils.logger.warning(f"⚠️ 注意: 缺少以下核心cookies: {missing_core}")
+            # 需要同时满足两个条件
+            if len(login_indicators) >= 2:
+                utils.logger.info(f"✅ 快手登录检测成功！满足条件: {', '.join(login_indicators)}")
                 return True
             else:
-                utils.logger.debug(f"快手登录检测中... passToken: {passToken_exists}, 会话({session_found})")
-                if missing_core:
-                    utils.logger.debug(f"缺少核心cookies: {missing_core}")
+                utils.logger.debug(f"快手登录检测中... 当前满足条件({len(login_indicators)}): {login_indicators}")
                 return False
         
         # B站平台的特殊严格检测
@@ -5074,137 +5072,117 @@ async def save_login_cookies(session_id: str, cookies: list, platform: str) -> b
 # ====== 平台登录状态检测函数（提前） ======
 
 async def verify_douyin_login_status(cookies: list) -> dict:
-    """验证抖音登录状态"""
+    """验证抖音登录状态 - 使用多种方法验证"""
     try:
         utils.logger.debug("开始验证抖音登录状态")
-        for c in cookies:
-            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
-        from playwright.async_api import async_playwright
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            await context.add_cookies(cookies)
-            page = await context.new_page()
-            try:
-                await page.goto("https://www.douyin.com", timeout=30000)
-                await page.wait_for_load_state('domcontentloaded', timeout=10000)
-                current_url = page.url
-                title = await page.title()
-                utils.logger.debug(f"主页最终URL: {current_url}, 标题: {title}")
-                page_content = await page.content()
-                utils.logger.debug(f"主页内容前500字: {page_content[:500]}")
-                # 1. 检查localStorage
-                has_user_login = await page.evaluate("() => window.localStorage.getItem('HasUserLogin')")
-                if has_user_login == "1":
-                    utils.logger.info("localStorage显示已登录")
-                    return {"is_logged_in": True, "message": "localStorage显示已登录"}
-                # 2. 检查是否有登录面板
-                login_panel = await page.query_selector("xpath=//div[@id='login-panel-new']")
-                if login_panel:
-                    utils.logger.debug("检测到登录面板")
-                    return {"is_logged_in": False, "message": "显示登录面板"}
-                # 3. 检查LOGIN_STATUS cookie
-                current_cookies = await context.cookies()
-                login_status = None
-                for cookie in current_cookies:
-                    if cookie['name'] == 'LOGIN_STATUS':
-                        login_status = cookie['value']
-                        break
-                if login_status == "1":
-                    utils.logger.info("LOGIN_STATUS显示已登录")
-                    return {"is_logged_in": True, "message": "LOGIN_STATUS显示已登录"}
-                # 4. 访问个人主页，判断是否能获取到用户信息
-                try:
-                    await page.goto("https://www.douyin.com/user/self", timeout=20000)
-                    await page.wait_for_load_state('domcontentloaded', timeout=10000)
-                    current_url2 = page.url
-                    title2 = await page.title()
-                    page_content2 = await page.content()
-                    utils.logger.info(f"个人主页最终URL: {current_url2}, 标题: {title2}")
-                    utils.logger.info(f"个人主页内容前500字: {page_content2[:500]}")
-                    if '登录' not in page_content2 and '请登录' not in page_content2:
-                        utils.logger.info("个人主页内容未出现登录提示，判定为已登录")
-                        return {"is_logged_in": True, "message": "访问个人主页未出现登录提示"}
-                except Exception as e:
-                    utils.logger.debug(f"访问个人主页异常: {e}")
-                return {"is_logged_in": False, "message": "未检测到登录状态"}
-            finally:
-                await browser.close()
+        
+        # 方法1：使用API验证工具
+        try:
+            from utils.api_validator import verify_login_by_api
+            api_result = await verify_login_by_api("dy", cookies)
+            
+            if api_result.get('is_logged_in') is True:
+                utils.logger.info("✅ 抖音API验证成功")
+                return api_result
+            elif api_result.get('is_logged_in') is None:
+                utils.logger.warning("⚠️ 抖音API验证返回未知状态，尝试其他方法")
+            else:
+                utils.logger.warning("❌ 抖音API验证失败，尝试其他方法")
+        except Exception as e:
+            utils.logger.warning(f"抖音API验证异常: {e}")
+        
+        # 方法2：基于cookies的本地验证
+        try:
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            login_indicators = []
+            
+            # 检查关键cookies
+            key_cookies = {
+                'sessionid': 20,  # 至少20字符
+                'ttwid': 10,      # 至少10字符
+                'odin_tt': 10,    # 至少10字符
+                'LOGIN_STATUS': 1, # 值为"1"
+                'passport_csrf_token': 5  # 至少5字符
+            }
+            
+            for cookie_name, min_length in key_cookies.items():
+                cookie_value = cookie_dict.get(cookie_name, '')
+                if cookie_value:
+                    if cookie_name == 'LOGIN_STATUS':
+                        if cookie_value == "1":
+                            login_indicators.append(cookie_name)
+                            utils.logger.info(f"✓ 抖音{cookie_name}=1")
+                    elif len(cookie_value) >= min_length:
+                        login_indicators.append(cookie_name)
+                        utils.logger.info(f"✓ 抖音{cookie_name}有效: {cookie_value[:10]}...")
+            
+            # 如果有足够的cookies，认为已登录
+            if len(login_indicators) >= 2:
+                utils.logger.info(f"✅ 抖音本地验证成功！满足{len(login_indicators)}个条件: {', '.join(login_indicators)}")
+                return {
+                    "is_logged_in": True,
+                    "message": "抖音本地验证通过",
+                    "user_info": {
+                        "platform": "douyin",
+                        "status": "logged_in",
+                        "indicators": login_indicators
+                    }
+                }
+            else:
+                utils.logger.warning(f"❌ 抖音本地验证失败，只有{len(login_indicators)}个指标: {login_indicators}")
+                return {"is_logged_in": False, "message": "本地验证失败"}
+                
+        except Exception as e:
+            utils.logger.error(f"抖音本地验证异常: {e}")
+        
+        # 如果所有方法都失败，返回未知状态
+        return {"is_logged_in": None, "message": "所有验证方法都失败"}
+                
     except Exception as e:
         utils.logger.error(f"验证抖音登录状态失败: {e}")
-        return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
+        return {"is_logged_in": None, "message": f"验证失败: {str(e)}"}
 
 async def verify_kuaishou_login_status(cookies: list) -> dict:
-    """验证快手登录状态"""
+    """验证快手登录状态 - 基于API请求验证"""
     try:
         utils.logger.debug("开始验证快手登录状态")
-        for c in cookies:
-            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
-        # 快手登录核心cookie检测
-        cookie_dict = {c['name']: c['value'] for c in cookies}
-        core_cookies = ['passToken', 'userId']
-        session_cookies = ['kuaishou.server.webday7_st', 'kuaishou.server.webday7_ph']
-        core_found = 0
-        session_found = 0
-        for name in core_cookies:
-            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 10:
-                core_found += 1
-        for name in session_cookies:
-            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 20:
-                session_found += 1
-        if core_found >= 1 and session_found >= 1:
-            utils.logger.info(f"快手登录检测成功！核心({core_found}) 会话({session_found})")
-            return {"is_logged_in": True, "message": "快手cookie检测通过"}
-        else:
-            utils.logger.debug(f"快手登录检测失败，核心({core_found}) 会话({session_found})")
-            return {"is_logged_in": False, "message": "快手cookie缺失或无效"}
+        
+        # 使用新的API验证工具
+        from utils.api_validator import verify_login_by_api
+        result = await verify_login_by_api("ks", cookies)
+        
+        return result
+                
     except Exception as e:
         utils.logger.error(f"验证快手登录状态失败: {e}")
         return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
 
 async def verify_bilibili_login_status(cookies: list) -> dict:
-    """验证B站登录状态"""
+    """验证B站登录状态 - 基于API请求验证"""
     try:
         utils.logger.debug("开始验证B站登录状态")
-        for c in cookies:
-            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
-        cookie_dict = {c['name']: c['value'] for c in cookies}
-        core_cookies = ['SESSDATA', 'DedeUserID', 'bili_jct']
-        core_found = 0
-        for name in core_cookies:
-            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 8:
-                core_found += 1
-        if core_found == len(core_cookies):
-            utils.logger.info(f"B站登录检测成功！核心({core_found})")
-            return {"is_logged_in": True, "message": "B站cookie检测通过"}
-        else:
-            utils.logger.debug(f"B站登录检测失败，核心({core_found})")
-            return {"is_logged_in": False, "message": "B站cookie缺失或无效"}
+        
+        # 使用新的API验证工具
+        from utils.api_validator import verify_login_by_api
+        result = await verify_login_by_api("bili", cookies)
+        
+        return result
+                
     except Exception as e:
         utils.logger.error(f"验证B站登录状态失败: {e}")
         return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}
 
 async def verify_xhs_login_status(cookies: list) -> dict:
-    """验证小红书登录状态"""
+    """验证小红书登录状态 - 基于API请求验证"""
     try:
         utils.logger.debug("开始验证小红书登录状态")
-        for c in cookies:
-            utils.logger.debug(f"传入cookie: {c.get('name')}={c.get('value')} domain={c.get('domain')}")
-        cookie_dict = {c['name']: c['value'] for c in cookies}
-        core_cookies = ['a1', 'web_session']
-        core_found = 0
-        for name in core_cookies:
-            if name in cookie_dict and cookie_dict[name] and len(cookie_dict[name]) > 20:
-                core_found += 1
-        # 强登录指标
-        unread_cookie = cookie_dict.get('unread', '')
-        has_strong_indicator = unread_cookie and ('ub' in unread_cookie or 'ue' in unread_cookie)
-        if core_found >= 2 and has_strong_indicator:
-            utils.logger.info(f"小红书登录检测成功（严格模式）！核心({core_found}/2) + 强指标")
-            return {"is_logged_in": True, "message": "小红书cookie检测通过"}
-        else:
-            utils.logger.debug(f"小红书登录检测失败 - 核心({core_found}/2), 强指标({has_strong_indicator}) [需要两者都满足]")
-            return {"is_logged_in": False, "message": "小红书cookie缺失或无效"}
+        
+        # 使用新的API验证工具
+        from utils.api_validator import verify_login_by_api
+        result = await verify_login_by_api("xhs", cookies)
+        
+        return result
+                
     except Exception as e:
         utils.logger.error(f"验证小红书登录状态失败: {e}")
         return {"is_logged_in": False, "message": f"验证失败: {str(e)}"}

@@ -171,5 +171,7 @@ cython_debug/
 /node_modules
 docs/.vitepress/cache
 
+login_data/
+logs/
 # Miniconda3
 Miniconda3*.sh

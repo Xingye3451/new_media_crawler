@@ -261,7 +261,7 @@ function generate_rc4_bb_str(url_search_params, user_agent, window_env_str, suff
         8: 3, // 固定
         10: end_time, //3次加密结束时间
         15: {
-            "aid": 6383,
+            "aid": 6383, // 抖音Web端应用ID，对应constant/douyin.py中的DOUYIN_AID
             "pageId": 6241,
             "boe": false,
             "ddrt": 7,

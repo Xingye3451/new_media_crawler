@@ -554,25 +554,25 @@
                         <div class="platform-icon">🟠</div>
                         <div class="platform-name">小红书</div>
                         <div class="platform-desc">短视频笔记内容</div>
-                        <div class="platform-status">✅ 可用</div>
+                        <div class="platform-status">⏳ 检查中...</div>
                     </div>
                     <div class="platform-card" data-platform="dy">
                         <div class="platform-icon">🔥</div>
                         <div class="platform-name">抖音</div>
                         <div class="platform-desc">短视频内容</div>
-                        <div class="platform-status">✅ 可用</div>
+                        <div class="platform-status">⏳ 检查中...</div>
                     </div>
                     <div class="platform-card" data-platform="ks">
                         <div class="platform-icon">⚡</div>
                         <div class="platform-name">快手</div>
                         <div class="platform-desc">短视频内容</div>
-                        <div class="platform-status">✅ 可用</div>
+                        <div class="platform-status">⏳ 检查中...</div>
                     </div>
                     <div class="platform-card" data-platform="bili">
                         <div class="platform-icon">📺</div>
                         <div class="platform-name">B站</div>
                         <div class="platform-desc">视频内容</div>
-                        <div class="platform-status">✅ 可用</div>
+                        <div class="platform-status">⏳ 检查中...</div>
                     </div>
                     <div class="platform-card coming-soon" data-platform="wb">
                         <div class="platform-icon">📱</div>
@@ -713,6 +713,9 @@
                     <button class="btn btn-secondary" onclick="clearSinglePlatformForm()">
                         🔄 清空表单
                     </button>
+                    <button class="btn btn-info" onclick="refreshAllPlatformStatus()">
+                        🔍 刷新登录状态
+                    </button>
 
                 </div>
 
@@ -852,11 +855,18 @@
 
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面初始化开始...');
+            
+            // 重置所有平台状态为检查中
+            resetAllPlatformStatus();
+            
             // 默认选择小红书平台
             selectPlatform('xhs');
             
             // 预检查所有平台的登录状态
-            checkAllPlatformsLoginStatus();
+            setTimeout(() => {
+                checkAllPlatformsLoginStatus();
+            }, 1000); // 延迟1秒执行，确保页面完全加载
             
             // 监听爬取类型变化
             document.getElementById('single-crawler-type').addEventListener('change', handleCrawlerTypeChange);
@@ -869,7 +879,42 @@
             if (startBtn) {
                 console.log('开始按钮已加载');
             }
+            
+            console.log('页面初始化完成');
         });
+        
+        // 重置所有平台状态
+        function resetAllPlatformStatus() {
+            const platforms = ['xhs', 'dy', 'ks', 'bili'];
+            platforms.forEach(platform => {
+                const card = document.querySelector(`.platform-card[data-platform="${platform}"]`);
+                if (card) {
+                    const statusElement = card.querySelector('.platform-status');
+                    if (statusElement) {
+                        statusElement.textContent = '⏳ 检查中...';
+                        statusElement.style.color = '#6c757d';
+                        card.style.opacity = '0.8';
+                        card.style.cursor = 'wait';
+                    }
+                }
+            });
+            console.log('已重置所有平台状态为检查中');
+        }
+        
+        // 刷新所有平台登录状态
+        async function refreshAllPlatformStatus() {
+            console.log('开始刷新所有平台登录状态...');
+            showToast('正在刷新登录状态...', 'info');
+            
+            // 重置状态
+            resetAllPlatformStatus();
+            
+            // 延迟执行检查
+            setTimeout(async () => {
+                await checkAllPlatformsLoginStatus();
+                showToast('登录状态刷新完成', 'success');
+            }, 500);
+        }
 
         // 切换标签页
         function switchTab(tabId) {
@@ -926,7 +971,9 @@
                     
                     const data = await response.json();
                     
-                    if (data.code === 200) {
+                    console.log(`平台 ${platform} 登录检查结果:`, data);
+                    
+                    if (data.code === 200 && data.data && data.data.status === 'logged_in') {
                         updatePlatformStatus(platform, 'logged_in');
                     } else {
                         updatePlatformStatus(platform, 'not_logged_in');
@@ -947,13 +994,25 @@
                     if (status === 'logged_in') {
                         statusElement.textContent = '✅ 已登录';
                         statusElement.style.color = '#28a745';
+                        // 添加可用状态样式
+                        card.style.opacity = '1';
+                        card.style.cursor = 'pointer';
                     } else if (status === 'error') {
                         statusElement.textContent = '❌ 检查失败';
                         statusElement.style.color = '#dc3545';
+                        // 添加错误状态样式
+                        card.style.opacity = '0.6';
+                        card.style.cursor = 'not-allowed';
                     } else {
                         statusElement.textContent = '⚠️ 需登录';
                         statusElement.style.color = '#ffc107';
+                        // 添加需要登录状态样式
+                        card.style.opacity = '0.8';
+                        card.style.cursor = 'pointer';
                     }
+                    
+                    // 调试日志
+                    console.log(`平台 ${platform} 状态更新为: ${status}`);
                 }
             }
         }
@@ -1022,7 +1081,9 @@
                 
                 const data = await response.json();
                 
-                if (data.code === 200) {
+                console.log(`平台 ${platform} 详细登录检查结果:`, data);
+                
+                if (data.code === 200 && data.data && data.data.status === 'logged_in') {
                     // 登录状态正常
                     const platformName = getPlatformName(platform);
                     showToast(`${platformName} 登录状态正常`, 'success');

@@ -25,6 +25,16 @@ from var import request_keyword_var
 from .exception import *
 from .field import *
 from .help import *
+from constant.douyin import (
+    DOUYIN_AID, DOUYIN_DEVICE_PLATFORM, DOUYIN_CHANNEL, 
+    DOUYIN_VERSION_CODE, DOUYIN_VERSION_NAME, DOUYIN_UPDATE_VERSION_CODE,
+    DOUYIN_PC_CLIENT_TYPE, DOUYIN_COOKIE_ENABLED, DOUYIN_BROWSER_LANGUAGE,
+    DOUYIN_BROWSER_PLATFORM, DOUYIN_BROWSER_NAME, DOUYIN_BROWSER_VERSION,
+    DOUYIN_BROWSER_ONLINE, DOUYIN_ENGINE_NAME, DOUYIN_OS_NAME, DOUYIN_OS_VERSION,
+    DOUYIN_CPU_CORE_NUM, DOUYIN_DEVICE_MEMORY, DOUYIN_ENGINE_VERSION,
+    DOUYIN_PLATFORM, DOUYIN_SCREEN_WIDTH, DOUYIN_SCREEN_HEIGHT,
+    DOUYIN_EFFECTIVE_TYPE, DOUYIN_ROUND_TRIP_TIME
+)
 
 
 class DOUYINClient(AbstractApiClient):
@@ -64,30 +74,30 @@ class DOUYINClient(AbstractApiClient):
                 utils.logger.warning(f"⚠️ [DOUYINClient] 获取localStorage失败: {e}")
                 local_storage: Dict = {}
         common_params = {
-            "device_platform": "webapp",
-            "aid": "6383",
-            "channel": "channel_pc_web",
-            "version_code": "190600",
-            "version_name": "19.6.0",
-            "update_version_code": "170400",
-            "pc_client_type": "1",
-            "cookie_enabled": "true",
-            "browser_language": "zh-CN",
-            "browser_platform": "MacIntel",
-            "browser_name": "Chrome",
-            "browser_version": "125.0.0.0",
-            "browser_online": "true",
-            "engine_name": "Blink",
-            "os_name": "Mac OS",
-            "os_version": "10.15.7",
-            "cpu_core_num": "8",
-            "device_memory": "8",
-            "engine_version": "109.0",
-            "platform": "PC",
-            "screen_width": "2560",
-            "screen_height": "1440",
-            'effective_type': '4g',
-            "round_trip_time": "50",
+            "device_platform": DOUYIN_DEVICE_PLATFORM,
+            "aid": str(DOUYIN_AID),
+            "channel": DOUYIN_CHANNEL,
+            "version_code": DOUYIN_VERSION_CODE,
+            "version_name": DOUYIN_VERSION_NAME,
+            "update_version_code": DOUYIN_UPDATE_VERSION_CODE,
+            "pc_client_type": DOUYIN_PC_CLIENT_TYPE,
+            "cookie_enabled": DOUYIN_COOKIE_ENABLED,
+            "browser_language": DOUYIN_BROWSER_LANGUAGE,
+            "browser_platform": DOUYIN_BROWSER_PLATFORM,
+            "browser_name": DOUYIN_BROWSER_NAME,
+            "browser_version": DOUYIN_BROWSER_VERSION,
+            "browser_online": DOUYIN_BROWSER_ONLINE,
+            "engine_name": DOUYIN_ENGINE_NAME,
+            "os_name": DOUYIN_OS_NAME,
+            "os_version": DOUYIN_OS_VERSION,
+            "cpu_core_num": DOUYIN_CPU_CORE_NUM,
+            "device_memory": DOUYIN_DEVICE_MEMORY,
+            "engine_version": DOUYIN_ENGINE_VERSION,
+            "platform": DOUYIN_PLATFORM,
+            "screen_width": DOUYIN_SCREEN_WIDTH,
+            "screen_height": DOUYIN_SCREEN_HEIGHT,
+            'effective_type': DOUYIN_EFFECTIVE_TYPE,
+            "round_trip_time": DOUYIN_ROUND_TRIP_TIME,
             "webid": get_web_id(),
             "msToken": local_storage.get("xmst"),
         }

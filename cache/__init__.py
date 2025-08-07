@@ -8,10 +8,12 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。  
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。  
 
+"""
+缓存模块
+提供统一的缓存接口，支持内存缓存和Redis缓存
+"""
 
-# -*- coding: utf-8 -*-
+from .abs_cache import AbstractCache
+from .cache_factory import CacheFactory
 
-# 导入各平台常量
-from .zhihu import *
-from .baidu_tieba import *
-from .douyin import *
+__all__ = ['AbstractCache', 'CacheFactory']
