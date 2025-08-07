@@ -380,7 +380,9 @@ class DouYinCrawler(AbstractCrawler):
                         # 获取评论（如果启用）
             if config.ENABLE_GET_COMMENTS and aweme_list:
                 try:
-                    await self.batch_get_note_comments(aweme_list)
+                    # 🆕 从前端传入参数，默认10条评论
+                    max_comments = getattr(self, 'max_comments', 10)
+                    await self.batch_get_note_comments(aweme_list, max_comments)
                 except Exception as e:
                     utils.logger.error(f"[DouYinCrawler.search] Failed to get comments: {e}")
             
@@ -388,16 +390,9 @@ class DouYinCrawler(AbstractCrawler):
 
     async def get_specified_awemes(self):
         """Get the information and comments of the specified post"""
-        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-        task_list = [
-            self.get_aweme_detail(aweme_id=aweme_id, semaphore=semaphore) for aweme_id in config.DY_SPECIFIED_ID_LIST
-        ]
-        aweme_details = await asyncio.gather(*task_list)
-        for aweme_detail in aweme_details:
-            if aweme_detail is not None:
-                # 使用Redis存储
-                await self.douyin_store.store_content({**aweme_detail, "task_id": self.task_id} if self.task_id else aweme_detail)
-        await self.batch_get_note_comments(config.DY_SPECIFIED_ID_LIST)
+        # 🆕 移除对配置的依赖，改为从前端传入参数
+        utils.logger.warning("[DouYinCrawler.get_specified_awemes] 此方法已废弃，请使用search_by_keywords或get_creators_and_notes_from_db")
+        pass
 
     async def get_aweme_detail(self, aweme_id: str, semaphore: asyncio.Semaphore) -> Any:
         """Get note detail"""
@@ -412,7 +407,7 @@ class DouYinCrawler(AbstractCrawler):
                     f"[DouYinCrawler.get_aweme_detail] have not fund note detail aweme_id:{aweme_id}, err: {ex}")
                 return None
 
-    async def batch_get_note_comments(self, aweme_list: List[str]) -> None:
+    async def batch_get_note_comments(self, aweme_list: List[str], max_comments: int = 10) -> None:
         """
         Batch get note comments
         """
@@ -438,7 +433,7 @@ class DouYinCrawler(AbstractCrawler):
             task_list: List[Task] = []
             for aweme_id in batch_awemes:
                 task = asyncio.create_task(
-                    self.get_comments(aweme_id, semaphore), name=aweme_id)
+                    self.get_comments(aweme_id, semaphore, max_comments), name=aweme_id)
                 task_list.append(task)
             
             if len(task_list) > 0:
@@ -462,7 +457,7 @@ class DouYinCrawler(AbstractCrawler):
         
         utils.logger.info(f"[DouYinCrawler.batch_get_note_comments] Comment processing completed. Total processed: {total_processed}")
 
-    async def get_comments(self, aweme_id: str, semaphore: asyncio.Semaphore) -> None:
+    async def get_comments(self, aweme_id: str, semaphore: asyncio.Semaphore, max_comments: int = 10) -> None:
         async with semaphore:
             try:
                 # 将关键词列表传递给 get_aweme_all_comments 方法
@@ -471,7 +466,7 @@ class DouYinCrawler(AbstractCrawler):
                     crawl_interval=random.random(),
                     is_fetch_sub_comments=config.ENABLE_GET_SUB_COMMENTS,
                     callback=douyin_store.batch_update_dy_aweme_comments,
-                    max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES
+                    max_count=max_comments  # 🆕 从前端传入参数
                 )
                 utils.logger.info(
                     f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} comments have all been obtained and filtered ...")
@@ -482,20 +477,9 @@ class DouYinCrawler(AbstractCrawler):
         """
         Get the information and videos of the specified creator
         """
-        utils.logger.info("[DouYinCrawler.get_creators_and_videos] Begin get douyin creators")
-        for user_id in config.DY_CREATOR_ID_LIST:
-            creator_info: Dict = await self.dy_client.get_user_info(user_id)
-            if creator_info:
-                await douyin_store.save_creator(user_id, creator=creator_info)
-
-            # Get all video information of the creator
-            all_video_list = await self.dy_client.get_all_user_aweme_posts(
-                sec_user_id=user_id,
-                callback=self.fetch_creator_video_detail
-            )
-
-            video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
-            await self.batch_get_note_comments(video_ids)
+        # 🆕 移除对配置的依赖，改为从前端传入参数
+        utils.logger.warning("[DouYinCrawler.get_creators_and_videos] 此方法已废弃，请使用get_creators_and_notes_from_db")
+        pass
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
                                            keywords: str = None, account_id: str = None, session_id: str = None,
@@ -523,6 +507,11 @@ class DouYinCrawler(AbstractCrawler):
             utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
             utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
             utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+            
+            # 🆕 设置max_comments参数，从前端传入
+            self.max_comments = 10  # 默认10条评论，可以从前端传入
+            if get_comments:
+                utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 启用评论获取，最大评论数: {self.max_comments}")
             
             # 确保客户端已初始化
             if not hasattr(self, 'dy_client') or self.dy_client is None:
@@ -625,7 +614,9 @@ class DouYinCrawler(AbstractCrawler):
                                 aweme_ids = [video_item.get("aweme_id") for video_item in all_results if video_item.get("aweme_id")]
                                 if aweme_ids:
                                     utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 为 {len(aweme_ids)} 个视频获取评论")
-                                    await self.batch_get_note_comments(aweme_ids)
+                                    # 🆕 从前端传入参数，默认10条评论
+                                    max_comments = getattr(self, 'max_comments', 10)
+                                    await self.batch_get_note_comments(aweme_ids, max_comments)
                                     utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 评论获取完成")
                             except Exception as e:
                                 utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取评论失败: {e}")
@@ -808,6 +799,11 @@ class DouYinCrawler(AbstractCrawler):
             self.account_id = account_id
             if account_id:
                 utils.logger.info(f"[DouYinCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
+            
+            # 🆕 设置max_comments参数，从前端传入
+            self.max_comments = 10  # 默认10条评论，可以从前端传入
+            if get_comments:
+                utils.logger.info(f"[DouYinCrawler.search_by_keywords] 启用评论获取，最大评论数: {self.max_comments}")
             
             # 设置配置
             import config

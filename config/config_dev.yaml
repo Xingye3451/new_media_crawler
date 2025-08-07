@@ -215,54 +215,23 @@ development:
   enable_detailed_errors: true  # 开发环境显示详细错误
   test_mode: true  # 开发环境启用测试模式
 
-# ==================== 平台特定配置 ====================
-xhs:
-  search_note_type: "video"
-  xhs_specified_id_list: []
-  xhs_creator_id_list: []
-
-douyin:
-  publish_time_type: 0
-  dy_specified_id_list: []
-  dy_creator_id_list: []
-
-kuaishou:
-  ks_specified_id_list: []
-  ks_creator_id_list: []
-
-bilibili:
-  all_day: false
-  start_day: "2024-01-01"
-  end_day: "2024-01-31"
-  bili_specified_id_list: []
-  bili_creator_id_list: []
-  creator_mode: false
-
-weibo:
-  weibo_specified_id_list: []
-  weibo_creator_id_list: []
-
-tieba:
-  tieba_specified_id_list: []
-  tieba_name_list: []
-  tieba_creator_url_list: []
-
-zhihu:
-  zhihu_specified_id_list: []
-  zhihu_creator_url_list: []
-
-# ==================== 评论配置 ====================
-comments:
-  max_comments_count_single_notes: 50  # 开发环境减少评论数
-  max_sub_comments_count_single_notes: 25
-
-# ==================== 联系人配置 ====================
-contacts:
-  max_contacts_count_single_notes: 50  # 开发环境减少联系人数
-
-# ==================== 动态配置 ====================
-dynamics:
-  max_dynamics_count_single_notes: 50  # 开发环境减少动态数
+# ==================== 任务隔离配置 ====================
+task_isolation:
+  # 任务隔离模式
+  isolation_mode: "strict"  # strict: 完全隔离, shared: 共享资源
+  
+  # 任务并发控制
+  max_concurrent_tasks: 5  # 开发环境减少并发数
+  max_tasks_per_session: 20  # 开发环境减少任务数
+  
+  # 资源隔离
+  enable_resource_isolation: true
+  enable_cross_task_data_access: false
+  
+  # 认证预留接口
+  auth_middleware_enabled: false  # 预留：将来集成用户认证
+  auth_token_header: "Authorization"
+  auth_session_timeout: 7200  # 2小时
 
 # ==================== 词云配置 ====================
 wordcloud:
@@ -273,20 +242,6 @@ wordcloud:
   stop_words_file: "./docs/hit_stopwords.txt"
   font_path: "./docs/STZHONGS.TTF"
 
-# ==================== 兼容性配置 ====================
+# ==================== 基础配置 ====================
 ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
-save_login_state: true
-cookies: ""
-account_id: null
-start_page: 1
-crawler_max_comments_count_singlenotes: 10
-sort_type: "popularity_descending"
-publish_time_type: 0
-xhs_specified_note_url_list: []
-start_day: '2024-01-01'
-end_day: '2024-01-01'
-all_day: false
-creator_mode: true
-start_contacs_page: 1
-crawler_max_contacs_count_singlenotes: 50  # 开发环境减少数量
-crawler_max_dynamics_count_singlenotes: 25  # 开发环境减少数量 
+save_login_state: true 

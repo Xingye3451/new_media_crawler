@@ -21,7 +21,7 @@ from tenacity import RetryError
 
 import config
 from base.base_crawler import AbstractCrawler
-from config import CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES
+# 移除对配置的依赖，改为从前端传入参数
 from model.m_xiaohongshu import NoteUrlInfo
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import xhs as xhs_store
@@ -302,32 +302,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
         utils.logger.info(
             "[XiaoHongShuCrawler.get_creators_and_notes] Begin get xiaohongshu creators"
         )
-        for user_id in config.XHS_CREATOR_ID_LIST:
-            # get creator detail info from web html content
-            createor_info: Dict = await self.xhs_client.get_creator_info(
-                user_id=user_id
-            )
-            if createor_info:
-                await self.xhs_store.save_creator(user_id, creator=createor_info)
-
-            # When proxy is not enabled, increase the crawling interval
-            if config.ENABLE_IP_PROXY:
-                crawl_interval = random.random()
-            else:
-                crawl_interval = random.uniform(1, config.CRAWLER_MAX_SLEEP_SEC)
-            # Get all note information of the creator
-            all_notes_list = await self.xhs_client.get_all_notes_by_creator(
-                user_id=user_id,
-                crawl_interval=crawl_interval,
-                callback=self.fetch_creator_notes_detail,
-            )
-
-            note_ids = []
-            xsec_tokens = []
-            for note_item in all_notes_list:
-                note_ids.append(note_item.get("note_id"))
-                xsec_tokens.append(note_item.get("xsec_token"))
-            await self.batch_get_note_comments(note_ids, xsec_tokens)
+        # 🆕 移除对配置的依赖，改为从前端传入参数
+        # 这个方法现在主要用于兼容性，实际使用get_creators_and_notes_from_db
+        utils.logger.warning("[XiaoHongShuCrawler.get_creators_and_notes] 此方法已废弃，请使用get_creators_and_notes_from_db")
+        pass
 
     async def get_creators_and_notes_from_db(self, creators: List[Dict], max_count: int = 50,
                                            keywords: str = None, account_id: str = None, session_id: str = None,
@@ -354,6 +332,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 最大数量限制: {max_count}")
             utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 关键词: '{keywords}'")
             utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+            
+            # 🆕 设置max_comments参数，从前端传入
+            self.max_comments = 10  # 默认10条评论，可以从前端传入
+            if get_comments:
+                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 启用评论获取，最大评论数: {self.max_comments}")
             
             # 确保客户端已初始化
             if not hasattr(self, 'xhs_client') or self.xhs_client is None:
@@ -469,7 +452,9 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             
                             if note_ids:
                                 utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 为 {len(note_ids)} 条笔记获取评论")
-                                await self.batch_get_note_comments(note_ids, xsec_tokens)
+                                # 🆕 从前端传入参数，默认10条评论
+                                max_comments = getattr(self, 'max_comments', 10)
+                                await self.batch_get_note_comments(note_ids, xsec_tokens, max_comments)
                     else:
                         utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 创作者 {creator_name} 没有获取到笔记")
                 
@@ -533,7 +518,9 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 need_get_comment_note_ids.append(note_detail.get("note_id", ""))
                 xsec_tokens.append(note_detail.get("xsec_token", ""))
                 await self.xhs_store.update_xhs_note(note_detail, task_id=self.task_id)
-        await self.batch_get_note_comments(need_get_comment_note_ids, xsec_tokens)
+        # 🆕 从前端传入参数，默认10条评论
+        max_comments = getattr(self, 'max_comments', 10)
+        await self.batch_get_note_comments(need_get_comment_note_ids, xsec_tokens, max_comments)
 
     async def get_note_detail_async_task(
         self,
@@ -603,7 +590,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 return None
 
     async def batch_get_note_comments(
-        self, note_list: List[str], xsec_tokens: List[str]
+        self, note_list: List[str], xsec_tokens: List[str], max_comments: int = 10
     ):
         """Batch get note comments"""
         if not config.ENABLE_GET_COMMENTS:
@@ -634,7 +621,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             for index, note_id in enumerate(batch_notes):
                 task = asyncio.create_task(
                     self.get_comments(
-                            note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore
+                            note_id=note_id, xsec_token=batch_tokens[index], semaphore=semaphore, max_comments=max_comments
                     ),
                     name=note_id,
                 )
@@ -661,7 +648,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Comment processing completed. Total processed: {total_processed}")
 
     async def get_comments(
-        self, note_id: str, xsec_token: str, semaphore: asyncio.Semaphore
+        self, note_id: str, xsec_token: str, semaphore: asyncio.Semaphore, max_comments: int = 10
     ):
         """Get note comments with keyword filtering and quantity limitation"""
         async with semaphore:
@@ -678,7 +665,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 xsec_token=xsec_token,
                 crawl_interval=crawl_interval,
                 callback=self.xhs_store.batch_update_xhs_note_comments,
-                max_count=CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                max_count=max_comments,  # 🆕 从前端传入参数
             )
 
     @staticmethod
@@ -855,6 +842,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
             self.account_id = account_id
             if account_id:
                 utils.logger.info(f"[XiaoHongShuCrawler.search_by_keywords] 使用指定账号ID: {account_id}")
+            
+            # 🆕 设置max_comments参数，从前端传入
+            self.max_comments = 10  # 默认10条评论，可以从前端传入
+            if get_comments:
+                utils.logger.info(f"[XiaoHongShuCrawler.search_by_keywords] 启用评论获取，最大评论数: {self.max_comments}")
             
             # 设置配置
             import config

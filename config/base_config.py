@@ -181,133 +181,30 @@ DEVELOPMENT_ENABLE_DEBUG_TOOLBAR = development_config.enable_debug_toolbar
 DEVELOPMENT_ENABLE_DETAILED_ERRORS = development_config.enable_detailed_errors
 DEVELOPMENT_TEST_MODE = development_config.test_mode
 
-# ==================== 兼容性配置 ====================
-# 为了保持向后兼容，保留原有的配置项
-# 这些配置项会从新的配置管理器中获取值
+# ==================== 任务隔离配置 ====================
+# 任务隔离相关配置
+TASK_ISOLATION_MODE = "strict"  # strict: 完全隔离, shared: 共享资源
+TASK_MAX_CONCURRENT_TASKS = 10
+TASK_MAX_TASKS_PER_SESSION = 50
+TASK_ENABLE_RESOURCE_ISOLATION = True
+TASK_ENABLE_CROSS_DATA_ACCESS = False
 
-# 自定义User Agent（暂时仅对XHS有效）
+# 认证预留配置
+AUTH_MIDDLEWARE_ENABLED = False  # 预留：将来集成用户认证
+AUTH_TOKEN_HEADER = "Authorization"
+AUTH_SESSION_TIMEOUT = 7200  # 2小时
+
+# ==================== 基础配置 ====================
+# 自定义User Agent
 UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
 
 # 是否保存登录状态
 SAVE_LOGIN_STATE = True
 
-# 登录cookies（仅用于命令行参数兼容，爬虫实际从数据库读取）
-COOKIES = ""
-
-# 指定使用的账号ID（可选，如果不指定则使用最新登录的账号）
-ACCOUNT_ID = None
-
-# 爬取开始页数 默认从第一页开始
-START_PAGE = 1
-
-# 爬取一级评论的数量控制(单视频/帖子)
-CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
-
-# 具体值参见media_platform.xxx.field下的枚举值，暂时只支持小红书
-SORT_TYPE = "popularity_descending"
-
-# 具体值参见media_platform.xxx.field下的枚举值，暂时只支持抖音
-PUBLISH_TIME_TYPE = 0
-
-# 已废弃⚠️⚠️⚠️指定小红书需要爬虫的笔记ID列表
-# 已废弃⚠️⚠️⚠️ 指定笔记ID笔记列表会因为缺少xsec_token和xsec_source参数导致爬取失败
-# XHS_SPECIFIED_ID_LIST = [
-#     "66fad51c000000001b0224b8",
-#     # ........................
-# ]
-
-# 指定小红书需要爬虫的笔记URL列表, 目前要携带xsec_token和xsec_source参数
-XHS_SPECIFIED_NOTE_URL_LIST = [
-    "https://www.xiaohongshu.com/explore/66fad51c000000001b0224b8?xsec_token=AB3rO-QopW5sgrJ41GwN01WCXh6yWPxjSoFI9D5JIMgKw=&xsec_source=pc_search"
-    # ........................
-]
-
-# 指定抖音需要爬取的ID列表
-DY_SPECIFIED_ID_LIST = [
-    "7280854932641664319",
-    "7202432992642387233",
-    # ........................
-]
-
-# 指定快手平台需要爬取的ID列表
-KS_SPECIFIED_ID_LIST = ["3xf8enb8dbj6uig", "3x6zz972bchmvqe"]
-
-# 指定B站平台需要爬取的视频bvid列表
-BILI_SPECIFIED_ID_LIST = [
-    "BV1d54y1g7db",
-    "BV1Sz4y1U77N",
-    "BV14Q4y1n7jz",
-    # ........................
-]
-
-# 指定微博平台需要爬取的帖子列表
-WEIBO_SPECIFIED_ID_LIST = [
-    "4982041758140155",
-    # ........................
-]
-
-# 指定weibo创作者ID列表
-WEIBO_CREATOR_ID_LIST = [
-    "5533390220",
-    # ........................
-]
-
-# 指定贴吧需要爬取的帖子列表
-TIEBA_SPECIFIED_ID_LIST = []
-
-# 指定贴吧名称列表，爬取该贴吧下的帖子
-TIEBA_NAME_LIST = [
-    # "盗墓笔记"
-]
-
-# 指定贴吧创作者URL列表
-TIEBA_CREATOR_URL_LIST = [
-    "https://tieba.baidu.com/home/main/?id=tb.1.7f139e2e.6CyEwxu3VJruH_-QqpCi6g&fr=frs",
-    # ........................
-]
-
-# 指定小红书创作者ID列表
-XHS_CREATOR_ID_LIST = [
-    "63e36c9a000000002703502b",
-    # ........................
-]
-
-# 指定Dy创作者ID列表(sec_id)
-DY_CREATOR_ID_LIST = [
-    "MS4wLjABAAAATJPY7LAlaa5X-c8uNdWkvz0jUGgpw4eeXIwu_8BhvqE",
-    # ........................
-]
-
-# 指定bili创作者ID列表(sec_id)
-BILI_CREATOR_ID_LIST = [
-    "20813884",
-    # ........................
-]
-
-# 指定快手创作者ID列表
-KS_CREATOR_ID_LIST = [
-    "3x4sm73aye7jq7i",
-    # ........................
-]
-
-# 指定知乎创作者主页url列表
-ZHIHU_CREATOR_URL_LIST = [
-    "https://www.zhihu.com/people/yd1234567",
-    # ........................
-]
-
-# 指定知乎需要爬取的帖子ID列表
-ZHIHU_SPECIFIED_ID_LIST = [
-    "https://www.zhihu.com/question/826896610/answer/4885821440", # 回答
-    "https://zhuanlan.zhihu.com/p/673461588", # 文章
-    "https://www.zhihu.com/zvideo/1539542068422144000" # 视频
-]
-
 # 词云相关
 # 是否开启生成评论词云图
 ENABLE_GET_WORDCLOUD = False
 # 自定义词语及其分组
-# 添加规则：xx:yy 其中xx为自定义添加的词组，yy为将xx该词组分到的组名。
 CUSTOM_WORDS = {
     "零几": "年份",  # 将"零几"识别为一个整体
     "高频词": "专业术语",  # 示例自定义词
@@ -318,30 +215,6 @@ STOP_WORDS_FILE = "./docs/hit_stopwords.txt"
 
 # 中文字体文件路径
 FONT_PATH = "./docs/STZHONGS.TTF"
-
-# 爬取开始的天数，仅支持 bilibili 关键字搜索，YYYY-MM-DD 格式，若为 None 则表示不设置时间范围，按照默认关键字最多返回 1000 条视频的结果处理
-START_DAY = '2024-01-01'
-
-# 爬取结束的天数，仅支持 bilibili 关键字搜索，YYYY-MM-DD 格式，若为 None 则表示不设置时间范围，按照默认关键字最多返回 1000 条视频的结果处理
-END_DAY = '2024-01-01'
-
-# 是否开启按每一天进行爬取的选项，仅支持 bilibili 关键字搜索
-# 若为 False，则忽略 START_DAY 与 END_DAY 设置的值
-# 若为 True，则按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下的所有视频
-ALL_DAY = False
-
-#!!! 下面仅支持 bilibili creator搜索
-# 爬取评论creator主页还是爬取creator动态和关系列表(True为前者)
-CREATOR_MODE = True
-
-# 爬取creator粉丝列表时起始爬取页数
-START_CONTACTS_PAGE = 1
-
-# 爬取作者粉丝和关注列表数量控制(单作者)
-CRAWLER_MAX_CONTACTS_COUNT_SINGLENOTES = 100
-
-# 爬取作者动态数量控制(单作者)
-CRAWLER_MAX_DYNAMICS_COUNT_SINGLENOTES = 50
 
 # ==================== 配置管理工具函数 ====================
 def reload_config():

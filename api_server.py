@@ -23,6 +23,9 @@ from models.content_models import (
 # 导入API路由
 from api.routes import api_router
 
+# 预留：导入认证中间件
+from middleware.auth_middleware import auth_middleware, enable_auth_middleware, disable_auth_middleware
+
 # 创建FastAPI应用
 app = FastAPI(
     title="MediaCrawler API",
@@ -31,6 +34,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# 预留：添加认证中间件（当前禁用）
+# app.middleware("http")(auth_middleware)
 
 # 添加CORS中间件
 app.add_middleware(
@@ -105,10 +111,30 @@ async def startup_event():
         except Exception as e:
             utils.logger.warning(f"⚠️ 任务清理机制初始化失败: {e}")
         
+        # 🆕 启动任务隔离管理器
+        try:
+            from utils.task_isolation import task_isolation_manager, start_task_cleanup
+            import asyncio
+            asyncio.create_task(start_task_cleanup())
+            utils.logger.info("✅ 任务隔离管理器初始化完成")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 任务隔离管理器初始化失败: {e}")
+        
         # 加载配置
         from config.env_config_loader import config_loader
         env = config_loader.get_environment()
         utils.logger.info(f"✅ 配置加载完成，环境: {env}")
+        
+        # 🆕 预留：配置认证中间件
+        try:
+            from config.base_config import AUTH_MIDDLEWARE_ENABLED
+            if AUTH_MIDDLEWARE_ENABLED:
+                enable_auth_middleware()
+                utils.logger.info("✅ 认证中间件已启用")
+            else:
+                utils.logger.info("ℹ️ 认证中间件已禁用（预留功能）")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 认证中间件配置失败: {e}")
         
         utils.logger.info("🎉 MediaCrawler API 服务启动完成!")
         
@@ -149,12 +175,6 @@ async def root():
 async def task_detail_page():
     """任务详情页面"""
     return FileResponse("static/task_detail.html")
-
-# 任务视频页面
-@app.get("/task_videos.html")
-async def task_videos_page():
-    """任务视频页面"""
-    return FileResponse("static/task_videos.html")
 
 # 任务结果页面
 @app.get("/task_results.html")
