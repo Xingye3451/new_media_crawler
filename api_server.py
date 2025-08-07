@@ -113,7 +113,7 @@ async def cleanup_old_logs():
         deleted_count = 0
         total_size = 0
         
-        utils.logger.info(f"开始清理过期日志文件，保留天数: {retention_days}")
+        utils.logger.debug(f"开始清理过期日志文件，保留天数: {retention_days}")
         
         for log_file in logs_dir.glob("*.log"):
             try:
@@ -139,7 +139,7 @@ async def cleanup_old_logs():
                     log_file.unlink()
                     deleted_count += 1
                     total_size += file_size
-                    utils.logger.info(f"已删除过期日志文件: {log_file.name} (大小: {file_size / 1024 / 1024:.2f}MB)")
+                    utils.logger.debug(f"已删除过期日志文件: {log_file.name} (大小: {file_size / 1024 / 1024:.2f}MB)")
                 
             except Exception as e:
                 utils.logger.error(f"处理日志文件 {log_file} 时出错: {e}")
@@ -147,7 +147,7 @@ async def cleanup_old_logs():
         if deleted_count > 0:
             utils.logger.info(f"日志清理完成，共删除 {deleted_count} 个过期文件，释放空间: {total_size / 1024 / 1024:.2f}MB")
         else:
-            utils.logger.info("没有需要清理的过期日志文件")
+            utils.logger.debug("没有需要清理的过期日志文件")
             
     except Exception as e:
         utils.logger.error(f"清理日志文件时出错: {e}")
@@ -165,7 +165,7 @@ async def log_cleanup_scheduler():
             
             # 等待到下次执行时间
             wait_seconds = (next_run - now).total_seconds()
-            utils.logger.info(f"日志清理定时任务将在 {next_run.strftime('%Y-%m-%d %H:%M:%S')} 执行")
+            utils.logger.debug(f"日志清理定时任务将在 {next_run.strftime('%Y-%m-%d %H:%M:%S')} 执行")
             await asyncio.sleep(wait_seconds)
             
             # 执行日志清理
@@ -213,11 +213,11 @@ async def startup_event():
     try:
         # 显示版本信息
         utils.logger.info("🚀 MediaCrawler API 服务启动中...")
-        utils.logger.info(f"📦 版本信息:")
-        utils.logger.info(f"   - 应用版本: {build_info['version']}")
-        utils.logger.info(f"   - 构建日期: {build_info['build_date']}")
-        utils.logger.info(f"   - Git提交: {build_info['git_commit']}")
-        utils.logger.info(f"   - 运行环境: {build_info['environment']}")
+        utils.logger.debug(f"📦 版本信息:")
+        utils.logger.debug(f"   - 应用版本: {build_info['version']}")
+        utils.logger.debug(f"   - 构建日期: {build_info['build_date']}")
+        utils.logger.debug(f"   - Git提交: {build_info['git_commit']}")
+        utils.logger.debug(f"   - 运行环境: {build_info['environment']}")
         
         # 初始化数据库连接
         await db.init_db()
@@ -233,7 +233,7 @@ async def startup_event():
         try:
             from api.task_cleanup_init import init_task_cleanup
             await init_task_cleanup()
-            utils.logger.info("✅ 任务清理机制初始化完成")
+            utils.logger.debug("✅ 任务清理机制初始化完成")
         except Exception as e:
             utils.logger.warning(f"⚠️ 任务清理机制初始化失败: {e}")
         
@@ -242,30 +242,30 @@ async def startup_event():
             from utils.task_isolation import task_isolation_manager, start_task_cleanup
             import asyncio
             asyncio.create_task(start_task_cleanup())
-            utils.logger.info("✅ 任务隔离管理器初始化完成")
+            utils.logger.debug("✅ 任务隔离管理器初始化完成")
         except Exception as e:
             utils.logger.warning(f"⚠️ 任务隔离管理器初始化失败: {e}")
         
         # 🆕 启动日志清理定时任务
         try:
             asyncio.create_task(log_cleanup_scheduler())
-            utils.logger.info("✅ 日志清理定时任务已启动（每天凌晨2点执行）")
+            utils.logger.debug("✅ 日志清理定时任务已启动（每天凌晨2点执行）")
         except Exception as e:
             utils.logger.warning(f"⚠️ 日志清理定时任务启动失败: {e}")
         
         # 加载配置
         from config.env_config_loader import config_loader
         env = config_loader.get_environment()
-        utils.logger.info(f"✅ 配置加载完成，环境: {env}")
+        utils.logger.debug(f"✅ 配置加载完成，环境: {env}")
         
         # 🆕 预留：配置认证中间件
         try:
             from config.base_config import AUTH_MIDDLEWARE_ENABLED
             if AUTH_MIDDLEWARE_ENABLED:
                 enable_auth_middleware()
-                utils.logger.info("✅ 认证中间件已启用")
+                utils.logger.debug("✅ 认证中间件已启用")
             else:
-                utils.logger.info("ℹ️ 认证中间件已禁用（预留功能）")
+                utils.logger.debug("ℹ️ 认证中间件已禁用（预留功能）")
         except Exception as e:
             utils.logger.warning(f"⚠️ 认证中间件配置失败: {e}")
         
@@ -438,15 +438,10 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     
-    # 显示启动信息
-    print("=" * 60)
-    print("🚀 MediaCrawler API 服务器")
-    print("=" * 60)
+    # 显示启动信息（简化版）
+    print("🚀 MediaCrawler API 服务器启动中...")
     print(f"📦 版本: {build_info['version']}")
-    print(f"🔧 构建日期: {build_info['build_date']}")
-    print(f"📝 Git提交: {build_info['git_commit']}")
-    print(f"🌍 环境: {build_info['environment']}")
-    print("=" * 60)
+    print("=" * 40)
     
     # 启动服务器
     uvicorn.run(
