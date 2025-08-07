@@ -760,6 +760,9 @@
                     <button class="btn btn-info" onclick="refreshAllPlatformStatus()">
                         🔍 刷新登录状态
                     </button>
+                    <button class="btn btn-warning" onclick="debugPlatformStatus()">
+                        🐛 调试状态
+                    </button>
 
                 </div>
 
@@ -910,11 +913,24 @@
             
             // 预检查所有平台的登录状态，然后选择第一个已登录的平台
             setTimeout(async () => {
-                const loginStatuses = await checkAllPlatformsLoginStatus();
-                console.log('所有平台登录状态:', loginStatuses);
-                // 选择第一个已登录的平台，如果没有则选择第一个可用平台
-                selectFirstAvailablePlatform();
-            }, 1000); // 延迟1秒执行，确保页面完全加载
+                try {
+                    console.log('开始检查所有平台登录状态...');
+                    const loginStatuses = await checkAllPlatformsLoginStatus();
+                    console.log('所有平台登录状态:', loginStatuses);
+                    
+                    // 选择第一个已登录的平台，如果没有则选择第一个可用平台
+                    selectFirstAvailablePlatform();
+                    
+                    // 再次检查小红书的状态（调试用）
+                    console.log('再次检查小红书状态...');
+                    const xhsStatus = await getPlatformAccountCount('xhs');
+                    console.log('小红书已登录账号数量:', xhsStatus);
+                    
+                } catch (error) {
+                    console.error('检查平台登录状态失败:', error);
+                    showToast('检查登录状态失败，请刷新页面重试', 'error');
+                }
+            }, 2000); // 延迟2秒执行，确保页面完全加载
             
             // 监听爬取类型变化
             document.getElementById('single-crawler-type').addEventListener('change', handleCrawlerTypeChange);
@@ -981,11 +997,38 @@
             
             // 延迟执行检查
             setTimeout(async () => {
-                const loginStatuses = await checkAllPlatformsLoginStatus();
-                console.log('刷新后所有平台登录状态:', loginStatuses);
-                // 重新选择第一个可用平台
-                selectFirstAvailablePlatform();
-                showToast('登录状态刷新完成', 'success');
+                try {
+                    const loginStatuses = await checkAllPlatformsLoginStatus();
+                    console.log('刷新后所有平台登录状态:', loginStatuses);
+                    
+                    // 重新选择第一个可用平台
+                    selectFirstAvailablePlatform();
+                    
+                    // 强制更新显示
+                    setTimeout(() => {
+                        console.log('强制更新平台状态显示...');
+                        const platforms = ['xhs', 'dy', 'ks', 'bili'];
+                        platforms.forEach(platform => {
+                            const singleCard = document.querySelector(`#single-platform .platform-card[data-platform="${platform}"]`);
+                            const multiCard = document.querySelector(`#multi-platform .platform-card[data-platform="${platform}"]`);
+                            
+                            if (singleCard) {
+                                const statusElement = singleCard.querySelector('.platform-status');
+                                console.log(`平台 ${platform} 单平台卡片状态:`, statusElement?.textContent);
+                            }
+                            
+                            if (multiCard) {
+                                const statusElement = multiCard.querySelector('.platform-status');
+                                console.log(`平台 ${platform} 多平台卡片状态:`, statusElement?.textContent);
+                            }
+                        });
+                    }, 1000);
+                    
+                    showToast('登录状态刷新完成', 'success');
+                } catch (error) {
+                    console.error('刷新登录状态失败:', error);
+                    showToast('刷新失败，请重试', 'error');
+                }
             }, 500);
         }
         
@@ -1049,6 +1092,7 @@
                             }
                         }
                         
+                        console.log(`平台 ${platform} 已登录账号数量: ${loggedInCount}`);
                         return loggedInCount;
                     }
                 }
@@ -1096,16 +1140,25 @@
             
             for (const platform of platforms) {
                 try {
+                    console.log(`开始检查平台 ${platform} 的登录状态...`);
+                    
                     // 首先获取该平台的账号列表
                     const accountsResponse = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
                     const accountsResult = await accountsResponse.json();
                     
-                    let accountId = null;
                     let loggedInAccountCount = 0;
+                    let totalAccountCount = 0;
+                    let loggedInAccounts = [];
+                    let notLoggedInAccounts = [];
                     
                     // 检查每个账号的登录状态
                     if (accountsResponse.ok && accountsResult.code === 200 && accountsResult.data && accountsResult.data.length > 0) {
+                        totalAccountCount = accountsResult.data.length;
+                        console.log(`平台 ${platform} 有 ${totalAccountCount} 个账号需要检查`);
+                        
                         for (const account of accountsResult.data) {
+                            console.log(`检查账号 ${account.id} 的登录状态...`);
+                            
                             // 检查单个账号的登录状态
                             const loginCheckData = {
                                 platform: platform,
@@ -1125,13 +1178,15 @@
                                 
                                 if (data.code === 200 && data.data && data.data.status === 'logged_in') {
                                     loggedInAccountCount++;
-                                    // 选择第一个已登录的账号作为默认账号
-                                    if (!accountId) {
-                                        accountId = account.id;
-                                    }
+                                    loggedInAccounts.push(account);
+                                    console.log(`✅ 账号 ${account.id} 已登录`);
+                                } else {
+                                    notLoggedInAccounts.push(account);
+                                    console.log(`⚠️ 账号 ${account.id} 未登录: ${data.message || '未知错误'}`);
                                 }
                             } catch (error) {
                                 console.error(`检查账号 ${account.id} 登录状态失败:`, error);
+                                notLoggedInAccounts.push(account);
                             }
                         }
                     }
@@ -1139,14 +1194,19 @@
                     // 更新已登录账号数量显示
                     updatePlatformAccountCount(platform, loggedInAccountCount);
                     
-                    // 根据是否有已登录账号来更新平台状态
-                    if (loggedInAccountCount > 0) {
-                        updatePlatformStatus(platform, 'logged_in');
-                        loginStatuses[platform] = 'logged_in';
-                    } else {
-                        updatePlatformStatus(platform, 'not_logged_in');
-                        loginStatuses[platform] = 'not_logged_in';
+                    // 关键修复：只要有一个已登录账号就认为平台可用
+                    const platformStatus = loggedInAccountCount > 0 ? 'logged_in' : 'not_logged_in';
+                    console.log(`平台 ${platform} 最终统计: 已登录=${loggedInAccountCount}, 未登录=${notLoggedInAccounts.length}, 平台状态=${platformStatus}`);
+                    
+                    // 只调用一次 updatePlatformStatus，避免覆盖
+                    updatePlatformStatus(platform, platformStatus);
+                    loginStatuses[platform] = platformStatus;
+                    
+                    // 如果有未登录的账号，显示提示信息
+                    if (notLoggedInAccounts.length > 0 && loggedInAccountCount > 0) {
+                        console.log(`平台 ${platform} 有 ${loggedInAccountCount} 个已登录账号，${notLoggedInAccounts.length} 个未登录账号`);
                     }
+                    
                 } catch (error) {
                     console.error(`检查平台 ${platform} 登录状态失败:`, error);
                     updatePlatformStatus(platform, 'error');
@@ -1154,6 +1214,7 @@
                 }
             }
             
+            console.log('所有平台登录状态检查完成:', loginStatuses);
             return loginStatuses;
         }
 
@@ -1216,8 +1277,8 @@
                 selectedCard.classList.add('selected');
                 selectedPlatform = platform;
                 
-                // 检查该平台的登录状态
-                await checkPlatformLoginStatus(platform);
+                // 不再重复检查登录状态，避免覆盖
+                // await checkPlatformLoginStatus(platform);
                 
                 // 加载该平台的账号列表
                 loadPlatformAccounts(platform);
@@ -1327,38 +1388,93 @@
                     // 清空现有选项
                     accountSelect.innerHTML = '';
                     
-                    // 优先选择已登录的账号
-                    let selectedAccount = result.data[0];
+                    // 检查每个账号的登录状态
+                    let loggedInAccounts = [];
+                    let notLoggedInAccounts = [];
+                    
                     for (const account of result.data) {
-                        if (account.login_status === 'logged_in') {
-                            selectedAccount = account;
-                            break;
+                        try {
+                            const loginCheckData = {
+                                platform: platform,
+                                account_id: account.id
+                            };
+                            
+                            const loginResponse = await fetch('/api/v1/login/check', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(loginCheckData)
+                            });
+                            
+                            const loginData = await loginResponse.json();
+                            
+                            if (loginData.code === 200 && loginData.data && loginData.data.status === 'logged_in') {
+                                loggedInAccounts.push(account);
+                            } else {
+                                notLoggedInAccounts.push(account);
+                            }
+                        } catch (error) {
+                            console.error(`检查账号 ${account.id} 登录状态失败:`, error);
+                            notLoggedInAccounts.push(account);
                         }
                     }
                     
-                    // 添加所有账号到选择框
-                    result.data.forEach((account) => {
+                    // 优先显示已登录的账号
+                    let selectedAccount = null;
+                    
+                    // 先添加已登录的账号
+                    loggedInAccounts.forEach((account) => {
                         const option = document.createElement('option');
                         option.value = account.id;
-                        option.textContent = `${account.account_name || account.username || `账号${account.id}`} (${account.login_status === 'logged_in' ? '✅已登录' : '⚠️未登录'})`;
-                        if (account.id === selectedAccount.id) {
-                            option.selected = true; // 默认选中已登录的账号
+                        option.textContent = `✅ ${account.account_name || account.username || `账号${account.id}`} (已登录)`;
+                        accountSelect.appendChild(option);
+                        
+                        // 选择第一个已登录的账号作为默认
+                        if (!selectedAccount) {
+                            selectedAccount = account;
+                            option.selected = true;
                         }
+                    });
+                    
+                    // 再添加未登录的账号
+                    notLoggedInAccounts.forEach((account) => {
+                        const option = document.createElement('option');
+                        option.value = account.id;
+                        option.textContent = `⚠️ ${account.account_name || account.username || `账号${account.id}`} (未登录)`;
                         accountSelect.appendChild(option);
                     });
                     
-                    console.log(`自动选择账号: ${selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`} (ID: ${selectedAccount.id}, 状态: ${selectedAccount.login_status})`);
+                    // 如果没有已登录账号，选择第一个账号
+                    if (!selectedAccount && result.data.length > 0) {
+                        selectedAccount = result.data[0];
+                        accountSelect.value = selectedAccount.id;
+                    }
+                    
+                    console.log(`平台 ${platform} 账号状态: ${loggedInAccounts.length} 个已登录, ${notLoggedInAccounts.length} 个未登录`);
                     
                     // 更新显示状态
-                    updateStatus('single-platform-result', 
-                        `✅ 已加载账号列表\n\n` +
-                        `平台: ${getPlatformName(platform)}\n` +
-                        `账号数量: ${result.data.length} 个\n` +
-                        `默认选择: ${selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`}\n` +
-                        `账号ID: ${selectedAccount.id}\n` +
-                        `登录状态: ${selectedAccount.login_status === 'logged_in' ? '✅已登录' : '⚠️未登录'}\n\n` +
-                        `可以开始爬取任务`
-                    );
+                    let statusMessage = `✅ 已加载账号列表\n\n`;
+                    statusMessage += `平台: ${getPlatformName(platform)}\n`;
+                    statusMessage += `总账号数: ${result.data.length} 个\n`;
+                    statusMessage += `已登录: ${loggedInAccounts.length} 个\n`;
+                    statusMessage += `未登录: ${notLoggedInAccounts.length} 个\n\n`;
+                    
+                    if (selectedAccount) {
+                        statusMessage += `默认选择: ${selectedAccount.account_name || selectedAccount.username || `账号${selectedAccount.id}`}\n`;
+                        statusMessage += `账号ID: ${selectedAccount.id}\n`;
+                        
+                        const isLoggedIn = loggedInAccounts.some(acc => acc.id === selectedAccount.id);
+                        statusMessage += `登录状态: ${isLoggedIn ? '✅已登录' : '⚠️未登录'}\n\n`;
+                        
+                        if (isLoggedIn) {
+                            statusMessage += `可以开始爬取任务`;
+                        } else {
+                            statusMessage += `⚠️ 当前账号未登录，建议选择已登录账号或先进行登录`;
+                        }
+                    }
+                    
+                    updateStatus('single-platform-result', statusMessage);
                     
                 } else {
                     // 没有可用账号
@@ -1411,6 +1527,11 @@
             } else {
                 selectedMultiPlatforms.add(platform);
                 card.classList.add('selected');
+                
+                // 如果有已登录账号但数量较少，显示提示
+                if (accountCount > 0 && accountCount <= 2) {
+                    showToast(`${getPlatformName(platform)} 有 ${accountCount} 个已登录账号，建议添加更多账号以提高成功率`, 'info');
+                }
             }
         }
 
@@ -1580,12 +1701,17 @@
             }
             
             // 检查选中平台的已登录账号数量
+            const platformIssues = [];
             for (const platform of selectedPlatforms) {
                 const accountCount = await getPlatformAccountCount(platform);
                 if (accountCount === 0) {
-                    showToast(`平台 ${getPlatformName(platform)} 没有已登录账号，请先进行登录`, 'error');
-                    return;
+                    platformIssues.push(getPlatformName(platform));
                 }
+            }
+            
+            if (platformIssues.length > 0) {
+                showToast(`以下平台没有已登录账号: ${platformIssues.join(', ')}，请先进行登录`, 'error');
+                return;
             }
             
             // 获取账号策略和执行模式
@@ -1989,6 +2115,76 @@
             const multiCards = document.querySelectorAll('#multi-platform .platform-card');
             multiCards.forEach(card => card.classList.remove('selected'));
             updateStatus('multi-platform-result', '表单已清空，等待开始多平台爬取任务...');
+        }
+        
+        // 调试平台状态
+        async function debugPlatformStatus() {
+            console.log('开始调试平台状态...');
+            showToast('正在调试平台状态...', 'info');
+            
+            const platforms = ['xhs', 'dy', 'ks', 'bili'];
+            let debugInfo = '🔍 平台状态调试信息:\n\n';
+            
+            for (const platform of platforms) {
+                try {
+                    // 获取账号列表
+                    const accountsResponse = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
+                    const accountsResult = await accountsResponse.json();
+                    
+                    debugInfo += `📱 ${getPlatformName(platform)}:\n`;
+                    
+                    if (accountsResponse.ok && accountsResult.code === 200 && accountsResult.data && accountsResult.data.length > 0) {
+                        debugInfo += `   总账号数: ${accountsResult.data.length}\n`;
+                        
+                        let loggedInCount = 0;
+                        let notLoggedInCount = 0;
+                        
+                        for (const account of accountsResult.data) {
+                            const loginCheckData = {
+                                platform: platform,
+                                account_id: account.id
+                            };
+                            
+                            try {
+                                const loginResponse = await fetch('/api/v1/login/check', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(loginCheckData)
+                                });
+                                
+                                const loginData = await loginResponse.json();
+                                
+                                if (loginData.code === 200 && loginData.data && loginData.data.status === 'logged_in') {
+                                    loggedInCount++;
+                                    debugInfo += `   ✅ 账号${account.id}: 已登录\n`;
+                                } else {
+                                    notLoggedInCount++;
+                                    debugInfo += `   ⚠️ 账号${account.id}: 未登录 (${loginData.message || '未知错误'})\n`;
+                                }
+                            } catch (error) {
+                                notLoggedInCount++;
+                                debugInfo += `   ❌ 账号${account.id}: 检查失败 (${error.message})\n`;
+                            }
+                        }
+                        
+                        debugInfo += `   已登录: ${loggedInCount} 个\n`;
+                        debugInfo += `   未登录: ${notLoggedInCount} 个\n`;
+                        debugInfo += `   平台状态: ${loggedInCount > 0 ? '✅ 可用' : '⚠️ 需登录'}\n\n`;
+                        
+                    } else {
+                        debugInfo += `   ❌ 无可用账号\n\n`;
+                    }
+                    
+                } catch (error) {
+                    debugInfo += `   ❌ 检查失败: ${error.message}\n\n`;
+                }
+            }
+            
+            console.log(debugInfo);
+            updateStatus('single-platform-result', debugInfo);
+            showToast('调试完成，请查看状态信息', 'success');
         }
     </script>
 </body>
