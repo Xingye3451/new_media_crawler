@@ -162,6 +162,18 @@
             cursor: not-allowed;
             background-color: #f8f9fa;
         }
+        
+        .platform-card.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: #f8f9fa;
+            pointer-events: none;
+        }
+        
+        .platform-card.disabled:hover {
+            transform: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
 
         .platform-card .platform-icon {
             font-size: 2em;
@@ -182,6 +194,13 @@
             font-size: 0.8em;
             color: #007bff;
             margin-top: 5px;
+        }
+        
+        .platform-card .platform-account-count {
+            font-size: 0.7em;
+            color: #6c757d;
+            margin-top: 3px;
+            font-style: italic;
         }
 
         .platform-card.coming-soon .platform-status {
@@ -518,6 +537,25 @@
             font-size: 0.8em;
             border-radius: 4px;
         }
+        
+        .account-management-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 12px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.9em;
+            transition: background-color 0.3s;
+        }
+        
+        .account-management-link:hover {
+            background-color: #5a6268;
+            color: white;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
@@ -547,6 +585,7 @@
                     <p>✅ 创作者主页：支持从数据库获取创作者列表进行爬取</p>
                     <p>⏳ 即将支持：微博、贴吧、知乎 (暂时禁用，专注短视频优化)</p>
                     <p>🚧 开发中：指定内容详情、评论获取功能 (敬请期待)</p>
+                    <p>💡 <strong>提示：</strong>未登录的平台将显示为禁用状态，请先点击右侧"👤 账号管理"进行登录</p>
                 </div>
 
                 <div class="platform-selector">
@@ -608,9 +647,14 @@
                             <i class="fas fa-user text-danger"></i>
                             当前账号
                         </label>
-                        <select id="single-account-select" class="form-control">
-                            <option value="">加载中...</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <select id="single-account-select" class="form-control" style="flex: 1;">
+                                <option value="">加载中...</option>
+                            </select>
+                            <a href="/static/account_management.html" target="_blank" class="account-management-link">
+                                👤 账号管理
+                            </a>
+                        </div>
                     </div>
                 </div>
 
@@ -740,30 +784,34 @@
                 <div class="form-group">
                     <label>🎯 选择目标平台 (可多选)</label>
                     <div class="platform-selector">
-                        <div class="platform-card" data-platform="xhs" onclick="toggleMultiPlatform('xhs')">
-                            <div class="platform-icon">🟠</div>
-                            <div class="platform-name">小红书</div>
-                            <div class="platform-desc">短视频笔记</div>
-                            <div class="platform-status">✅ 可用</div>
-                        </div>
-                        <div class="platform-card" data-platform="dy" onclick="toggleMultiPlatform('dy')">
-                            <div class="platform-icon">🔥</div>
-                            <div class="platform-name">抖音</div>
-                            <div class="platform-desc">短视频</div>
-                            <div class="platform-status">✅ 可用</div>
-                        </div>
-                        <div class="platform-card" data-platform="ks" onclick="toggleMultiPlatform('ks')">
-                            <div class="platform-icon">⚡</div>
-                            <div class="platform-name">快手</div>
-                            <div class="platform-desc">短视频</div>
-                            <div class="platform-status">✅ 可用</div>
-                        </div>
-                        <div class="platform-card" data-platform="bili" onclick="toggleMultiPlatform('bili')">
-                            <div class="platform-icon">📺</div>
-                            <div class="platform-name">B站</div>
-                            <div class="platform-desc">视频</div>
-                            <div class="platform-status">✅ 可用</div>
-                        </div>
+                                            <div class="platform-card" data-platform="xhs" onclick="toggleMultiPlatform('xhs')">
+                        <div class="platform-icon">🟠</div>
+                        <div class="platform-name">小红书</div>
+                        <div class="platform-desc">短视频笔记</div>
+                        <div class="platform-status">⏳ 检查中...</div>
+                        <div class="platform-account-count" id="xhs-account-count"></div>
+                    </div>
+                    <div class="platform-card" data-platform="dy" onclick="toggleMultiPlatform('dy')">
+                        <div class="platform-icon">🔥</div>
+                        <div class="platform-name">抖音</div>
+                        <div class="platform-desc">短视频</div>
+                        <div class="platform-status">⏳ 检查中...</div>
+                        <div class="platform-account-count" id="dy-account-count"></div>
+                    </div>
+                    <div class="platform-card" data-platform="ks" onclick="toggleMultiPlatform('ks')">
+                        <div class="platform-icon">⚡</div>
+                        <div class="platform-name">快手</div>
+                        <div class="platform-desc">短视频</div>
+                        <div class="platform-status">⏳ 检查中...</div>
+                        <div class="platform-account-count" id="ks-account-count"></div>
+                    </div>
+                    <div class="platform-card" data-platform="bili" onclick="toggleMultiPlatform('bili')">
+                        <div class="platform-icon">📺</div>
+                        <div class="platform-name">B站</div>
+                        <div class="platform-desc">视频</div>
+                        <div class="platform-status">⏳ 检查中...</div>
+                        <div class="platform-account-count" id="bili-account-count"></div>
+                    </div>
                     </div>
                 </div>
 
@@ -860,12 +908,12 @@
             // 重置所有平台状态为检查中
             resetAllPlatformStatus();
             
-            // 默认选择小红书平台
-            selectPlatform('xhs');
-            
-            // 预检查所有平台的登录状态
-            setTimeout(() => {
-                checkAllPlatformsLoginStatus();
+            // 预检查所有平台的登录状态，然后选择第一个已登录的平台
+            setTimeout(async () => {
+                const loginStatuses = await checkAllPlatformsLoginStatus();
+                console.log('所有平台登录状态:', loginStatuses);
+                // 选择第一个已登录的平台，如果没有则选择第一个可用平台
+                selectFirstAvailablePlatform();
             }, 1000); // 延迟1秒执行，确保页面完全加载
             
             // 监听爬取类型变化
@@ -887,14 +935,36 @@
         function resetAllPlatformStatus() {
             const platforms = ['xhs', 'dy', 'ks', 'bili'];
             platforms.forEach(platform => {
-                const card = document.querySelector(`.platform-card[data-platform="${platform}"]`);
-                if (card) {
-                    const statusElement = card.querySelector('.platform-status');
+                // 重置单平台卡片
+                const singleCard = document.querySelector(`#single-platform .platform-card[data-platform="${platform}"]`);
+                if (singleCard) {
+                    const statusElement = singleCard.querySelector('.platform-status');
                     if (statusElement) {
                         statusElement.textContent = '⏳ 检查中...';
                         statusElement.style.color = '#6c757d';
-                        card.style.opacity = '0.8';
-                        card.style.cursor = 'wait';
+                        singleCard.style.opacity = '0.8';
+                        singleCard.style.cursor = 'wait';
+                        singleCard.classList.remove('disabled');
+                    }
+                }
+                
+                // 重置多平台卡片
+                const multiCard = document.querySelector(`#multi-platform .platform-card[data-platform="${platform}"]`);
+                if (multiCard) {
+                    const statusElement = multiCard.querySelector('.platform-status');
+                    if (statusElement) {
+                        statusElement.textContent = '⏳ 检查中...';
+                        statusElement.style.color = '#6c757d';
+                        multiCard.style.opacity = '0.8';
+                        multiCard.style.cursor = 'wait';
+                        multiCard.classList.remove('disabled');
+                    }
+                    
+                    // 重置账号数量显示
+                    const countElement = multiCard.querySelector('.platform-account-count');
+                    if (countElement) {
+                        countElement.textContent = '';
+                        countElement.style.color = '#6c757d';
                     }
                 }
             });
@@ -911,9 +981,95 @@
             
             // 延迟执行检查
             setTimeout(async () => {
-                await checkAllPlatformsLoginStatus();
+                const loginStatuses = await checkAllPlatformsLoginStatus();
+                console.log('刷新后所有平台登录状态:', loginStatuses);
+                // 重新选择第一个可用平台
+                selectFirstAvailablePlatform();
                 showToast('登录状态刷新完成', 'success');
             }, 500);
+        }
+        
+        // 选择第一个可用的平台
+        function selectFirstAvailablePlatform() {
+            const platforms = ['xhs', 'dy', 'ks', 'bili'];
+            let selectedPlatformFound = false;
+            
+            for (const platform of platforms) {
+                const card = document.querySelector(`.platform-card[data-platform="${platform}"]`);
+                if (card && !card.classList.contains('disabled') && !card.classList.contains('coming-soon')) {
+                    console.log(`选择第一个可用平台: ${platform}`);
+                    selectPlatform(platform);
+                    selectedPlatformFound = true;
+                    break;
+                }
+            }
+            
+            if (!selectedPlatformFound) {
+                console.log('没有找到可用的平台，显示提示信息');
+                showToast('所有平台都未登录，请先进行登录', 'warning');
+                // 清空当前选择
+                selectedPlatform = null;
+                const platformCards = document.querySelectorAll('#single-platform .platform-card');
+                platformCards.forEach(card => card.classList.remove('selected'));
+            }
+        }
+        
+        // 获取平台已登录账号数量
+        async function getPlatformAccountCount(platform) {
+            try {
+                const response = await fetch(`/api/v1/accounts/?platform=${platform}&is_active=true`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.code === 200 && data.data && data.data.length > 0) {
+                        let loggedInCount = 0;
+                        
+                        // 检查每个账号的登录状态
+                        for (const account of data.data) {
+                            const loginCheckData = {
+                                platform: platform,
+                                account_id: account.id
+                            };
+                            
+                            try {
+                                const loginResponse = await fetch('/api/v1/login/check', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(loginCheckData)
+                                });
+                                
+                                const loginData = await loginResponse.json();
+                                
+                                if (loginData.code === 200 && loginData.data && loginData.data.status === 'logged_in') {
+                                    loggedInCount++;
+                                }
+                            } catch (error) {
+                                console.error(`检查账号 ${account.id} 登录状态失败:`, error);
+                            }
+                        }
+                        
+                        return loggedInCount;
+                    }
+                }
+            } catch (error) {
+                console.error(`获取平台 ${platform} 已登录账号数量失败:`, error);
+            }
+            return 0;
+        }
+        
+        // 更新平台账号数量显示
+        function updatePlatformAccountCount(platform, count) {
+            const countElement = document.getElementById(`${platform}-account-count`);
+            if (countElement) {
+                if (count === 0) {
+                    countElement.textContent = '无已登录账号';
+                    countElement.style.color = '#dc3545';
+                } else {
+                    countElement.textContent = `${count} 个已登录账号`;
+                    countElement.style.color = '#28a745';
+                }
+            }
         }
 
         // 切换标签页
@@ -936,6 +1092,7 @@
         // 检查所有平台的登录状态
         async function checkAllPlatformsLoginStatus() {
             const platforms = ['xhs', 'dy', 'ks', 'bili'];
+            const loginStatuses = {};
             
             for (const platform of platforms) {
                 try {
@@ -944,75 +1101,105 @@
                     const accountsResult = await accountsResponse.json();
                     
                     let accountId = null;
+                    let loggedInAccountCount = 0;
                     
-                    // 如果有可用账号，选择第一个
+                    // 检查每个账号的登录状态
                     if (accountsResponse.ok && accountsResult.code === 200 && accountsResult.data && accountsResult.data.length > 0) {
-                        const firstAccount = accountsResult.data[0];
-                        accountId = firstAccount.id;
+                        for (const account of accountsResult.data) {
+                            // 检查单个账号的登录状态
+                            const loginCheckData = {
+                                platform: platform,
+                                account_id: account.id
+                            };
+                            
+                            try {
+                                const response = await fetch('/api/v1/login/check', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(loginCheckData)
+                                });
+                                
+                                const data = await response.json();
+                                
+                                if (data.code === 200 && data.data && data.data.status === 'logged_in') {
+                                    loggedInAccountCount++;
+                                    // 选择第一个已登录的账号作为默认账号
+                                    if (!accountId) {
+                                        accountId = account.id;
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`检查账号 ${account.id} 登录状态失败:`, error);
+                            }
+                        }
                     }
                     
-                    // 构建登录检查请求数据
-                    const loginCheckData = {
-                        platform: platform
-                    };
+                    // 更新已登录账号数量显示
+                    updatePlatformAccountCount(platform, loggedInAccountCount);
                     
-                    // 如果有账号ID，添加到请求中
-                    if (accountId) {
-                        loginCheckData.account_id = accountId;
-                    }
-                    
-                    const response = await fetch('/api/v1/login/check', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(loginCheckData)
-                    });
-                    
-                    const data = await response.json();
-                    
-                    console.log(`平台 ${platform} 登录检查结果:`, data);
-                    
-                    if (data.code === 200 && data.data && data.data.status === 'logged_in') {
+                    // 根据是否有已登录账号来更新平台状态
+                    if (loggedInAccountCount > 0) {
                         updatePlatformStatus(platform, 'logged_in');
+                        loginStatuses[platform] = 'logged_in';
                     } else {
                         updatePlatformStatus(platform, 'not_logged_in');
+                        loginStatuses[platform] = 'not_logged_in';
                     }
                 } catch (error) {
                     console.error(`检查平台 ${platform} 登录状态失败:`, error);
                     updatePlatformStatus(platform, 'error');
+                    loginStatuses[platform] = 'error';
                 }
             }
+            
+            return loginStatuses;
         }
 
         // 更新平台状态显示
         function updatePlatformStatus(platform, status) {
-            const card = document.querySelector(`.platform-card[data-platform="${platform}"]`);
-            if (card) {
-                const statusElement = card.querySelector('.platform-status');
-                if (statusElement) {
-                    if (status === 'logged_in') {
-                        statusElement.textContent = '✅ 已登录';
-                        statusElement.style.color = '#28a745';
-                        // 添加可用状态样式
-                        card.style.opacity = '1';
-                        card.style.cursor = 'pointer';
-                    } else if (status === 'error') {
-                        statusElement.textContent = '❌ 检查失败';
-                        statusElement.style.color = '#dc3545';
-                        // 添加错误状态样式
-                        card.style.opacity = '0.6';
-                        card.style.cursor = 'not-allowed';
-                    } else {
-                        statusElement.textContent = '⚠️ 需登录';
-                        statusElement.style.color = '#ffc107';
-                        // 添加需要登录状态样式
-                        card.style.opacity = '0.8';
-                        card.style.cursor = 'pointer';
-                    }
-                    
-                    // 调试日志
-                    console.log(`平台 ${platform} 状态更新为: ${status}`);
+            // 更新单平台卡片
+            const singleCard = document.querySelector(`#single-platform .platform-card[data-platform="${platform}"]`);
+            if (singleCard) {
+                updateCardStatus(singleCard, status);
+            }
+            
+            // 更新多平台卡片
+            const multiCard = document.querySelector(`#multi-platform .platform-card[data-platform="${platform}"]`);
+            if (multiCard) {
+                updateCardStatus(multiCard, status);
+            }
+            
+            // 调试日志
+            console.log(`平台 ${platform} 状态更新为: ${status}`);
+        }
+        
+        // 更新单个卡片状态
+        function updateCardStatus(card, status) {
+            const statusElement = card.querySelector('.platform-status');
+            if (statusElement) {
+                if (status === 'logged_in') {
+                    statusElement.textContent = '✅ 已登录';
+                    statusElement.style.color = '#28a745';
+                    // 添加可用状态样式
+                    card.style.opacity = '1';
+                    card.style.cursor = 'pointer';
+                    card.classList.remove('disabled');
+                } else if (status === 'error') {
+                    statusElement.textContent = '❌ 检查失败';
+                    statusElement.style.color = '#dc3545';
+                    // 添加错误状态样式
+                    card.style.opacity = '0.6';
+                    card.style.cursor = 'not-allowed';
+                    card.classList.add('disabled');
+                } else {
+                    statusElement.textContent = '⚠️ 需登录';
+                    statusElement.style.color = '#ffc107';
+                    // 添加需要登录状态样式
+                    card.style.opacity = '0.8';
+                    card.style.cursor = 'not-allowed';
+                    card.classList.add('disabled');
                 }
             }
         }
@@ -1025,7 +1212,7 @@
             
             // 添加选中状态
             const selectedCard = document.querySelector(`#single-platform .platform-card[data-platform="${platform}"]`);
-            if (selectedCard && !selectedCard.classList.contains('coming-soon')) {
+            if (selectedCard && !selectedCard.classList.contains('coming-soon') && !selectedCard.classList.contains('disabled')) {
                 selectedCard.classList.add('selected');
                 selectedPlatform = platform;
                 
@@ -1040,6 +1227,8 @@
                 if (crawlerType === 'creator') {
                     loadCreatorsForPlatform(platform);
                 }
+            } else if (selectedCard && selectedCard.classList.contains('disabled')) {
+                showToast('该平台未登录，请先进行登录', 'warning');
             }
         }
 
@@ -1196,11 +1385,23 @@
         }
 
         // 切换多平台选择
-        function toggleMultiPlatform(platform) {
+        async function toggleMultiPlatform(platform) {
             const card = document.querySelector(`#multi-platform .platform-card[data-platform="${platform}"]`);
             
             if (card.classList.contains('coming-soon')) {
                 showToast('该平台即将支持，敬请期待！', 'warning');
+                return;
+            }
+            
+            if (card.classList.contains('disabled')) {
+                showToast('该平台未登录，请先进行登录', 'warning');
+                return;
+            }
+            
+            // 检查该平台的已登录账号数量
+            const accountCount = await getPlatformAccountCount(platform);
+            if (accountCount === 0) {
+                showToast('该平台没有已登录账号，请先进行登录', 'warning');
                 return;
             }
             
@@ -1376,6 +1577,15 @@
             if (selectedPlatforms.length === 0) {
                 showToast('请至少选择一个平台', 'warning');
                 return;
+            }
+            
+            // 检查选中平台的已登录账号数量
+            for (const platform of selectedPlatforms) {
+                const accountCount = await getPlatformAccountCount(platform);
+                if (accountCount === 0) {
+                    showToast(`平台 ${getPlatformName(platform)} 没有已登录账号，请先进行登录`, 'error');
+                    return;
+                }
             }
             
             // 获取账号策略和执行模式

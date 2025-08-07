@@ -27,6 +27,7 @@ from api.creator_management import router as creator_management_router
 from api.multi_platform_crawler import router as multi_platform_crawler_router
 from api.system_monitor import router as system_monitor_router
 from api.task_isolation import router as task_isolation_router
+from api.scheduled_tasks import scheduled_tasks_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -176,4 +177,11 @@ api_router.include_router(
     task_isolation_router,
     prefix="/v1",
     tags=["task-isolation"]
+)
+
+# 定时任务相关路由
+api_router.include_router(
+    scheduled_tasks_router,
+    prefix="/v1",
+    tags=["scheduled-tasks"]
 ) 

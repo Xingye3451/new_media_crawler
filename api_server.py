@@ -253,6 +253,14 @@ async def startup_event():
         except Exception as e:
             utils.logger.warning(f"⚠️ 日志清理定时任务启动失败: {e}")
         
+        # 🆕 启动定时任务调度器
+        try:
+            from timetask.task_scheduler import scheduler
+            await scheduler.start()
+            utils.logger.debug("✅ 定时任务调度器已启动")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 定时任务调度器启动失败: {e}")
+        
         # 加载配置
         from config.env_config_loader import config_loader
         env = config_loader.get_environment()
@@ -291,6 +299,14 @@ async def shutdown_event():
         redis_manager = TaskResultRedisManager()
         await redis_manager.close()
         utils.logger.info("✅ Redis连接已关闭")
+        
+        # 🆕 停止定时任务调度器
+        try:
+            from timetask.task_scheduler import scheduler
+            await scheduler.stop()
+            utils.logger.info("✅ 定时任务调度器已停止")
+        except Exception as e:
+            utils.logger.warning(f"⚠️ 停止定时任务调度器失败: {e}")
         
         utils.logger.info("👋 MediaCrawler API 服务已关闭")
         

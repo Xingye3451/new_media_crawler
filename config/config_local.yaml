@@ -271,6 +271,23 @@ wordcloud:
   stop_words_file: "./docs/hit_stopwords.txt"
   font_path: "./docs/STZHONGS.TTF"
 
+# ==================== 定时任务配置 ====================
+scheduled_tasks:
+  # 登录状态检查任务
+  login_status_check:
+    enabled: true                    # 是否启用登录状态检查
+    interval_hours: 6               # 检查间隔（小时）
+    start_time: "02:00"            # 开始时间（24小时制）
+    max_concurrent: 5              # 最大并发检查数
+    timeout: 30                    # 单个检查超时时间（秒）
+    enable_logging: true           # 是否启用详细日志
+    
+  # 调度器配置
+  scheduler:
+    max_concurrent_tasks: 3        # 最大并发任务数
+    task_timeout_seconds: 3600     # 任务超时时间（秒）
+    enable_logging: true           # 是否启用调度器日志
+
 # ==================== 基础配置 ====================
 ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
 save_login_state: true 

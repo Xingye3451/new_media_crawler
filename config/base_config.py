@@ -31,6 +31,11 @@ performance_config = config_manager.get_performance_config()
 monitoring_config = config_manager.get_monitoring_config()
 development_config = config_manager.get_development_config()
 
+# 获取定时任务配置
+scheduled_tasks_config = config_manager.get("scheduled_tasks", {})
+login_status_check_config = scheduled_tasks_config.get("login_status_check", {})
+scheduler_config = scheduled_tasks_config.get("scheduler", {})
+
 # ==================== 代理配置 ====================
 # 是否开启 IP 代理
 ENABLE_IP_PROXY = proxy_config.enabled
@@ -194,6 +199,20 @@ AUTH_MIDDLEWARE_ENABLED = False  # 预留：将来集成用户认证
 AUTH_TOKEN_HEADER = "Authorization"
 AUTH_SESSION_TIMEOUT = 7200  # 2小时
 
+# ==================== 定时任务配置 ====================
+# 登录状态检查任务配置
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_ENABLED = login_status_check_config.get("enabled", True)
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_INTERVAL_HOURS = login_status_check_config.get("interval_hours", 6)
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_START_TIME = login_status_check_config.get("start_time", "02:00")
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_MAX_CONCURRENT = login_status_check_config.get("max_concurrent", 5)
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_TIMEOUT = login_status_check_config.get("timeout", 30)
+SCHEDULED_TASKS_LOGIN_STATUS_CHECK_ENABLE_LOGGING = login_status_check_config.get("enable_logging", True)
+
+# 调度器配置
+SCHEDULED_TASKS_SCHEDULER_MAX_CONCURRENT_TASKS = scheduler_config.get("max_concurrent_tasks", 3)
+SCHEDULED_TASKS_SCHEDULER_TASK_TIMEOUT_SECONDS = scheduler_config.get("task_timeout_seconds", 3600)
+SCHEDULED_TASKS_SCHEDULER_ENABLE_LOGGING = scheduler_config.get("enable_logging", True)
+
 # ==================== 基础配置 ====================
 # 自定义User Agent
 UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
@@ -224,6 +243,7 @@ def reload_config():
     global proxy_config, crawler_config, database_config, app_config, redis_config
     global remote_desktop_config, server_config, security_config, crawler_service_config
     global task_management_config, performance_config, monitoring_config, development_config
+    global scheduled_tasks_config, login_status_check_config, scheduler_config
     
     proxy_config = config_manager.get_proxy_config()
     crawler_config = config_manager.get_crawler_config()
@@ -238,6 +258,11 @@ def reload_config():
     performance_config = config_manager.get_performance_config()
     monitoring_config = config_manager.get_monitoring_config()
     development_config = config_manager.get_development_config()
+    
+    # 重新获取定时任务配置
+    scheduled_tasks_config = config_manager.get("scheduled_tasks", {})
+    login_status_check_config = scheduled_tasks_config.get("login_status_check", {})
+    scheduler_config = scheduled_tasks_config.get("scheduler", {})
 
 def export_config(env: str = "development", format: str = "yaml"):
     """导出配置"""
