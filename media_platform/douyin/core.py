@@ -101,32 +101,33 @@ class DouYinCrawler(AbstractCrawler):
                     if await dy_anti_crawler.enhance_page_loading(self.context_page, optimal_url):
                         utils.logger.info("🛡️ [DouYinCrawler] 页面加载成功")
                         
-                        # 模拟人类行为
+                        # 🆕 在页面加载后立即模拟人类行为，建立"人类"身份
                         try:
-                            await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                            if hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                                utils.logger.info("🛡️ [DouYinCrawler] 开始模拟人类行为，建立真实用户身份...")
+                                await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                                utils.logger.info("🛡️ [DouYinCrawler] 人类行为模拟完成，身份建立成功")
+                            else:
+                                utils.logger.warning("🛡️ [DouYinCrawler] 页面已关闭，跳过人类行为模拟")
                         except Exception as e:
-                            utils.logger.warning(f"🛡️ [DouYinCrawler] 模拟人类行为失败: {e}")
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 人类行为模拟失败: {e}")
                         
-                        # 检查频率限制
+                        # 🆕 在人类行为模拟后，进行反爬虫检查和处理
                         try:
+                            # 检查频率限制
                             if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_session"):
                                 utils.logger.warning("🛡️ [DouYinCrawler] 检测到频率限制，已处理")
-                        except Exception as e:
-                            utils.logger.warning(f"🛡️ [DouYinCrawler] 频率限制检查失败: {e}")
-                        
-                        # 绕过验证码
-                        try:
+                            
+                            # 绕过验证码
                             if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_session"):
                                 utils.logger.error("🛡️ [DouYinCrawler] 验证码处理失败")
-                        except Exception as e:
-                            utils.logger.warning(f"🛡️ [DouYinCrawler] 验证码检查失败: {e}")
-                        
-                        # 处理抖音特有的反爬虫机制
-                        try:
+                            
+                            # 处理抖音特有的反爬虫机制
                             if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_session"):
                                 utils.logger.warning("🛡️ [DouYinCrawler] 检测到抖音特有反爬虫机制，已处理")
+                                
                         except Exception as e:
-                            utils.logger.warning(f"🛡️ [DouYinCrawler] 抖音特有反爬虫检查失败: {e}")
+                            utils.logger.warning(f"🛡️ [DouYinCrawler] 反爬虫检查失败: {e}")
                             
                     else:
                         utils.logger.warning("🛡️ [DouYinCrawler] 增强页面加载失败，使用默认方式")
@@ -210,7 +211,7 @@ class DouYinCrawler(AbstractCrawler):
 
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
-    async def search(self, start_page: int = 1) -> None:
+    async def search(self, start_page: int = 1) -> int:
         utils.logger.info("[DouYinCrawler.search] Begin search douyin keywords")
         dy_limit_count = 10  # douyin limit page fixed value
         # 🆕 修复：使用实例变量替代config.CRAWLER_MAX_NOTES_COUNT
@@ -260,27 +261,37 @@ class DouYinCrawler(AbstractCrawler):
                 try:
                     utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page}")
                     
-                    # 🆕 反爬虫处理：在搜索前检查页面状态
-                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                    # 🆕 反爬虫处理：在每次搜索前进行人类行为模拟和反爬虫检查
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page:
                         try:
-                            # 检查频率限制
-                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_search"):
-                                utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到频率限制，等待后继续")
-                                await asyncio.sleep(random.uniform(10, 30))
-                            
-                            # 绕过验证码
-                            if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_search"):
-                                utils.logger.error("🛡️ [DouYinCrawler.search] 验证码处理失败，跳过当前页面")
-                                continue
-                            
-                            # 处理抖音特有的反爬虫机制
-                            if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_search"):
-                                utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到抖音特有反爬虫机制，等待后继续")
-                                await asyncio.sleep(random.uniform(15, 45))
+                            # 🆕 检查页面是否已关闭
+                            if self.context_page.is_closed():
+                                utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 前检测到页面已关闭，跳过反爬虫操作")
+                                # 即使页面关闭，也继续搜索流程
+                                pass
+                            else:
+                                # 🆕 每次搜索前都模拟人类行为，保持"人类"身份
+                                utils.logger.debug("🛡️ [DouYinCrawler.search] 搜索前模拟人类行为...")
+                                await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                                
+                                # 检查频率限制
+                                if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_search"):
+                                    utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到频率限制，等待后继续")
+                                    await asyncio.sleep(random.uniform(10, 30))
+                                
+                                # 绕过验证码
+                                if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_search"):
+                                    utils.logger.error("🛡️ [DouYinCrawler.search] 验证码处理失败，跳过当前页面")
+                                    continue
+                                
+                                # 处理抖音特有的反爬虫机制
+                                if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_search"):
+                                    utils.logger.warning("🛡️ [DouYinCrawler.search] 检测到抖音特有反爬虫机制，等待后继续")
+                                    await asyncio.sleep(random.uniform(15, 45))
                         except Exception as e:
                             utils.logger.warning(f"🛡️ [DouYinCrawler.search] 反爬虫处理失败: {e}")
-                    elif not hasattr(self, 'context_page') or not self.context_page or self.context_page.is_closed():
-                        utils.logger.warning("🛡️ [DouYinCrawler.search] 页面不可用，跳过反爬虫检查")
+                    else:
+                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 前页面不可用，跳过反爬虫检查")
                     
                     # 🆕 修复：移除对config.PUBLISH_TIME_TYPE的依赖，使用默认值
                     posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
@@ -326,16 +337,29 @@ class DouYinCrawler(AbstractCrawler):
                     batch_data = data_list[i:i + batch_size]
                     utils.logger.info(f"[DouYinCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_data)}")
                     
-                    # 🆕 反爬虫处理：批处理前的检查
-                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                    # 🆕 反爬虫处理：批处理前的检查 - 增强页面状态检查
+                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page:
                         try:
-                            # 检查频率限制
-                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_batch"):
-                                utils.logger.warning("🛡️ [DouYinCrawler.search] 批处理前检测到频率限制，等待后继续")
-                                await asyncio.sleep(random.uniform(5, 15))
+                            # 🆕 检查页面是否已关闭
+                            if self.context_page.is_closed():
+                                utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前检测到页面已关闭，跳过反爬虫操作")
+                                # 即使页面关闭，也继续处理数据
+                                pass
+                            else:
+                                # 🆕 批处理前模拟人类行为，保持自然节奏
+                                utils.logger.debug("🛡️ [DouYinCrawler.search] 批处理前模拟人类行为...")
+                                await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                                
+                                # 检查频率限制
+                                if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_batch"):
+                                    utils.logger.warning("🛡️ [DouYinCrawler.search] 批处理前检测到频率限制，等待后继续")
+                                    await asyncio.sleep(random.uniform(5, 15))
                         except Exception as e:
                             utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理前反爬虫检查失败: {e}")
+                    else:
+                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前页面不可用，跳过反爬虫操作")
                     
+                    # 🆕 处理视频数据 - 即使页面关闭也继续处理
                     for post_item in batch_data:
                         try:
                             aweme_info: Dict = post_item.get("aweme_info") or \
@@ -354,22 +378,10 @@ class DouYinCrawler(AbstractCrawler):
                             utils.logger.error(f"[DouYinCrawler.search] Failed to process video: {e}")
                             continue
                     
-                    # 🆕 反爬虫处理：增加随机间隔，避免请求过于频繁
-                    if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
-                        try:
-                            # 模拟人类行为
-                            await dy_anti_crawler.simulate_human_behavior(self.context_page)
-                            
-                            # 随机间隔
-                            interval = random.uniform(2, 5)
-                            utils.logger.info(f"🛡️ [DouYinCrawler.search] 批处理间隔: {interval:.1f} 秒")
-                            await asyncio.sleep(interval)
-                        except Exception as e:
-                            utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理反爬虫处理失败: {e}")
-                            await asyncio.sleep(1)
-                    else:
-                        # 基础间隔
-                        await asyncio.sleep(1)
+                    # 🆕 批处理后添加自然间隔，模拟人类浏览节奏
+                    interval = random.uniform(2, 5)
+                    utils.logger.debug(f"🛡️ [DouYinCrawler.search] 批处理间隔: {interval:.1f} 秒")
+                    await asyncio.sleep(interval)
                 
                 # 检查处理时间，避免长时间运行
                 elapsed_time = time.time() - start_time
@@ -391,6 +403,7 @@ class DouYinCrawler(AbstractCrawler):
                     utils.logger.error(f"[DouYinCrawler.search] Failed to get comments: {e}")
             
             utils.logger.info(f"[DouYinCrawler.search] Search completed. Total processed: {processed_count}")
+            return processed_count
 
     async def get_specified_awemes(self):
         """Get the information and comments of the specified post"""
@@ -833,13 +846,36 @@ class DouYinCrawler(AbstractCrawler):
             # 启动爬虫
             await self.start()
             
-            # 执行实际的搜索
-            await self.search(start_page=start_page)
+            # 执行实际的搜索，获取processed_count
+            processed_count = await self.search(start_page=start_page)
             
-            # 从统一存储中获取结果
+            # 🆕 修复：确保返回的数据数量与实际处理的数量一致
             results = []
-            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'unified_store'):
-                results = await self.douyin_store.unified_store.get_all_content()
+            
+            # 尝试从douyin_store获取数据
+            if hasattr(self, 'douyin_store'):
+                if hasattr(self.douyin_store, 'get_all_content'):
+                    results = await self.douyin_store.get_all_content()
+                elif hasattr(self.douyin_store, 'unified_store'):
+                    results = await self.douyin_store.unified_store.get_all_content()
+            
+            # 如果存储中没有数据，尝试从Redis获取
+            if not results and hasattr(self, 'task_id'):
+                from utils.redis_manager import redis_manager
+                try:
+                    task_videos = await redis_manager.get_task_videos(self.task_id, "dy")
+                    results = task_videos
+                except Exception as e:
+                    utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 从Redis获取数据失败: {e}")
+            
+            # 🆕 确保返回的数据数量与实际处理的数量一致
+            actual_count = len(results)
+            if actual_count != processed_count:
+                utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 数据数量不一致：处理了 {processed_count} 条，存储中有 {actual_count} 条")
+                # 如果存储中的数据多于处理的数据，可能是重复数据，只返回处理的数量
+                if actual_count > processed_count:
+                    utils.logger.info(f"[DouYinCrawler.search_by_keywords] 检测到重复数据，只返回最近处理的 {processed_count} 条")
+                    results = results[-processed_count:] if processed_count > 0 else []
             
             utils.logger.info(f"[DouYinCrawler.search_by_keywords] 搜索完成，获取 {len(results)} 条数据")
             return results
@@ -850,7 +886,7 @@ class DouYinCrawler(AbstractCrawler):
         finally:
             # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
-                if hasattr(self, 'browser_context') and self.browser_context and not self.browser_context.is_closed():
+                if hasattr(self, 'browser_context') and self.browser_context:
                     # 检查是否由外部管理（如crawler_core.py）
                     if not hasattr(self, '_externally_managed'):
                         await self.close()

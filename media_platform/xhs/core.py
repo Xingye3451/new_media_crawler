@@ -975,7 +975,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
         finally:
             # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
-                if hasattr(self, 'browser_context') and self.browser_context and not self.browser_context.is_closed():
+                if hasattr(self, 'browser_context') and self.browser_context:
                     # 检查是否由外部管理（如crawler_core.py）
                     if not hasattr(self, '_externally_managed'):
                         await self.close()

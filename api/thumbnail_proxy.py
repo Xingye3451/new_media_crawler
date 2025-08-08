@@ -56,7 +56,7 @@ def download_thumbnail(url: str) -> bool:
             parsed_url = urlparse(url)
             headers['Referer'] = f'{parsed_url.scheme}://{parsed_url.netloc}/'
         
-        logger.info(f"开始下载缩略图: {url}")
+        logger.debug(f"开始下载缩略图: {url}")
         
         # 发送请求
         response = requests.get(url, headers=headers, timeout=10, stream=True)
@@ -70,7 +70,7 @@ def download_thumbnail(url: str) -> bool:
             
             # 检查文件大小
             if os.path.exists(file_path) and os.path.getsize(file_path) > 100:
-                logger.info(f"缩略图下载成功: {file_path}, 大小: {os.path.getsize(file_path)} 字节")
+                logger.debug(f"缩略图下载成功: {file_path}, 大小: {os.path.getsize(file_path)} 字节")
                 return True
             else:
                 logger.error(f"缩略图文件无效: {file_path}")
@@ -98,7 +98,7 @@ async def thumbnail_proxy(url: str, force_download: bool = False):
         
         # 检查本地是否已有文件
         if os.path.exists(thumbnail_path) and not force_download:
-            logger.info(f"使用本地缓存缩略图: {thumbnail_path}")
+            logger.debug(f"使用本地缓存缩略图: {thumbnail_path}")
             return FileResponse(
                 thumbnail_path,
                 media_type='image/jpeg',
