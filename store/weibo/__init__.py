@@ -95,6 +95,12 @@ def _get_collected_data() -> List[Dict]:
     return _collected_data
 
 def _clear_collected_data():
+    """清空收集到的数据，用于新的爬取任务"""
+    global _collected_data
+    _collected_data.clear()
+    utils.logger.info("[WeiboStore] 已清空收集的数据，准备新的爬取任务")
+
+def _clear_collected_data():
     """清空收集到的数据"""
     global _collected_data
     _collected_data = []

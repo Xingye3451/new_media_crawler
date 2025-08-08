@@ -343,6 +343,34 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
         
         # 创建爬虫实例
         crawler = MultiPlatformCrawlerFactory.create_crawler(platform, task_id=task_id)
+        # 🆕 标记浏览器由外部管理，避免重复关闭
+        crawler._externally_managed = True
+        
+        # 🆕 清空之前收集的数据，确保新任务的数据正确
+        try:
+            if platform == "xhs":
+                from store.xhs import _clear_collected_data
+                _clear_collected_data()
+            elif platform == "dy":
+                if hasattr(crawler, 'douyin_store') and hasattr(crawler.douyin_store, 'clear_collected_data'):
+                    crawler.douyin_store.clear_collected_data()
+            elif platform == "ks":
+                from store.kuaishou import _clear_collected_data
+                _clear_collected_data()
+            elif platform == "bili":
+                from store.bilibili import _clear_collected_data
+                _clear_collected_data()
+            elif platform == "wb":
+                from store.weibo import _clear_collected_data
+                _clear_collected_data()
+            elif platform == "zhihu":
+                from store.zhihu import _clear_collected_data
+                _clear_collected_data()
+            elif platform == "tieba":
+                from store.tieba import _clear_collected_data
+                _clear_collected_data()
+        except Exception as e:
+            utils.logger.warning(f"[MULTI_TASK_{task_id}] 清空数据失败: {e}")
         
         # 设置爬虫配置
         import config
@@ -365,7 +393,8 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
                 get_comments=request.enable_comments,
                 save_data_option="db",
                 use_proxy=request.use_proxy,
-                proxy_strategy=request.proxy_strategy
+                proxy_strategy=request.proxy_strategy,
+                start_page=1  # 多平台爬取默认从第1页开始
             )
         
         # 🆕 使用错误处理器执行爬取

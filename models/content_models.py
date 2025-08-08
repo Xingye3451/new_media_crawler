@@ -125,6 +125,9 @@ class CrawlerRequest(BaseModel):
     # 短视频优先参数
     video_priority: Optional[bool] = Field(default=True, description="短视频优先模式（如小红书优先搜索视频内容）", example=True)
     video_only: Optional[bool] = Field(default=False, description="仅爬取视频内容", example=False)
+    
+    # 分页参数
+    start_page: Optional[int] = Field(default=1, description="起始页码", example=1)
 
 
 class MultiPlatformCrawlerRequest(BaseModel):

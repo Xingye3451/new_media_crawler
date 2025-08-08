@@ -498,7 +498,12 @@ class DouyinRedisStoreImplement(AbstractStore):
     
     def __init__(self, redis_callback=None):
         self.redis_callback = redis_callback
-        self.collected_data = []  # 收集爬取到的数据
+        self.collected_data = []
+    
+    def clear_collected_data(self):
+        """清空收集的数据，用于新的爬取任务"""
+        self.collected_data.clear()
+        utils.logger.info("[DouyinRedisStore] 已清空收集的数据，准备新的爬取任务")  # 收集爬取到的数据
     
     def set_redis_callback(self, callback):
         """设置Redis回调函数"""

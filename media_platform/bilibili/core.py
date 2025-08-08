@@ -53,7 +53,7 @@ class BilibiliCrawler(AbstractCrawler):
         self.bilibili_store = BilibiliStoreFactory.create_store()
         self.task_id = task_id
 
-    async def start(self) -> None:
+    async def start(self, start_page: int = 1) -> None:
         """初始化爬虫，创建浏览器上下文和客户端"""
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
@@ -170,27 +170,29 @@ class BilibiliCrawler(AbstractCrawler):
             else:
                 utils.logger.warning(f"[BilibiliCrawler.get_creators_and_notes] creator_id:{creator_id} not found")
 
-    async def search(self):
+    async def search(self, start_page: int = 1):
         """
         search bilibili video with keywords
         :return:
         """
         utils.logger.info("[BilibiliCrawler.search] Begin search bilibli keywords")
         bili_limit_count = 20  # bilibili limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < bili_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = bili_limit_count
-        start_page = config.START_PAGE  # start page number
+        # 🆕 修复：使用实例变量替代config.CRAWLER_MAX_NOTES_COUNT
+        max_notes_count = getattr(self, 'max_notes_count', 20)
+        if max_notes_count < bili_limit_count:
+            max_notes_count = bili_limit_count
         
         # 添加资源监控
         start_time = time.time()
         processed_count = 0
         
         # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
-        # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
+        # 从实例变量获取关键字
         keywords_to_search = getattr(self, 'dynamic_keywords', None)
         if not keywords_to_search:
-            utils.logger.warning("[BilibiliCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
-            keywords_to_search = config.KEYWORDS
+            utils.logger.error("[BilibiliCrawler.search] 没有找到动态关键字，无法进行搜索")
+            utils.logger.error("[BilibiliCrawler.search] 请确保在调用search方法前设置了dynamic_keywords")
+            return
         
         # 确保关键字不为空
         if not keywords_to_search or not keywords_to_search.strip():
@@ -204,9 +206,9 @@ class BilibiliCrawler(AbstractCrawler):
             source_keyword_var.set(keyword)
             utils.logger.info(f"[BilibiliCrawler.search] Current search keyword: {keyword}")
             # 每个关键词最多返回 1000 条数据
-            if not config.ALL_DAY:
-                page = 1
-                while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            # 🆕 修复：移除对 config.ALL_DAY 的依赖，默认使用单日搜索
+            page = 1
+            while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                     if page < start_page:
                         utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
                         page += 1
@@ -226,7 +228,7 @@ class BilibiliCrawler(AbstractCrawler):
                         video_list: List[Dict] = videos_res.get("result")
 
                         # 限制并发数量，避免资源耗尽
-                        max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(video_list))
+                        max_concurrent = min(5, len(video_list))  # 🆕 修复：使用固定值替代config.MAX_CONCURRENCY_NUM
                         semaphore = asyncio.Semaphore(max_concurrent)
                         
                         # 分批处理视频详情
@@ -302,7 +304,9 @@ class BilibiliCrawler(AbstractCrawler):
                             break
                         
                         # 获取评论（如果启用）
-                        if config.ENABLE_GET_COMMENTS and video_id_list:
+                        # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
+                        get_comments = getattr(self, 'get_comments', False)
+                        if get_comments and video_id_list:
                             try:
                                 await self.batch_get_video_comments(video_id_list)
                             except Exception as e:
@@ -315,16 +319,22 @@ class BilibiliCrawler(AbstractCrawler):
                         page += 1
                         continue
                         
-            # 按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
+            # 🆕 修复：移除对config.START_DAY和config.END_DAY的依赖，默认使用最近7天
+            # 按照日期范围进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
             else:
-                for day in pd.date_range(start=config.START_DAY, end=config.END_DAY, freq='D'):
+                # 使用最近7天作为默认日期范围
+                from datetime import datetime, timedelta
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=7)
+                
+                for day in pd.date_range(start=start_date, end=end_date, freq='D'):
                     # 按照每一天进行爬取的时间戳参数
                     pubtime_begin_s, pubtime_end_s = await self.get_pubtime_datetime(start=day.strftime('%Y-%m-%d'), end=day.strftime('%Y-%m-%d'))
                     page = 1
                     #!该段 while 语句在发生异常时（通常情况下为当天数据为空时）会自动跳转到下一天，以实现最大程度爬取该关键词下当天的所有视频
                     #!除了仅保留现在原有的 try, except Exception 语句外，不要再添加其他的异常处理！！！否则将使该段代码失效，使其仅能爬取当天一天数据而无法跳转到下一天
                     #!除非将该段代码的逻辑进行重构以实现相同的功能，否则不要进行修改！！！
-                    while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+                    while (page - start_page + 1) * bili_limit_count <= max_notes_count:
                         #! Catch any error if response return nothing, go to next day
                         try:
                             #! Don't skip any page, to make sure gather all video in one day
@@ -418,7 +428,9 @@ class BilibiliCrawler(AbstractCrawler):
         :param video_id_list:
         :return:
         """
-        if not config.ENABLE_GET_COMMENTS:
+        # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
+        get_comments = getattr(self, 'get_comments', False)
+        if not get_comments:
             utils.logger.info(
                 f"[BilibiliCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
@@ -1209,7 +1221,7 @@ class BilibiliCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled") -> List[Dict]:
+                                proxy_strategy: str = "disabled", start_page: int = 1) -> List[Dict]:
         """
         根据关键词搜索B站视频
         :param keywords: 搜索关键词
@@ -1241,16 +1253,25 @@ class BilibiliCrawler(AbstractCrawler):
             else:
                 utils.logger.warning("[BilibiliCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
             
+            # 🆕 清空之前收集的数据，确保新任务的数据正确
+            try:
+                from store.bilibili import _clear_collected_data
+                _clear_collected_data()
+            except Exception as e:
+                utils.logger.warning(f"[BilibiliCrawler] 清空数据失败: {e}")
+            
             # 启动爬虫
-            await self.start()
+            await self.start(start_page=start_page)
             
             # 执行实际的搜索
-            await self.search()
+            await self.search(start_page=start_page)
             
             # 从统一存储中获取结果
             results = []
@@ -1298,9 +1319,11 @@ class BilibiliCrawler(AbstractCrawler):
             self.dynamic_video_ids = [user_id]
             utils.logger.info(f"[BilibiliCrawler.get_user_notes] 设置动态用户ID: {user_id}")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
             
             # 启动爬虫
@@ -1324,6 +1347,46 @@ class BilibiliCrawler(AbstractCrawler):
                     await self.close()
             except Exception as e:
                 utils.logger.warning(f"[BilibiliCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")
+
+    async def get_pubtime_datetime(self, start: str, end: str) -> tuple:
+        """
+        获取发布时间范围的时间戳
+        
+        Args:
+            start (str): 开始日期，格式：YYYY-MM-DD
+            end (str): 结束日期，格式：YYYY-MM-DD
+            
+        Returns:
+            tuple: (pubtime_begin_s, pubtime_end_s) 时间戳
+        """
+        try:
+            from datetime import datetime
+            
+            # 解析日期字符串
+            start_date = datetime.strptime(start, '%Y-%m-%d')
+            end_date = datetime.strptime(end, '%Y-%m-%d')
+            
+            # 转换为时间戳（秒）
+            pubtime_begin_s = int(start_date.timestamp())
+            pubtime_end_s = int(end_date.timestamp())
+            
+            utils.logger.debug(f"[BilibiliCrawler.get_pubtime_datetime] 时间范围: {start} -> {end}")
+            utils.logger.debug(f"[BilibiliCrawler.get_pubtime_datetime] 时间戳: {pubtime_begin_s} -> {pubtime_end_s}")
+            
+            return pubtime_begin_s, pubtime_end_s
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliCrawler.get_pubtime_datetime] 时间转换失败: {e}")
+            # 返回默认时间戳（最近7天）
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=7)
+            
+            pubtime_begin_s = int(start_date.timestamp())
+            pubtime_end_s = int(end_date.timestamp())
+            
+            utils.logger.warning(f"[BilibiliCrawler.get_pubtime_datetime] 使用默认时间范围: {pubtime_begin_s} -> {pubtime_end_s}")
+            return pubtime_begin_s, pubtime_end_s
 
     async def close(self):
         """

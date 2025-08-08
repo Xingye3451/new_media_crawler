@@ -472,6 +472,13 @@ class TieBaCrawler(AbstractCrawler):
             config.SAVE_DATA_OPTION = save_data_option
             config.ENABLE_IP_PROXY = use_proxy
             
+            # 🆕 清空之前收集的数据，确保新任务的数据正确
+            try:
+                from store.tieba import _clear_collected_data
+                _clear_collected_data()
+            except Exception as e:
+                utils.logger.warning(f"[TiebaCrawler] 清空数据失败: {e}")
+            
             # 启动爬虫
             await self.start()
             

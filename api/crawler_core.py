@@ -359,13 +359,13 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ proxy_strategy: {request.proxy_strategy}")
         utils.logger.info(f"[TASK_{task_id}]   └─ selected_creators: {getattr(request, 'selected_creators', None)}")
         
-        # 🆕 创建错误处理器
+        # 🆕 创建错误处理器 - 减少重试次数避免嵌套重试过多
         retry_config = RetryConfig(
-            max_retries=3,
+            max_retries=3,  
             base_delay=2.0,
-            max_delay=30.0,
+            max_delay=20.0,  # 减少最大延迟
             account_switch_enabled=True,
-            max_account_switches=3
+            max_account_switches=2  # 减少账号切换次数
         )
         error_handler = await create_error_handler(request.platform, task_id, retry_config)
         utils.logger.info(f"[TASK_{task_id}] ✅ 错误处理器初始化完成")
@@ -410,6 +410,8 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
         
         try:
             crawler = CrawlerFactory.create_crawler(request.platform, task_id=task_id)
+            # 🆕 标记浏览器由外部管理，避免重复关闭
+            crawler._externally_managed = True
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
             await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45)
         except PlatformComingSoonException as e:
@@ -447,7 +449,8 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
                         get_comments=request.get_comments,
                         save_data_option=request.save_data_option,
                         use_proxy=request.use_proxy,
-                        proxy_strategy=request.proxy_strategy
+                        proxy_strategy=request.proxy_strategy,
+                        start_page=getattr(request, 'start_page', 1)
                     )
                 elif request.crawler_type == "creator":
                     # 从数据库获取创作者列表

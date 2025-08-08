@@ -362,9 +362,9 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
     mapped_data = {}
     
     # 🆕 添加调试日志，打印原始数据
-    utils.logger.info(f"[map_platform_fields] 平台: {platform}")
-    utils.logger.info(f"[map_platform_fields] 原始数据字段: {list(data.keys())}")
-    utils.logger.info(f"[map_platform_fields] 原始数据内容: {data}")
+    utils.logger.debug(f"[map_platform_fields] 平台: {platform}")
+    utils.logger.debug(f"[map_platform_fields] 原始数据字段: {list(data.keys())}")
+    utils.logger.debug(f"[map_platform_fields] 原始数据内容: {data}")
     
     # 添加平台标识
     mapped_data["platform"] = platform
@@ -423,7 +423,7 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
             
             if value is not None:
                 # 🆕 添加调试日志，打印映射结果
-                utils.logger.info(f"[map_platform_fields] 字段映射: {platform_field} -> {unified_field} = {value}")
+                utils.logger.debug(f"[map_platform_fields] 字段映射: {platform_field} -> {unified_field} = {value}")
                 # 对数值字段进行类型转换
                 if unified_field in numeric_fields:
                     try:
@@ -447,13 +447,13 @@ def map_platform_fields(platform: str, data: Dict) -> Dict:
                             timestamp = mapped_data[unified_field]
                             if timestamp < 10000000000:  # 10位时间戳
                                 mapped_data[unified_field] = timestamp * 1000  # 转换为13位时间戳
-                                utils.logger.info(f"[map_platform_fields] B站时间戳转换: {timestamp} -> {mapped_data[unified_field]}")
+                                utils.logger.debug(f"[map_platform_fields] B站时间戳转换: {timestamp} -> {mapped_data[unified_field]}")
                 else:
                     mapped_data[unified_field] = value
     
     # 🆕 添加调试日志，打印最终映射结果
-    utils.logger.info(f"[map_platform_fields] 最终映射结果: {mapped_data}")
-    utils.logger.info(f"[map_platform_fields] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
+    utils.logger.debug(f"[map_platform_fields] 最终映射结果: {mapped_data}")
+    utils.logger.debug(f"[map_platform_fields] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
     
     return mapped_data
 
@@ -499,9 +499,9 @@ async def add_new_content(platform: str, content_item: Dict, task_id: str = None
         utils.logger.debug(f"[add_new_content] 字段映射完成，映射后字段数: {len(mapped_data)}")
         
         # 🆕 添加调试日志，检查映射后的数据
-        utils.logger.info(f"[add_new_content] 映射后数据字段: {list(mapped_data.keys())}")
-        utils.logger.info(f"[add_new_content] content_id是否存在: {'content_id' in mapped_data}")
-        utils.logger.info(f"[add_new_content] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
+        utils.logger.debug(f"[add_new_content] 映射后数据字段: {list(mapped_data.keys())}")
+        utils.logger.debug(f"[add_new_content] content_id是否存在: {'content_id' in mapped_data}")
+        utils.logger.debug(f"[add_new_content] content_id值: {mapped_data.get('content_id', 'NOT_FOUND')}")
         
         # 添加任务ID
         if task_id:
@@ -525,9 +525,9 @@ async def add_new_content(platform: str, content_item: Dict, task_id: str = None
         utils.logger.debug(f"[add_new_content] 字段过滤完成，最终字段数: {len(safe_item)}")
         
         # 🆕 添加调试日志，检查过滤后的数据
-        utils.logger.info(f"[add_new_content] 过滤后数据字段: {list(safe_item.keys())}")
-        utils.logger.info(f"[add_new_content] 过滤后content_id是否存在: {'content_id' in safe_item}")
-        utils.logger.info(f"[add_new_content] 过滤后content_id值: {safe_item.get('content_id', 'NOT_FOUND')}")
+        utils.logger.debug(f"[add_new_content] 过滤后数据字段: {list(safe_item.keys())}")
+        utils.logger.debug(f"[add_new_content] 过滤后content_id是否存在: {'content_id' in safe_item}")
+        utils.logger.debug(f"[add_new_content] 过滤后content_id值: {safe_item.get('content_id', 'NOT_FOUND')}")
         
         # 插入数据库
         utils.logger.debug(f"[add_new_content] 开始插入数据库，表名: unified_content")

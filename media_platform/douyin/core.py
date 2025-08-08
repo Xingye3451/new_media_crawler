@@ -210,12 +210,13 @@ class DouYinCrawler(AbstractCrawler):
 
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
-    async def search(self) -> None:
+    async def search(self, start_page: int = 1) -> None:
         utils.logger.info("[DouYinCrawler.search] Begin search douyin keywords")
         dy_limit_count = 10  # douyin limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < dy_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = dy_limit_count
-        start_page = config.START_PAGE  # start page number
+        # 🆕 修复：使用实例变量替代config.CRAWLER_MAX_NOTES_COUNT
+        max_notes_count = getattr(self, 'max_notes_count', 20)
+        if max_notes_count < dy_limit_count:
+            max_notes_count = dy_limit_count
         
         # 🆕 集成抖音反爬虫增强模块
         try:
@@ -250,7 +251,7 @@ class DouYinCrawler(AbstractCrawler):
             aweme_list: List[str] = []
             page = 0
             dy_search_id = ""
-            while (page - start_page + 1) * dy_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            while (page - start_page + 1) * dy_limit_count <= max_notes_count:
                 if page < start_page:
                     utils.logger.info(f"[DouYinCrawler.search] Skip {page}")
                     page += 1
@@ -281,9 +282,10 @@ class DouYinCrawler(AbstractCrawler):
                     elif not hasattr(self, 'context_page') or not self.context_page or self.context_page.is_closed():
                         utils.logger.warning("🛡️ [DouYinCrawler.search] 页面不可用，跳过反爬虫检查")
                     
+                    # 🆕 修复：移除对config.PUBLISH_TIME_TYPE的依赖，使用默认值
                     posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
                                                                             offset=page * dy_limit_count - dy_limit_count,
-                                                                            publish_time=PublishTimeType(config.PUBLISH_TIME_TYPE),
+                                                                            publish_time=PublishTimeType.UNLIMITED,  # 使用正确的枚举值
                                                                             search_id=dy_search_id
                                                                             )
                     if posts_res.get("data") is None or posts_res.get("data") == []:
@@ -378,7 +380,9 @@ class DouYinCrawler(AbstractCrawler):
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
             
                         # 获取评论（如果启用）
-            if config.ENABLE_GET_COMMENTS and aweme_list:
+            # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
+            get_comments = getattr(self, 'get_comments', False)
+            if get_comments and aweme_list:
                 try:
                     # 🆕 从前端传入参数，默认10条评论
                     max_comments = getattr(self, 'max_comments', 10)
@@ -778,7 +782,7 @@ class DouYinCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled") -> List[Dict]:
+                                proxy_strategy: str = "disabled", start_page: int = 1) -> List[Dict]:
         """
         根据关键词搜索抖音视频（参考B站和快手实现）
         :param keywords: 搜索关键词
@@ -815,16 +819,22 @@ class DouYinCrawler(AbstractCrawler):
             else:
                 utils.logger.warning("[DouYinCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
+            
+            # 🆕 清空之前收集的数据，确保新任务的数据正确
+            if hasattr(self, 'douyin_store') and hasattr(self.douyin_store, 'clear_collected_data'):
+                self.douyin_store.clear_collected_data()
             
             # 启动爬虫
             await self.start()
             
             # 执行实际的搜索
-            await self.search()
+            await self.search(start_page=start_page)
             
             # 从统一存储中获取结果
             results = []
@@ -838,10 +848,15 @@ class DouYinCrawler(AbstractCrawler):
             utils.logger.error(f"[DouYinCrawler.search_by_keywords] 搜索失败: {e}")
             raise
         finally:
-            # 安全关闭浏览器，避免重复关闭
+            # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
-                if hasattr(self, 'browser_context') and self.browser_context:
-                    await self.close()
+                if hasattr(self, 'browser_context') and self.browser_context and not self.browser_context.is_closed():
+                    # 检查是否由外部管理（如crawler_core.py）
+                    if not hasattr(self, '_externally_managed'):
+                        await self.close()
+                        utils.logger.info("[DouYinCrawler.search_by_keywords] 浏览器已关闭")
+                    else:
+                        utils.logger.info("[DouYinCrawler.search_by_keywords] 浏览器由外部管理，跳过关闭")
             except Exception as e:
                 utils.logger.warning(f"[DouYinCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
 
@@ -872,9 +887,11 @@ class DouYinCrawler(AbstractCrawler):
             self.dynamic_video_ids = [user_id]
             utils.logger.info(f"[DouYinCrawler.get_user_notes] 设置动态用户ID: {user_id}")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
             
             # 启动爬虫

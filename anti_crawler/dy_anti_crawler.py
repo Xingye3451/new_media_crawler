@@ -200,12 +200,22 @@ class DYAntiCrawler:
         except Exception as e:
             utils.logger.error(f"❌ [DY反爬] 设置浏览器上下文失败: {e}")
     
-    async def handle_frequency_limit(self, page, session_id: str) -> bool:
-        """处理频率限制问题"""
+    async def handle_frequency_limit(self, page, session_id: str, retry_count: int = 0) -> bool:
+        """处理频率限制问题 - 修复等待时间过长问题"""
         try:
             # 检查页面是否已关闭
             if not page or page.is_closed():
                 utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过频率限制检查")
+                return False
+            
+            # 🆕 添加总超时控制，确保不超过10秒
+            import time
+            start_time = time.time()
+            max_total_time = 10  # 最大总时间10秒
+            
+            # 限制重试次数，最多1次（避免与爬虫核心重试机制冲突）
+            if retry_count >= 1:
+                utils.logger.warning("⚠️ [DY反爬] 已达到最大重试次数(1次)，停止处理频率限制")
                 return False
             
             # 检查是否出现频率限制
@@ -229,17 +239,23 @@ class DYAntiCrawler:
             
             for indicator in frequency_indicators:
                 if indicator in page_content or indicator in current_title:
-                    utils.logger.warning(f"⚠️ [DY反爬] 检测到频率限制: {indicator}")
+                    utils.logger.warning(f"⚠️ [DY反爬] 检测到频率限制: {indicator} (重试 {retry_count + 1}/1)")
                     
-                    # 策略1: 等待随机时间
-                    wait_time = random.uniform(30, 120)
-                    utils.logger.info(f"⏳ [DY反爬] 等待 {wait_time:.1f} 秒...")
+                    # 策略1: 等待较短时间 (2-5秒) - 减少等待时间
+                    # 🆕 检查总时间是否超过限制
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= max_total_time:
+                        utils.logger.warning(f"⚠️ [DY反爬] 总时间已超过{max_total_time}秒，跳过等待")
+                        return True
+                    
+                    wait_time = min(random.uniform(2, 5), max_total_time - elapsed_time)
+                    utils.logger.info(f"⏳ [DY反爬] 等待 {wait_time:.1f} 秒... (已用时: {elapsed_time:.1f}秒)")
                     await asyncio.sleep(wait_time)
                     
                     # 策略2: 刷新页面
                     try:
                         await page.reload(wait_until="domcontentloaded", timeout=30000)
-                        await asyncio.sleep(random.uniform(3, 8))
+                        await asyncio.sleep(random.uniform(2, 5))
                     except Exception as e:
                         utils.logger.warning(f"⚠️ [DY反爬] 页面刷新失败: {e}")
                     
@@ -271,35 +287,42 @@ class DYAntiCrawler:
                 utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过人类行为模拟")
                 return
             
-            # 1. 随机鼠标移动
+            # 1. 随机鼠标移动 - 完全重写，避免鼠标对象问题
             try:
-                viewport = await page.viewport_size()
-                if viewport:
-                    # 智能获取viewport尺寸，支持多种类型
-                    width = 1920
-                    height = 1080
+                # 使用JavaScript模拟鼠标移动，避免Playwright鼠标对象问题
+                await page.evaluate("""
+                    // 模拟鼠标移动
+                    const viewport = {
+                        width: window.innerWidth || 1920,
+                        height: window.innerHeight || 1080
+                    };
                     
-                    if isinstance(viewport, dict):
-                        # 字典类型
-                        width = viewport.get('width', 1920)
-                        height = viewport.get('height', 1080)
-                    elif hasattr(viewport, 'width') and hasattr(viewport, 'height'):
-                        # 对象类型
-                        width = viewport.width
-                        height = viewport.height
-                    elif hasattr(viewport, 'get'):
-                        # 有get方法的对象
-                        width = viewport.get('width', 1920)
-                        height = viewport.get('height', 1080)
-                    
-                    # 直接使用page.mouse，确保它是正确的对象
-                    for _ in range(random.randint(2, 5)):
-                        x = random.randint(100, width - 100)
-                        y = random.randint(100, height - 100)
-                        await page.mouse.move(x, y)
-                        await asyncio.sleep(random.uniform(0.1, 0.5))
+                    // 随机移动鼠标2-5次
+                    for (let i = 0; i < Math.floor(Math.random() * 4) + 2; i++) {
+                        const x = Math.floor(Math.random() * (viewport.width - 200)) + 100;
+                        const y = Math.floor(Math.random() * (viewport.height - 200)) + 100;
+                        
+                        // 创建鼠标移动事件
+                        const moveEvent = new MouseEvent('mousemove', {
+                            clientX: x,
+                            clientY: y,
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        
+                        document.dispatchEvent(moveEvent);
+                        
+                        // 随机延迟 - 修复：移除await，使用同步延迟
+                        const delay = Math.random() * 400 + 100;
+                        const start = Date.now();
+                        while (Date.now() - start < delay) {
+                            // 同步等待
+                        }
+                    }
+                """)
+                utils.logger.debug("✅ [DY反爬] JavaScript鼠标移动完成")
             except Exception as e:
-                utils.logger.warning(f"⚠️ [DY反爬] 鼠标移动失败: {e}")
+                utils.logger.warning(f"⚠️ [DY反爬] JavaScript鼠标移动失败: {e}")
             
             # 2. 随机滚动
             try:
@@ -312,14 +335,27 @@ class DYAntiCrawler:
             except Exception as e:
                 utils.logger.warning(f"⚠️ [DY反爬] 页面滚动失败: {e}")
             
-            # 3. 随机点击空白区域
+            # 3. 随机点击空白区域 - 使用JavaScript模拟点击
             try:
-                await page.mouse.click(
-                    random.randint(50, 200),
-                    random.randint(50, 200)
-                )
+                await page.evaluate("""
+                    // 随机点击空白区域
+                    const x = Math.floor(Math.random() * 150) + 50;
+                    const y = Math.floor(Math.random() * 150) + 50;
+                    
+                    // 创建鼠标点击事件
+                    const clickEvent = new MouseEvent('click', {
+                        clientX: x,
+                        clientY: y,
+                        bubbles: true,
+                        cancelable: true,
+                        button: 0
+                    });
+                    
+                    document.elementFromPoint(x, y)?.dispatchEvent(clickEvent);
+                """)
+                utils.logger.debug("✅ [DY反爬] JavaScript鼠标点击完成")
             except Exception as e:
-                utils.logger.warning(f"⚠️ [DY反爬] 鼠标点击失败: {e}")
+                utils.logger.warning(f"⚠️ [DY反爬] JavaScript鼠标点击失败: {e}")
             
             await asyncio.sleep(random.uniform(1, 3))
             
@@ -389,11 +425,11 @@ class DYAntiCrawler:
                 except:
                     continue
             
-            # 2. 等待用户手动处理
+            # 2. 等待用户手动处理 - 修复等待时间过长问题
             utils.logger.info("⏳ [DY反爬] 等待用户手动处理验证码...")
             
-            # 等待最多5分钟
-            for i in range(300):
+            # 等待最多10秒 (而不是30秒)
+            for i in range(10):
                 # 检查验证码是否还存在
                 captcha_exists = False
                 for selector in [".captcha", ".verify", "[class*='captcha']", "[class*='verify']"]:
@@ -411,7 +447,7 @@ class DYAntiCrawler:
                 
                 await asyncio.sleep(1)
             
-            utils.logger.error("❌ [DY反爬] 验证码处理超时")
+            utils.logger.error("❌ [DY反爬] 验证码处理超时 (10秒)")
             return False
             
         except Exception as e:
@@ -506,12 +542,22 @@ class DYAntiCrawler:
         except Exception as e:
             utils.logger.error(f"❌ [DY反爬] 设置代理轮换失败: {e}")
     
-    async def handle_dy_specific_anti_crawler(self, page, session_id: str) -> bool:
-        """处理抖音特有的反爬虫机制"""
+    async def handle_dy_specific_anti_crawler(self, page, session_id: str, retry_count: int = 0) -> bool:
+        """处理抖音特有的反爬虫机制 - 修复等待时间过长问题"""
         try:
             # 检查页面是否已关闭
             if not page or page.is_closed():
                 utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过抖音特有反爬虫检查")
+                return False
+            
+            # 🆕 添加总超时控制，确保不超过10秒
+            import time
+            start_time = time.time()
+            max_total_time = 10  # 最大总时间10秒
+            
+            # 限制重试次数，最多1次（避免与爬虫核心重试机制冲突）
+            if retry_count >= 1:
+                utils.logger.warning("⚠️ [DY反爬] 已达到最大重试次数(1次)，停止处理抖音反爬虫机制")
                 return False
             
             # 1. 检查抖音特有的反爬虫页面
@@ -533,17 +579,23 @@ class DYAntiCrawler:
             
             for indicator in dy_anti_indicators:
                 if indicator in page_content or indicator in current_title:
-                    utils.logger.warning(f"⚠️ [DY反爬] 检测到抖音反爬虫机制: {indicator}")
+                    utils.logger.warning(f"⚠️ [DY反爬] 检测到抖音反爬虫机制: {indicator} (重试 {retry_count + 1}/1)")
                     
-                    # 等待更长时间
-                    wait_time = random.uniform(60, 180)
-                    utils.logger.info(f"⏳ [DY反爬] 等待 {wait_time:.1f} 秒...")
+                    # 等待较短时间 (3-8秒) - 减少等待时间
+                    # 🆕 检查总时间是否超过限制
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= max_total_time:
+                        utils.logger.warning(f"⚠️ [DY反爬] 总时间已超过{max_total_time}秒，跳过等待")
+                        return True
+                    
+                    wait_time = min(random.uniform(3, 8), max_total_time - elapsed_time)
+                    utils.logger.info(f"⏳ [DY反爬] 等待 {wait_time:.1f} 秒... (已用时: {elapsed_time:.1f}秒)")
                     await asyncio.sleep(wait_time)
                     
                     # 刷新页面
                     try:
                         await page.reload(wait_until="domcontentloaded", timeout=30000)
-                        await asyncio.sleep(random.uniform(5, 10))
+                        await asyncio.sleep(random.uniform(3, 8))
                     except Exception as e:
                         utils.logger.warning(f"⚠️ [DY反爬] 页面刷新失败: {e}")
                     

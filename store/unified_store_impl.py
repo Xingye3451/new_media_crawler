@@ -48,6 +48,11 @@ class UnifiedStoreImplement(AbstractStore):
         self.collected_data = []  # 收集爬取到的数据
         # 添加存储锁，确保串行化存储操作，避免数据库连接竞争
         self._storage_lock = asyncio.Lock()
+    
+    def clear_collected_data(self):
+        """清空收集的数据，用于新的爬取任务"""
+        self.collected_data.clear()
+        utils.logger.info(f"[UnifiedStore] 已清空收集的数据，准备新的爬取任务")
         
     def set_redis_callback(self, callback):
         """设置Redis回调函数"""

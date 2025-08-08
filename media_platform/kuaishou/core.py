@@ -44,7 +44,7 @@ class KuaishouCrawler(AbstractCrawler):
         self.user_agent = utils.get_user_agent()
         self.task_id = task_id
 
-    async def start(self) -> None:
+    async def start(self, start_page: int = 1) -> None:
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
             ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
@@ -112,7 +112,7 @@ class KuaishouCrawler(AbstractCrawler):
             if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
                 utils.logger.debug(f"[KuaishouCrawler.start] 检测到动态关键字: {self.dynamic_keywords}")
                 utils.logger.debug(f"[KuaishouCrawler.start] 执行关键词搜索模式")
-                await self.search()
+                await self.search(start_page=start_page)
             elif hasattr(self, 'dynamic_video_ids') and self.dynamic_video_ids:
                 utils.logger.debug(f"[KuaishouCrawler.start] 检测到动态视频ID: {self.dynamic_video_ids}")
                 utils.logger.debug(f"[KuaishouCrawler.start] 执行指定视频模式")
@@ -126,7 +126,7 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.debug(f"[KuaishouCrawler.start] 使用配置文件中的爬取类型: {config.CRAWLER_TYPE}")
                 if config.CRAWLER_TYPE == "search":
                     # Search for notes and retrieve their comment information.
-                    await self.search()
+                    await self.search(start_page=start_page)
                 elif config.CRAWLER_TYPE == "detail":
                     # Get the information and comments of the specified post
                     await self.get_specified_notes()
@@ -136,12 +136,13 @@ class KuaishouCrawler(AbstractCrawler):
 
             utils.logger.debug("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
-    async def search(self):
+    async def search(self, start_page: int = 1):
         utils.logger.debug("[KuaishouCrawler.search] Begin search kuaishou keywords")
         ks_limit_count = 20  # kuaishou limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
-        start_page = config.START_PAGE
+        # 🆕 修复：使用实例变量替代config.CRAWLER_MAX_NOTES_COUNT
+        max_notes_count = getattr(self, 'max_notes_count', 20)
+        if max_notes_count < ks_limit_count:
+            max_notes_count = ks_limit_count
         
         # 添加资源监控
         start_time = time.time()
@@ -172,7 +173,7 @@ class KuaishouCrawler(AbstractCrawler):
             page = 1
             while (
                 page - start_page + 1
-            ) * ks_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            ) * ks_limit_count <= max_notes_count:
                 if page < start_page:
                     utils.logger.debug(f"[KuaishouCrawler.search] Skip page: {page}")
                     page += 1
@@ -254,7 +255,9 @@ class KuaishouCrawler(AbstractCrawler):
                         break
                     
                     # 获取评论（如果启用）
-                    if config.ENABLE_GET_COMMENTS and video_id_list:
+                    # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
+                    get_comments = getattr(self, 'get_comments', False)
+                    if get_comments and video_id_list:
                         try:
                             await self.batch_get_video_comments(video_id_list)
                         except Exception as e:
@@ -705,7 +708,7 @@ class KuaishouCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled") -> List[Dict]:
+                                proxy_strategy: str = "disabled", start_page: int = 1) -> List[Dict]:
         """
         根据关键词搜索快手视频
         :param keywords: 搜索关键词
@@ -737,13 +740,22 @@ class KuaishouCrawler(AbstractCrawler):
             else:
                 utils.logger.warning("[KuaishouCrawler.search_by_keywords] 关键字为空，将使用默认搜索")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
             
+            # 🆕 清空之前收集的数据，确保新任务的数据正确
+            try:
+                from store.kuaishou import _clear_collected_data
+                _clear_collected_data()
+            except Exception as e:
+                utils.logger.warning(f"[KuaishouCrawler] 清空数据失败: {e}")
+            
             # 启动爬虫
-            await self.start()
+            await self.start(start_page=start_page)
             
             # 由于Redis存储是通过回调函数处理的，我们需要从Redis中获取数据
             # 或者直接返回爬取过程中收集的数据
@@ -803,9 +815,11 @@ class KuaishouCrawler(AbstractCrawler):
             self.dynamic_video_ids = [user_id]
             utils.logger.debug(f"[KuaishouCrawler.get_user_notes] 设置动态用户ID: {user_id}")
             
-            config.CRAWLER_MAX_NOTES_COUNT = max_count
-            config.ENABLE_GET_COMMENTS = get_comments
-            config.SAVE_DATA_OPTION = save_data_option
+            # 🆕 修复：将关键参数设置到实例变量，而不是全局配置
+            self.max_notes_count = max_count
+            self.get_comments = get_comments
+            self.save_data_option = save_data_option
+            # 保留其他配置使用全局config
             config.ENABLE_IP_PROXY = use_proxy
             
             # 启动爬虫

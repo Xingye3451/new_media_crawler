@@ -20,6 +20,25 @@ from var import source_keyword_var
 
 from .bilibili_store_impl import *
 
+# 全局数据收集器
+_collected_data = []
+
+def _add_collected_data(data: Dict):
+    """添加收集到的数据"""
+    global _collected_data
+    _collected_data.append(data)
+
+def _get_collected_data() -> List[Dict]:
+    """获取收集到的数据"""
+    global _collected_data
+    return _collected_data
+
+def _clear_collected_data():
+    """清空收集到的数据，用于新的爬取任务"""
+    global _collected_data
+    _collected_data.clear()
+    utils.logger.info("[BilibiliStore] 已清空收集的数据，准备新的爬取任务")
+
 
 class BilibiliStoreFactory:
     STORES = {

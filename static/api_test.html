@@ -1595,7 +1595,8 @@
                 save_data_option: "db",  // 固定为数据库存储
                 account_id: parseInt(selectedAccountId), // 使用选中的账号ID
                 selected_creators: crawlType === 'creator' ? Array.from(selectedCreators) : [], // 传递选中的创作者ID列表
-                creator_ref_id: crawlType === 'creator' && selectedCreators.size > 0 ? Array.from(selectedCreators)[0] : null // 传递第一个选中的创作者ID作为引用ID
+                creator_ref_id: crawlType === 'creator' && selectedCreators.size > 0 ? Array.from(selectedCreators)[0] : null, // 传递第一个选中的创作者ID作为引用ID
+                start_page: 1 // 起始页码，默认为1
             };
             
             try {
