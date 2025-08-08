@@ -1287,7 +1287,7 @@ async def handle_xhs_login(session_id: str, browser_context, page):
     
     try:
         # 🆕 导入小红书反爬虫增强模块
-        from api.xhs_anti_crawler import xhs_anti_crawler
+        from anti_crawler import xhs_anti_crawler
         
         # 🆕 设置增强的浏览器上下文
         await xhs_anti_crawler.setup_enhanced_browser_context(browser_context)

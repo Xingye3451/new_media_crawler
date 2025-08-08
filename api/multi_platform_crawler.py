@@ -312,8 +312,22 @@ async def get_platform_accounts(platform: str, account_strategy: str = "smart") 
 async def run_single_platform_crawler(task_id: str, platform: str, request: MultiPlatformCrawlerRequest, 
                                     account_strategy: str = "smart", execution_mode: str = "parallel"):
     """运行单个平台的爬虫任务"""
+    # 🆕 导入错误处理模块
+    from utils.crawler_error_handler import create_error_handler, RetryConfig, ErrorType, RetryableCrawlerOperation
+    
     try:
         utils.logger.info(f"[MULTI_TASK_{task_id}] 🚀 开始执行平台 {platform} 爬取任务")
+        
+        # 🆕 创建错误处理器
+        retry_config = RetryConfig(
+            max_retries=3,
+            base_delay=2.0,
+            max_delay=30.0,
+            account_switch_enabled=True,
+            max_account_switches=3
+        )
+        error_handler = await create_error_handler(platform, task_id, retry_config)
+        utils.logger.info(f"[MULTI_TASK_{task_id}] ✅ 平台 {platform} 错误处理器初始化完成")
         
         # 获取平台账号
         accounts = await get_platform_accounts(platform, account_strategy)
@@ -339,21 +353,34 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
         # 开始爬取
         await log_multi_platform_task_step(task_id, platform, "crawling_start", "开始执行爬取")
         
-        results = await crawler.search_by_keywords(
-            keywords=request.keywords,
-            max_count=request.max_count_per_platform,
-            account_id=account_id,
-            session_id=None,
-            login_type="qrcode",
-            get_comments=request.enable_comments,
-            save_data_option="db",
-            use_proxy=request.use_proxy,
-            proxy_strategy=request.proxy_strategy
-        )
+        # 🆕 使用错误处理器包装爬取操作
+        async def execute_platform_crawling():
+            """执行平台爬取操作"""
+            return await crawler.search_by_keywords(
+                keywords=request.keywords,
+                max_count=request.max_count_per_platform,
+                account_id=account_id,
+                session_id=None,
+                login_type="qrcode",
+                get_comments=request.enable_comments,
+                save_data_option="db",
+                use_proxy=request.use_proxy,
+                proxy_strategy=request.proxy_strategy
+            )
+        
+        # 🆕 使用错误处理器执行爬取
+        retry_op = RetryableCrawlerOperation(error_handler)
+        results = await retry_op.execute(execute_platform_crawling)
         
         result_count = len(results) if results else 0
         await log_multi_platform_task_step(task_id, platform, "crawling_completed", 
                                          f"爬取完成，共获取 {result_count} 条数据")
+        
+        # 🆕 记录错误摘要
+        error_summary = error_handler.get_error_summary()
+        if error_summary["total_errors"] > 0:
+            utils.logger.info(f"[MULTI_TASK_{task_id}] 📊 平台 {platform} 错误处理摘要: {error_summary}")
+            await log_multi_platform_task_step(task_id, platform, "error_summary", f"错误处理摘要: {error_summary}", "INFO")
         
         # 🆕 安全关闭爬虫资源
         try:
@@ -383,6 +410,14 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
         
     except Exception as e:
         utils.logger.error(f"[MULTI_TASK_{task_id}] ❌ 平台 {platform} 爬取失败: {e}")
+        
+        # 🆕 记录错误处理摘要
+        try:
+            error_summary = error_handler.get_error_summary()
+            utils.logger.error(f"[MULTI_TASK_{task_id}] 📊 平台 {platform} 最终错误处理摘要: {error_summary}")
+        except:
+            pass
+        
         await log_multi_platform_task_step(task_id, platform, "crawling_failed", f"爬取失败: {str(e)}", "ERROR")
         raise
 

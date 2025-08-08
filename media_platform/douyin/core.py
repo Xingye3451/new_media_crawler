@@ -75,7 +75,7 @@ class DouYinCrawler(AbstractCrawler):
             
             # 🆕 集成抖音反爬虫增强模块
             try:
-                from api.dy_anti_crawler import dy_anti_crawler
+                from anti_crawler import dy_anti_crawler
                 
                 # 设置增强的浏览器上下文
                 await dy_anti_crawler.setup_enhanced_browser_context(self.browser_context)
@@ -90,7 +90,7 @@ class DouYinCrawler(AbstractCrawler):
             
             # 🆕 使用增强的页面加载策略
             try:
-                from api.dy_anti_crawler import dy_anti_crawler
+                from anti_crawler import dy_anti_crawler
                 
                 # 获取最优登录URL
                 optimal_url = await dy_anti_crawler.get_optimal_login_url()
@@ -219,7 +219,7 @@ class DouYinCrawler(AbstractCrawler):
         
         # 🆕 集成抖音反爬虫增强模块
         try:
-            from api.dy_anti_crawler import dy_anti_crawler
+            from anti_crawler import dy_anti_crawler
             utils.logger.info("🛡️ [DouYinCrawler.search] 抖音反爬虫增强模块已启用")
         except Exception as e:
             utils.logger.warning(f"⚠️ [DouYinCrawler.search] 抖音反爬虫模块加载失败: {e}")

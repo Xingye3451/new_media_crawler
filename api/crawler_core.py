@@ -339,6 +339,9 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
 
 async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
     """内部爬虫任务执行函数"""
+    # 🆕 导入错误处理模块
+    from utils.crawler_error_handler import create_error_handler, RetryConfig, ErrorType
+    
     try:
         utils.logger.info("█" * 100)
         utils.logger.info(f"[TASK_{task_id}] 🚀 开始执行爬虫任务")
@@ -355,6 +358,17 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
         utils.logger.info(f"[TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ proxy_strategy: {request.proxy_strategy}")
         utils.logger.info(f"[TASK_{task_id}]   └─ selected_creators: {getattr(request, 'selected_creators', None)}")
+        
+        # 🆕 创建错误处理器
+        retry_config = RetryConfig(
+            max_retries=3,
+            base_delay=2.0,
+            max_delay=30.0,
+            account_switch_enabled=True,
+            max_account_switches=3
+        )
+        error_handler = await create_error_handler(request.platform, task_id, retry_config)
+        utils.logger.info(f"[TASK_{task_id}] ✅ 错误处理器初始化完成")
         
         # 🆕 初始化数据库连接（确保上下文变量可用）
         utils.logger.info(f"[TASK_{task_id}] 📊 初始化数据库连接...")
@@ -420,88 +434,101 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
         await log_task_step(task_id, request.platform, "crawling_start", "开始执行爬取", "INFO", 50)
         
         try:
-            # 根据爬虫类型执行不同的爬取逻辑
-            if request.crawler_type == "search":
-                results = await crawler.search_by_keywords(
-                    keywords=request.keywords,
-                    max_count=request.max_notes_count,
-                    account_id=request.account_id,
-                    session_id=request.session_id,
-                    login_type=request.login_type,
-                    get_comments=request.get_comments,
-                    save_data_option=request.save_data_option,
-                    use_proxy=request.use_proxy,
-                    proxy_strategy=request.proxy_strategy
-                )
-            elif request.crawler_type == "creator":
-                # 从数据库获取创作者列表
-                db = await get_db_connection()
-                if not db:
-                    raise Exception("数据库连接失败")
-                
-                # 获取指定平台的创作者列表
-                utils.logger.info(f"[TASK_{task_id}] 检查用户选择的创作者...")
-                utils.logger.info(f"[TASK_{task_id}] selected_creators 属性存在: {hasattr(request, 'selected_creators')}")
-                utils.logger.info(f"[TASK_{task_id}] selected_creators 值: {getattr(request, 'selected_creators', None)}")
-                
-                if hasattr(request, 'selected_creators') and request.selected_creators:
-                    # 使用用户选择的创作者
-                    utils.logger.info(f"[TASK_{task_id}] 使用用户选择的创作者，数量: {len(request.selected_creators)}")
-                    creators_query = """
-                        SELECT creator_id, platform, name, nickname 
-                        FROM unified_creator 
-                        WHERE platform = %s AND creator_id IN ({})
-                        ORDER BY last_modify_ts DESC
-                    """.format(','.join(['%s'] * len(request.selected_creators)))
-                    creators = await db.query(creators_query, request.platform, *request.selected_creators)
-                    utils.logger.info(f"[TASK_{task_id}] 用户选择了 {len(creators)} 个创作者")
-                    utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+            # 🆕 使用错误处理器包装爬取操作
+            async def execute_crawling():
+                """执行爬取操作"""
+                if request.crawler_type == "search":
+                    return await crawler.search_by_keywords(
+                        keywords=request.keywords,
+                        max_count=request.max_notes_count,
+                        account_id=request.account_id,
+                        session_id=request.session_id,
+                        login_type=request.login_type,
+                        get_comments=request.get_comments,
+                        save_data_option=request.save_data_option,
+                        use_proxy=request.use_proxy,
+                        proxy_strategy=request.proxy_strategy
+                    )
+                elif request.crawler_type == "creator":
+                    # 从数据库获取创作者列表
+                    db = await get_db_connection()
+                    if not db:
+                        raise Exception("数据库连接失败")
+                    
+                    # 获取指定平台的创作者列表
+                    utils.logger.info(f"[TASK_{task_id}] 检查用户选择的创作者...")
+                    utils.logger.info(f"[TASK_{task_id}] selected_creators 属性存在: {hasattr(request, 'selected_creators')}")
+                    utils.logger.info(f"[TASK_{task_id}] selected_creators 值: {getattr(request, 'selected_creators', None)}")
+                    
+                    if hasattr(request, 'selected_creators') and request.selected_creators:
+                        # 使用用户选择的创作者
+                        utils.logger.info(f"[TASK_{task_id}] 使用用户选择的创作者，数量: {len(request.selected_creators)}")
+                        creators_query = """
+                            SELECT creator_id, platform, name, nickname 
+                            FROM unified_creator 
+                            WHERE platform = %s AND creator_id IN ({})
+                            ORDER BY last_modify_ts DESC
+                        """.format(','.join(['%s'] * len(request.selected_creators)))
+                        creators = await db.query(creators_query, request.platform, *request.selected_creators)
+                        utils.logger.info(f"[TASK_{task_id}] 用户选择了 {len(creators)} 个创作者")
+                        utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+                    else:
+                        # 获取所有创作者（按最大数量限制）
+                        utils.logger.info(f"[TASK_{task_id}] 未选择特定创作者，获取所有创作者")
+                        creators_query = """
+                            SELECT creator_id, platform, name, nickname 
+                            FROM unified_creator 
+                            WHERE platform = %s AND is_deleted = 0
+                            ORDER BY last_modify_ts DESC
+                            LIMIT %s
+                        """
+                        creators = await db.query(creators_query, request.platform, request.max_notes_count)
+                        utils.logger.info(f"[TASK_{task_id}] 找到 {len(creators)} 个创作者（自动选择）")
+                        utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
+                    
+                    if not creators:
+                        raise Exception(f"平台 {request.platform} 没有找到可用的创作者")
+                    
+                    # 先初始化爬虫（创建客户端等）
+                    await crawler.start()
+                    
+                    # 🆕 添加调试日志，确保关键字正确传递
+                    utils.logger.debug(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")
+                    utils.logger.debug(f"[TASK_{task_id}] 关键字类型: {type(request.keywords)}")
+                    utils.logger.debug(f"[TASK_{task_id}] 关键字是否为空: {not request.keywords or not request.keywords.strip()}")
+                    
+                    # 调用创作者爬取方法
+                    return await crawler.get_creators_and_notes_from_db(
+                        creators=creators,
+                        max_count=request.max_notes_count,
+                        keywords=request.keywords,  # 添加关键词参数
+                        account_id=request.account_id,
+                        session_id=request.session_id,
+                        login_type=request.login_type,
+                        get_comments=request.get_comments,
+                        save_data_option=request.save_data_option,
+                        use_proxy=request.use_proxy,
+                        proxy_strategy=request.proxy_strategy
+                    )
                 else:
-                    # 获取所有创作者（按最大数量限制）
-                    utils.logger.info(f"[TASK_{task_id}] 未选择特定创作者，获取所有创作者")
-                    creators_query = """
-                        SELECT creator_id, platform, name, nickname 
-                        FROM unified_creator 
-                        WHERE platform = %s AND is_deleted = 0
-                        ORDER BY last_modify_ts DESC
-                        LIMIT %s
-                    """
-                    creators = await db.query(creators_query, request.platform, request.max_notes_count)
-                    utils.logger.info(f"[TASK_{task_id}] 找到 {len(creators)} 个创作者（自动选择）")
-                    utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
-                
-                if not creators:
-                    raise Exception(f"平台 {request.platform} 没有找到可用的创作者")
-                
-                # 先初始化爬虫（创建客户端等）
-                await crawler.start()
-                
-                # 🆕 添加调试日志，确保关键字正确传递
-                utils.logger.debug(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")
-                utils.logger.debug(f"[TASK_{task_id}] 关键字类型: {type(request.keywords)}")
-                utils.logger.debug(f"[TASK_{task_id}] 关键字是否为空: {not request.keywords or not request.keywords.strip()}")
-                
-                # 调用创作者爬取方法
-                results = await crawler.get_creators_and_notes_from_db(
-                    creators=creators,
-                    max_count=request.max_notes_count,
-                    keywords=request.keywords,  # 添加关键词参数
-                    account_id=request.account_id,
-                    session_id=request.session_id,
-                    login_type=request.login_type,
-                    get_comments=request.get_comments,
-                    save_data_option=request.save_data_option,
-                    use_proxy=request.use_proxy,
-                    proxy_strategy=request.proxy_strategy
-                )
-            else:
-                raise ValueError(f"不支持的爬虫类型: {request.crawler_type}")
+                    raise ValueError(f"不支持的爬虫类型: {request.crawler_type}")
+            
+            # 🆕 使用错误处理器执行爬取
+            from utils.crawler_error_handler import RetryableCrawlerOperation
+            retry_op = RetryableCrawlerOperation(error_handler)
+            results = await retry_op.execute(execute_crawling)
             
             # 更新任务状态
             task_status[task_id]["status"] = "completed"
             task_status[task_id]["result_count"] = len(results) if results else 0
             task_status[task_id]["results"] = results
             task_status[task_id]["updated_at"] = datetime.now().isoformat()
+            
+            # 🆕 记录错误摘要
+            error_summary = error_handler.get_error_summary()
+            if error_summary["total_errors"] > 0:
+                utils.logger.info(f"[TASK_{task_id}] 📊 错误处理摘要: {error_summary}")
+                await log_task_step(task_id, request.platform, "error_summary", f"错误处理摘要: {error_summary}", "INFO", 95)
             
             await update_task_progress(task_id, 100.0, "completed", len(results) if results else 0)
             await log_task_step(task_id, request.platform, "crawling_completed", f"爬取完成，共获取 {len(results) if results else 0} 条数据", "INFO", 100)
@@ -510,6 +537,11 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
             
         except Exception as e:
             utils.logger.error(f"[TASK_{task_id}] ❌ 爬取过程中发生错误: {e}")
+            
+            # 🆕 记录错误处理摘要
+            error_summary = error_handler.get_error_summary()
+            utils.logger.error(f"[TASK_{task_id}] 📊 最终错误处理摘要: {error_summary}")
+            
             task_status[task_id]["status"] = "failed"
             task_status[task_id]["error"] = f"爬取失败: {str(e)}"
             task_status[task_id]["updated_at"] = datetime.now().isoformat()

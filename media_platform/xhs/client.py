@@ -99,6 +99,7 @@ class XiaoHongShuClient(AbstractApiClient):
         async with httpx.AsyncClient(proxies=self.proxies) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
 
+        # 🆕 增强错误检测和处理
         if response.status_code == 471 or response.status_code == 461:
             # someday someone maybe will bypass captcha
             verify_type = response.headers.get("Verifytype", "unknown")
@@ -107,6 +108,16 @@ class XiaoHongShuClient(AbstractApiClient):
             raise Exception(
                 f"出现验证码，请求失败，Verifytype: {verify_type}，Verifyuuid: {verify_uuid}, Response: {response}"
             )
+        
+        # 🆕 检测权限丢失
+        if response.status_code == 403:
+            utils.logger.error(f"[XiaoHongShuClient.request] 权限丢失，状态码: 403, Response: {response.text}")
+            raise Exception("权限丢失，需要重新登录")
+        
+        # 🆕 检测频率限制
+        if response.status_code == 429:
+            utils.logger.error(f"[XiaoHongShuClient.request] 请求频率过高，状态码: 429, Response: {response.text}")
+            raise Exception("请求频率过高，请稍后重试")
 
         if return_response:
             return response.text
@@ -122,6 +133,14 @@ class XiaoHongShuClient(AbstractApiClient):
         elif data.get("code") == self.IP_ERROR_CODE:
             utils.logger.error(f"[XiaoHongShuClient.request] IP被限制: {data}")
             raise IPBlockError(self.IP_ERROR_STR)
+        # 🆕 检测登录状态失效
+        elif data.get("code") == -1 and "未登录" in data.get("msg", ""):
+            utils.logger.error(f"[XiaoHongShuClient.request] 登录状态失效: {data}")
+            raise Exception("登录状态失效，需要重新登录")
+        # 🆕 检测账号被封
+        elif data.get("code") == -1 and any(keyword in data.get("msg", "") for keyword in ["封禁", "blocked", "banned"]):
+            utils.logger.error(f"[XiaoHongShuClient.request] 账号被封: {data}")
+            raise Exception("账号被封，需要切换账号")
         elif data.get("code") == -510000 and data.get("msg") == "笔记不存在":
             # 🆕 修复：笔记不存在是正常现象，不是错误
             utils.logger.debug(f"[XiaoHongShuClient.request] 笔记不存在，这是正常现象: {data}")
