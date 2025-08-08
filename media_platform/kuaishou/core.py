@@ -26,7 +26,7 @@ from tools import utils
 from var import comment_tasks_var, crawler_type_var, source_keyword_var
 
 from .client import KuaiShouClient
-from .exception import DataFetchError
+from .exception import DataFetchError, FrequencyLimitError, IPBlockError
 from .login import KuaishouLogin
 from utils.db_utils import get_cookies_from_database
 
@@ -171,6 +171,11 @@ class KuaishouCrawler(AbstractCrawler):
                 f"[KuaishouCrawler.search] Current search keyword: {keyword}"
             )
             page = 1
+            
+            # 🆕 添加重试次数限制
+            max_retries = 3
+            retry_count = 0
+            
             while (
                 page - start_page + 1
             ) * ks_limit_count <= max_notes_count:
@@ -310,6 +315,17 @@ class KuaishouCrawler(AbstractCrawler):
                     f"[KuaishouCrawler.get_video_info_task] Get video_id:{video_id} info result: {result} ..."
                 )
                 return result.get("visionVideoDetail")
+            except FrequencyLimitError as ex:
+                retry_count += 1
+                utils.logger.error(f"[KuaishouCrawler.get_video_info_task] 访问频次异常，等待更长时间: {ex} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[KuaishouCrawler.get_video_info_task] 达到最大重试次数 {max_retries}，终止视频详情获取")
+                    return None
+                
+                # 频率限制错误，等待更长时间后重试
+                await asyncio.sleep(30)  # 等待30秒
+                return None
             except DataFetchError as ex:
                 utils.logger.error(
                     f"[KuaishouCrawler.get_video_info_task] Get video detail error: {ex}"
@@ -395,10 +411,23 @@ class KuaishouCrawler(AbstractCrawler):
                     callback=self.kuaishou_store.batch_update_ks_video_comments,
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
+            except FrequencyLimitError as ex:
+                retry_count += 1
+                utils.logger.error(f"[KuaishouCrawler.get_comments] 访问频次异常，等待更长时间: {ex} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[KuaishouCrawler.get_comments] 达到最大重试次数 {max_retries}，终止评论获取")
+                    return
+                
+                # 频率限制错误，等待更长时间后重试
+                await asyncio.sleep(30)  # 等待30秒
             except DataFetchError as ex:
-                utils.logger.error(
-                    f"[KuaishouCrawler.get_comments] get video_id: {video_id} comment error: {ex}"
-                )
+                retry_count += 1
+                utils.logger.error(f"[KuaishouCrawler.get_comments] get video_id: {video_id} comment error: {ex} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[KuaishouCrawler.get_comments] 达到最大重试次数 {max_retries}，终止评论获取")
+                    return
             except Exception as e:
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] may be been blocked, err:{e}"

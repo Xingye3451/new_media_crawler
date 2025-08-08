@@ -252,6 +252,11 @@ class DouYinCrawler(AbstractCrawler):
             aweme_list: List[str] = []
             page = 0
             dy_search_id = ""
+            
+            # 🆕 添加重试次数限制
+            max_retries = 3
+            retry_count = 0
+            
             while (page - start_page + 1) * dy_limit_count <= max_notes_count:
                 if page < start_page:
                     utils.logger.info(f"[DouYinCrawler.search] Skip {page}")
@@ -293,6 +298,11 @@ class DouYinCrawler(AbstractCrawler):
                     else:
                         utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 前页面不可用，跳过反爬虫检查")
                     
+                    # 🆕 修复：在搜索前检查页面状态，避免在关闭的页面上搜索
+                    if hasattr(self, 'context_page') and self.context_page and self.context_page.is_closed():
+                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 时页面已关闭，跳过搜索")
+                        break
+                    
                     # 🆕 修复：移除对config.PUBLISH_TIME_TYPE的依赖，使用默认值
                     posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
                                                                             offset=page * dy_limit_count - dy_limit_count,
@@ -303,7 +313,12 @@ class DouYinCrawler(AbstractCrawler):
                         utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page} is empty,{posts_res.get('data')}`")
                         break
                 except DataFetchError:
-                    utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed")
+                    retry_count += 1
+                    utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed (重试 {retry_count}/{max_retries})")
+                    
+                    if retry_count >= max_retries:
+                        utils.logger.error(f"[DouYinCrawler.search] 达到最大重试次数 {max_retries}，终止搜索")
+                        break
                     
                     # 🆕 反爬虫处理：搜索失败时的处理
                     if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
@@ -320,7 +335,7 @@ class DouYinCrawler(AbstractCrawler):
                         except Exception as e:
                             utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索失败反爬虫处理失败: {e}")
                     
-                    break
+                    continue
 
                 page += 1
                 if "data" not in posts_res:
@@ -337,27 +352,23 @@ class DouYinCrawler(AbstractCrawler):
                     batch_data = data_list[i:i + batch_size]
                     utils.logger.info(f"[DouYinCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_data)}")
                     
-                    # 🆕 反爬虫处理：批处理前的检查 - 增强页面状态检查
+                    # 🆕 批处理前只进行基础检查，不进行人类行为模拟
                     if dy_anti_crawler and hasattr(self, 'context_page') and self.context_page:
                         try:
                             # 🆕 检查页面是否已关闭
                             if self.context_page.is_closed():
-                                utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前检测到页面已关闭，跳过反爬虫操作")
+                                utils.logger.debug(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前检测到页面已关闭")
                                 # 即使页面关闭，也继续处理数据
                                 pass
                             else:
-                                # 🆕 批处理前模拟人类行为，保持自然节奏
-                                utils.logger.debug("🛡️ [DouYinCrawler.search] 批处理前模拟人类行为...")
-                                await dy_anti_crawler.simulate_human_behavior(self.context_page)
-                                
-                                # 检查频率限制
+                                # 🆕 只进行频率限制检查，不进行人类行为模拟
                                 if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_batch"):
                                     utils.logger.warning("🛡️ [DouYinCrawler.search] 批处理前检测到频率限制，等待后继续")
                                     await asyncio.sleep(random.uniform(5, 15))
                         except Exception as e:
                             utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理前反爬虫检查失败: {e}")
                     else:
-                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前页面不可用，跳过反爬虫操作")
+                        utils.logger.debug(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前页面不可用")
                     
                     # 🆕 处理视频数据 - 即使页面关闭也继续处理
                     for post_item in batch_data:
@@ -371,9 +382,15 @@ class DouYinCrawler(AbstractCrawler):
                             aweme_list.append(aweme_info.get("aweme_id", ""))
                             # 添加关键词信息
                             aweme_info["source_keyword"] = keyword
-                            # 使用Redis存储
-                            await self.douyin_store.store_content({**aweme_info, "task_id": self.task_id} if self.task_id else aweme_info)
-                            processed_count += 1
+                            # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
+                            existing_ids = [item.get("aweme_id") for item in self.douyin_store.collected_data]
+                            if aweme_info.get("aweme_id") not in existing_ids:
+                                # 使用Redis存储
+                                await self.douyin_store.store_content({**aweme_info, "task_id": self.task_id} if self.task_id else aweme_info)
+                                processed_count += 1
+                                utils.logger.debug(f"🆕 [DouYinCrawler.search] 新增数据: {aweme_info.get('aweme_id')}")
+                            else:
+                                utils.logger.debug(f"🆕 [DouYinCrawler.search] 跳过重复数据: {aweme_info.get('aweme_id')}")
                         except Exception as e:
                             utils.logger.error(f"[DouYinCrawler.search] Failed to process video: {e}")
                             continue
@@ -608,8 +625,14 @@ class DouYinCrawler(AbstractCrawler):
                                     # 保存到数据库
                                     utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
                                     try:
-                                        await self.douyin_store.store_content({**video_detail, "task_id": self.task_id} if self.task_id else video_detail)
-                                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
+                                        # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
+                                        existing_ids = [item.get("aweme_id") for item in self.douyin_store.collected_data]
+                                        if video_detail.get("aweme_id") not in existing_ids:
+                                            await self.douyin_store.store_content({**video_detail, "task_id": self.task_id} if self.task_id else video_detail)
+                                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频数据保存成功")
+                                            utils.logger.debug(f"🆕 [DouYinCrawler.get_creators_and_notes_from_db] 新增数据: {video_detail.get('aweme_id')}")
+                                        else:
+                                            utils.logger.debug(f"🆕 [DouYinCrawler.get_creators_and_notes_from_db] 跳过重复数据: {video_detail.get('aweme_id')}")
                                     except Exception as e:
                                         utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 视频数据保存失败: {e}")
                                     
@@ -663,8 +686,14 @@ class DouYinCrawler(AbstractCrawler):
         note_details = await asyncio.gather(*task_list)
         for aweme_item in note_details:
             if aweme_item is not None:
-                # 使用Redis存储
-                await self.douyin_store.store_content({**aweme_item, "task_id": self.task_id} if self.task_id else aweme_item)
+                # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
+                existing_ids = [item.get("aweme_id") for item in self.douyin_store.collected_data]
+                if aweme_item.get("aweme_id") not in existing_ids:
+                    # 使用Redis存储
+                    await self.douyin_store.store_content({**aweme_item, "task_id": self.task_id} if self.task_id else aweme_item)
+                    utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 新增数据: {aweme_item.get('aweme_id')}")
+                else:
+                    utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 跳过重复数据: {aweme_item.get('aweme_id')}")
 
     @staticmethod
     def format_proxy_info(ip_proxy_info: IpInfoModel) -> Tuple[Optional[Dict], Optional[Dict]]:

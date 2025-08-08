@@ -24,7 +24,7 @@ from base.base_crawler import AbstractApiClient
 from tools import utils
 from html import unescape
 
-from .exception import DataFetchError, IPBlockError
+from .exception import DataFetchError, IPBlockError, FrequencyLimitError
 from .field import SearchNoteType, SearchSortType
 from .help import get_search_id, sign
 
@@ -137,6 +137,10 @@ class XiaoHongShuClient(AbstractApiClient):
         elif data.get("code") == -1 and "未登录" in data.get("msg", ""):
             utils.logger.error(f"[XiaoHongShuClient.request] 登录状态失效: {data}")
             raise Exception("登录状态失效，需要重新登录")
+        # 🆕 检测频率限制错误
+        elif data.get("code") == 300013 and "访问频次异常" in data.get("msg", ""):
+            utils.logger.error(f"[XiaoHongShuClient.request] 访问频次异常，需要等待更长时间: {data}")
+            raise FrequencyLimitError("访问频次异常，请勿频繁操作或重启试试")
         # 🆕 检测账号被封
         elif data.get("code") == -1 and any(keyword in data.get("msg", "") for keyword in ["封禁", "blocked", "banned"]):
             utils.logger.error(f"[XiaoHongShuClient.request] 账号被封: {data}")

@@ -23,3 +23,7 @@ class DataFetchError(RequestError):
 
 class IPBlockError(RequestError):
     """fetch so fast that the server block us ip"""
+
+
+class FrequencyLimitError(RequestError):
+    """访问频次异常，需要等待更长时间"""

@@ -35,7 +35,7 @@ from tools import utils
 from var import crawler_type_var, source_keyword_var
 
 from .client import XiaoHongShuClient
-from .exception import DataFetchError
+from .exception import DataFetchError, FrequencyLimitError
 from .field import SearchSortType
 from .help import parse_note_info_from_note_url, get_search_id
 from .login import XiaoHongShuLogin
@@ -200,6 +200,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
             start_time = time.time()
             processed_count = 0
             
+                    # 🆕 添加重试次数限制
+            max_retries = 3
+            retry_count = 0
+            
             # 修复循环条件，添加更清晰的退出逻辑
             while True:
                 # 检查是否超过最大数量限制
@@ -291,13 +295,36 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     
                     page += 1
                     
+                except FrequencyLimitError as e:
+                    retry_count += 1
+                    utils.logger.error(f"[XiaoHongShuCrawler.search] 访问频次异常，等待更长时间: {e} (重试 {retry_count}/{max_retries})")
+                    
+                    if retry_count >= max_retries:
+                        utils.logger.error(f"[XiaoHongShuCrawler.search] 达到最大重试次数 {max_retries}，终止搜索")
+                        break
+                    
+                    # 频率限制错误，等待更长时间后重试
+                    await asyncio.sleep(30)  # 等待30秒
+                    continue
                 except DataFetchError as e:
-                    utils.logger.error(f"[XiaoHongShuCrawler.search] 搜索失败 (DataFetchError): {e}")
+                    retry_count += 1
+                    utils.logger.error(f"[XiaoHongShuCrawler.search] 搜索失败 (DataFetchError): {e} (重试 {retry_count}/{max_retries})")
+                    
+                    if retry_count >= max_retries:
+                        utils.logger.error(f"[XiaoHongShuCrawler.search] 达到最大重试次数 {max_retries}，终止搜索")
+                        break
+                    
                     # 如果是网络错误，等待更长时间后重试
                     await asyncio.sleep(5)
                     continue
                 except Exception as e:
-                    utils.logger.error(f"[XiaoHongShuCrawler.search] 搜索过程中发生未知错误: {e}")
+                    retry_count += 1
+                    utils.logger.error(f"[XiaoHongShuCrawler.search] 搜索过程中发生未知错误: {e} (重试 {retry_count}/{max_retries})")
+                    
+                    if retry_count >= max_retries:
+                        utils.logger.error(f"[XiaoHongShuCrawler.search] 达到最大重试次数 {max_retries}，终止搜索")
+                        break
+                    
                     # 等待一段时间后重试
                     await asyncio.sleep(3)
                     continue

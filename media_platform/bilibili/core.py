@@ -34,7 +34,7 @@ from tools import utils
 from var import crawler_type_var, source_keyword_var
 
 from .client import BilibiliClient
-from .exception import DataFetchError
+from .exception import DataFetchError, FrequencyLimitError, IPBlockError
 from .field import SearchOrderType
 from .login import BilibiliLogin
 from utils.db_utils import get_cookies_from_database
@@ -208,6 +208,11 @@ class BilibiliCrawler(AbstractCrawler):
             # 每个关键词最多返回 1000 条数据
             # 🆕 修复：移除对 config.ALL_DAY 的依赖，默认使用单日搜索
             page = 1
+            
+            # 🆕 添加重试次数限制
+            max_retries = 3
+            retry_count = 0
+            
             while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                     if page < start_page:
                         utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
@@ -496,12 +501,30 @@ class BilibiliCrawler(AbstractCrawler):
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
 
+            except FrequencyLimitError as ex:
+                retry_count += 1
+                utils.logger.error(f"[BilibiliCrawler.get_comments] 访问频次异常，等待更长时间: {ex} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[BilibiliCrawler.get_comments] 达到最大重试次数 {max_retries}，终止评论获取")
+                    return
+                
+                # 频率限制错误，等待更长时间后重试
+                await asyncio.sleep(30)  # 等待30秒
             except DataFetchError as ex:
-                utils.logger.error(
-                    f"[BilibiliCrawler.get_comments] get video_id: {video_id} comment error: {ex}")
+                retry_count += 1
+                utils.logger.error(f"[BilibiliCrawler.get_comments] get video_id: {video_id} comment error: {ex} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[BilibiliCrawler.get_comments] 达到最大重试次数 {max_retries}，终止评论获取")
+                    return
             except Exception as e:
-                utils.logger.error(
-                    f"[BilibiliCrawler.get_comments] may be been blocked, err:{e}")
+                retry_count += 1
+                utils.logger.error(f"[BilibiliCrawler.get_comments] may be been blocked, err:{e} (重试 {retry_count}/{max_retries})")
+                
+                if retry_count >= max_retries:
+                    utils.logger.error(f"[BilibiliCrawler.get_comments] 达到最大重试次数 {max_retries}，终止评论获取")
+                    return
 
     async def get_creator_videos(self, creator_id: int, max_count: int = None):
         """

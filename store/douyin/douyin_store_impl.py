@@ -602,8 +602,14 @@ class DouyinRedisStoreImplement(AbstractStore):
             "stored_at": content_item.get("stored_at", ""),
         }
 
-        # 收集数据用于返回
-        self.collected_data.append(processed_content)
+        # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
+        existing_ids = [item.get("aweme_id") for item in self.collected_data]
+        if aweme_id not in existing_ids:
+            # 收集数据用于返回
+            self.collected_data.append(processed_content)
+            utils.logger.debug(f"🆕 [DouyinRedisStore] 新增数据: {aweme_id}")
+        else:
+            utils.logger.debug(f"🆕 [DouyinRedisStore] 跳过重复数据: {aweme_id}")
 
         # 日志输出
         utils.logger.info(f"🎬 [DouyinRedisStore] 视频ID: {aweme_id}, 标题: {processed_content.get('title')}")

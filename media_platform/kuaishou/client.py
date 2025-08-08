@@ -22,7 +22,7 @@ import config
 from base.base_crawler import AbstractApiClient
 from tools import utils
 
-from .exception import DataFetchError
+from .exception import DataFetchError, FrequencyLimitError, IPBlockError
 from .graphql import KuaiShouGraphQL
 
 
@@ -72,12 +72,12 @@ class KuaiShouClient(AbstractApiClient):
                 if "400002" in error_msg or "captcha" in error_msg.lower() or "验证码" in error_msg:
                     utils.logger.error("🚨 检测到反爬虫机制：需要验证码")
                     raise DataFetchError("反爬虫机制触发：需要验证码验证")
-                elif "429" in error_msg or "too many requests" in error_msg.lower():
+                elif "429" in error_msg or "too many requests" in error_msg.lower() or "请求过于频繁" in error_msg:
                     utils.logger.error("🚨 检测到反爬虫机制：请求过于频繁")
-                    raise DataFetchError("反爬虫机制触发：请求过于频繁，请稍后重试")
-                elif "403" in error_msg or "forbidden" in error_msg.lower():
+                    raise FrequencyLimitError("访问频次异常，请勿频繁操作或重启试试")
+                elif "403" in error_msg or "forbidden" in error_msg.lower() or "访问被禁止" in error_msg:
                     utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
-                    raise DataFetchError("反爬虫机制触发：访问被禁止")
+                    raise IPBlockError("访问被禁止，IP可能被封")
                 else:
                     raise DataFetchError(data.get("errors", "unkonw error"))
             else:

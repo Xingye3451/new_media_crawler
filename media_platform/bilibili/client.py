@@ -25,7 +25,7 @@ import config
 from base.base_crawler import AbstractApiClient
 from tools import utils
 
-from .exception import DataFetchError
+from .exception import DataFetchError, FrequencyLimitError, IPBlockError
 from .field import CommentOrderType, SearchOrderType
 from .help import BilibiliSign
 
@@ -54,7 +54,15 @@ class BilibiliClient(AbstractApiClient):
                 **kwargs
             )
         data: Dict = response.json()
-        if data.get("code") != 0:
+        
+        # 🆕 检测频率限制错误
+        if data.get("code") == -412 and "请求过于频繁" in data.get("message", ""):
+            utils.logger.error(f"[BilibiliClient.request] 访问频次异常，需要等待更长时间: {data}")
+            raise FrequencyLimitError("访问频次异常，请勿频繁操作或重启试试")
+        elif data.get("code") == -403 and "访问被禁止" in data.get("message", ""):
+            utils.logger.error(f"[BilibiliClient.request] 访问被禁止: {data}")
+            raise IPBlockError("访问被禁止，IP可能被封")
+        elif data.get("code") != 0:
             raise DataFetchError(data.get("message", "unkonw error"))
         else:
             return data.get("data", {})
