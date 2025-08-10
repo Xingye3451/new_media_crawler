@@ -716,21 +716,32 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="single-proxy-strategy">🌐 代理方式</label>
-                        <select id="single-proxy-strategy">
+                        <label for="single-proxy-selection">🌐 代理选择</label>
+                        <select id="single-proxy-selection" onchange="handleProxySelectionChange()">
                             <option value="disabled">禁用代理</option>
-                            <option value="smart">智能策略 (推荐)</option>
-                            <option value="round_robin">轮询策略</option>
-                            <option value="random">随机策略</option>
-                            <option value="weighted">权重策略</option>
-                            <option value="failover">故障转移策略</option>
-                            <option value="geo_based">地理位置策略</option>
+                            <option value="auto">自动选择代理</option>
+                            <option value="manual">手动选择代理</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="single-proxy-ip" id="single-proxy-ip-label" style="display: none;">选择代理IP</label>
+                        <select id="single-proxy-ip" style="display: none;">
+                            <option value="">加载中...</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label>&nbsp;</label>
                         <div style="padding-top: 5px; color: #666; font-size: 0.9em;">
                             💾 数据存储：数据库存储
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <div style="padding-top: 5px; color: #666; font-size: 0.9em;">
+                            🔄 <button type="button" onclick="refreshProxyList()" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline;">刷新代理列表</button>
                         </div>
                     </div>
                 </div>
@@ -845,6 +856,23 @@
                         <select id="multi-execution-mode">
                             <option value="parallel">并行执行 (推荐)</option>
                             <option value="sequential">顺序执行</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="multi-proxy-selection">🌐 代理选择</label>
+                        <select id="multi-proxy-selection" onchange="handleMultiProxySelectionChange()">
+                            <option value="disabled">禁用代理</option>
+                            <option value="auto">自动选择代理</option>
+                            <option value="manual">手动选择代理</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="multi-proxy-ip" id="multi-proxy-ip-label" style="display: none;">选择代理IP</label>
+                        <select id="multi-proxy-ip" style="display: none;">
+                            <option value="">加载中...</option>
                         </select>
                     </div>
                 </div>
@@ -1580,7 +1608,8 @@
             }
             
             const maxCount = document.getElementById('single-max-count').value;
-            const proxyStrategy = document.getElementById('single-proxy-strategy').value;
+            const proxySelection = document.getElementById('single-proxy-selection').value;
+            const proxyIp = document.getElementById('single-proxy-ip').value;
             const getComments = false; // 固定为false，因为评论功能待开发
             const videoPriority = document.getElementById('single-video-priority').checked;
 
@@ -1589,7 +1618,8 @@
                 keywords: keywords, // 始终传递关键词，让后端决定是否使用
                 max_notes_count: parseInt(maxCount),
                 crawler_type: crawlType,
-                proxy_strategy: proxyStrategy,
+                use_proxy: proxySelection !== 'disabled',
+                proxy_ip: proxySelection === 'manual' ? proxyIp : null,
                 get_comments: getComments,
                 video_priority: videoPriority,
                 save_data_option: "db",  // 固定为数据库存储
@@ -1749,6 +1779,10 @@
                 );
             }
             
+            // 获取代理配置
+            const proxySelection = document.getElementById('multi-proxy-selection').value;
+            const proxyIp = document.getElementById('multi-proxy-ip').value;
+            
             const requestData = {
                 platforms: selectedPlatforms,
                 keywords: keywords,
@@ -1756,8 +1790,8 @@
                 enable_comments: false, // 评论功能待开发
                 enable_images: document.getElementById('multi-enable-images').checked,
                 save_format: "db", // 固定使用数据库存储
-                use_proxy: false, // 默认不使用代理
-                proxy_strategy: "disabled",
+                use_proxy: proxySelection !== 'disabled',
+                proxy_ip: proxySelection === 'manual' ? proxyIp : null,
                 account_strategy: accountStrategy,
                 execution_mode: executionMode
             };
@@ -2090,7 +2124,9 @@
             document.getElementById('single-keywords').value = '';
             document.getElementById('single-max-count').value = '20';
             document.getElementById('single-account-select').value = '';
-            document.getElementById('single-proxy-strategy').value = 'disabled';
+            document.getElementById('single-proxy-selection').value = 'disabled';
+            document.getElementById('single-proxy-ip').style.display = 'none';
+            document.getElementById('single-proxy-ip-label').style.display = 'none';
             document.getElementById('single-get-comments').checked = false; // 保持禁用状态
             document.getElementById('single-video-priority').checked = true;
             
@@ -2112,10 +2148,90 @@
             document.getElementById('multi-enable-images').checked = false;
             document.getElementById('multi-account-strategy').value = 'smart';
             document.getElementById('multi-execution-mode').value = 'parallel';
+            document.getElementById('multi-proxy-selection').value = 'disabled';
+            document.getElementById('multi-proxy-ip').style.display = 'none';
+            document.getElementById('multi-proxy-ip-label').style.display = 'none';
             selectedMultiPlatforms.clear();
             const multiCards = document.querySelectorAll('#multi-platform .platform-card');
             multiCards.forEach(card => card.classList.remove('selected'));
             updateStatus('multi-platform-result', '表单已清空，等待开始多平台爬取任务...');
+        }
+        
+        // 处理单平台代理选择变化
+        function handleProxySelectionChange() {
+            const proxySelection = document.getElementById('single-proxy-selection').value;
+            const proxyIpSelect = document.getElementById('single-proxy-ip');
+            const proxyIpLabel = document.getElementById('single-proxy-ip-label');
+            
+            if (proxySelection === 'manual') {
+                proxyIpLabel.style.display = 'block';
+                proxyIpSelect.style.display = 'block';
+                loadProxyList('single-proxy-ip');
+            } else {
+                proxyIpLabel.style.display = 'none';
+                proxyIpSelect.style.display = 'none';
+            }
+        }
+        
+        // 处理多平台代理选择变化
+        function handleMultiProxySelectionChange() {
+            const proxySelection = document.getElementById('multi-proxy-selection').value;
+            const proxyIpSelect = document.getElementById('multi-proxy-ip');
+            const proxyIpLabel = document.getElementById('multi-proxy-ip-label');
+            
+            if (proxySelection === 'manual') {
+                proxyIpLabel.style.display = 'block';
+                proxyIpSelect.style.display = 'block';
+                loadProxyList('multi-proxy-ip');
+            } else {
+                proxyIpLabel.style.display = 'none';
+                proxyIpSelect.style.display = 'none';
+            }
+        }
+        
+        // 加载代理列表
+        async function loadProxyList(selectId) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">加载中...</option>';
+            
+            try {
+                const response = await fetch('/api/v1/qingguo/in-use');
+                const result = await response.json();
+                
+                if (result.success && result.proxies && result.proxies.length > 0) {
+                    select.innerHTML = '<option value="">请选择代理IP</option>';
+                    result.proxies.forEach(proxy => {
+                        const option = document.createElement('option');
+                        option.value = proxy.ip;
+                        option.textContent = `${proxy.ip}:${proxy.port} (${proxy.area || '未知区域'})`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">暂无可用代理</option>';
+                }
+            } catch (error) {
+                console.error('加载代理列表失败:', error);
+                select.innerHTML = '<option value="">加载失败</option>';
+            }
+        }
+        
+        // 刷新代理列表
+        async function refreshProxyList() {
+            showToast('正在刷新代理列表...', 'info');
+            
+            // 刷新单平台代理列表
+            const singleProxySelection = document.getElementById('single-proxy-selection').value;
+            if (singleProxySelection === 'manual') {
+                await loadProxyList('single-proxy-ip');
+            }
+            
+            // 刷新多平台代理列表
+            const multiProxySelection = document.getElementById('multi-proxy-selection').value;
+            if (multiProxySelection === 'manual') {
+                await loadProxyList('multi-proxy-ip');
+            }
+            
+            showToast('代理列表刷新完成', 'success');
         }
         
         // 调试平台状态

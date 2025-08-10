@@ -310,7 +310,7 @@ async def get_platform_accounts(platform: str, account_strategy: str = "smart") 
         return []
 
 async def run_single_platform_crawler(task_id: str, platform: str, request: MultiPlatformCrawlerRequest, 
-                                    account_strategy: str = "smart", execution_mode: str = "parallel"):
+                                    account_strategy: str = "smart", execution_mode: str = "parallel", proxy_info=None):
     """运行单个平台的爬虫任务"""
     # 🆕 导入错误处理模块
     from utils.crawler_error_handler import create_error_handler, RetryConfig, ErrorType, RetryableCrawlerOperation
@@ -345,6 +345,20 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
         crawler = MultiPlatformCrawlerFactory.create_crawler(platform, task_id=task_id)
         # 🆕 标记浏览器由外部管理，避免重复关闭
         crawler._externally_managed = True
+        
+        # 🆕 设置代理信息
+        if proxy_info and request.use_proxy:
+            crawler.proxy_info = proxy_info
+            utils.logger.info(f"[MULTI_TASK_{task_id}] 设置代理: {proxy_info.ip}:{proxy_info.port}")
+            # 🆕 打印代理使用信息
+            utils.logger.info(f"[MULTI_TASK_{task_id}] 🌐 平台 {platform} 代理使用信息:")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理类型: {proxy_info.proxy_type}")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 认证信息: {proxy_info.username}:{proxy_info.password}")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 区域: {proxy_info.area}")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
+            utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ 使用方式: curl -x {proxy_info.proxy_type}://{proxy_info.username}:{proxy_info.password}@{proxy_info.ip}:{proxy_info.port} https://httpbin.org/ip")
+            await log_multi_platform_task_step(task_id, platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO")
         
         # 🆕 清空之前收集的数据，确保新任务的数据正确
         try:
@@ -518,6 +532,73 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
         execution_mode = getattr(request, 'execution_mode', 'parallel')
         account_strategy = getattr(request, 'account_strategy', 'smart')
         
+        # 🆕 获取代理信息
+        proxy_info = None
+        if request.use_proxy:
+            if hasattr(request, 'proxy_ip') and request.proxy_ip:
+                # 手动指定代理IP
+                try:
+                    from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+                    proxy_manager = await get_qingguo_proxy_manager()
+                    
+                    # 从数据库获取指定IP的代理信息
+                    db = await get_db_connection()
+                    if db:
+                        query = "SELECT * FROM proxy_pool WHERE ip = %s AND status = 'active' AND enabled = 1"
+                        proxy_data = await db.get_first(query, request.proxy_ip)
+                        
+                        if proxy_data:
+                            from proxy.qingguo_long_term_proxy import ProxyInfo, ProxyStatus
+                            proxy_info = ProxyInfo(
+                                id=str(proxy_data['id']),
+                                ip=proxy_data['ip'],
+                                port=proxy_data['port'],
+                                username=proxy_data.get('username', ''),
+                                password=proxy_data.get('password', ''),
+                                proxy_type=proxy_data['proxy_type'],
+                                expire_ts=proxy_data.get('expire_ts', 0),
+                                created_at=proxy_data['created_at'],
+                                status=ProxyStatus(proxy_data.get('status', 'active')),
+                                enabled=proxy_data.get('enabled', True),
+                                area=proxy_data.get('area'),
+                                description=proxy_data.get('description')
+                            )
+                            utils.logger.info(f"[MULTI_TASK_{task_id}] 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
+                            # 🆕 打印代理详细信息
+                            utils.logger.info(f"[MULTI_TASK_{task_id}] 📋 代理详细信息:")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理ID: {proxy_info.id}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理类型: {proxy_info.proxy_type}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 用户名: {proxy_info.username}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 区域: {proxy_info.area}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ 过期时间: {proxy_info.expire_ts}")
+                        else:
+                            utils.logger.warning(f"[MULTI_TASK_{task_id}] 指定的代理IP {request.proxy_ip} 不可用")
+                except Exception as e:
+                    utils.logger.warning(f"[MULTI_TASK_{task_id}] 获取指定代理失败: {e}")
+            else:
+                # 自动获取代理
+                try:
+                    from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+                    proxy_manager = await get_qingguo_proxy_manager()
+                    proxy_info = await proxy_manager.get_available_proxy()
+                    if proxy_info:
+                        utils.logger.info(f"[MULTI_TASK_{task_id}] 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
+                        # 🆕 打印代理详细信息
+                        utils.logger.info(f"[MULTI_TASK_{task_id}] 📋 自动代理详细信息:")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理ID: {proxy_info.id}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理类型: {proxy_info.proxy_type}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 用户名: {proxy_info.username}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 区域: {proxy_info.area}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ 过期时间: {proxy_info.expire_ts}")
+                except Exception as e:
+                    utils.logger.warning(f"[MULTI_TASK_{task_id}] 自动获取代理失败: {e}")
+        else:
+            utils.logger.info(f"[MULTI_TASK_{task_id}] 未启用代理功能")
+        
         # 执行爬取任务
         platform_results = {}
         platform_errors = {}
@@ -530,7 +611,7 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
             # 创建所有平台的爬取任务
             tasks = []
             for platform in request.platforms:
-                task = run_single_platform_crawler(task_id, platform, request, account_strategy, execution_mode)
+                task = run_single_platform_crawler(task_id, platform, request, account_strategy, execution_mode, proxy_info)
                 tasks.append((platform, task))
             
             # 并行执行所有任务
@@ -555,7 +636,7 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
                     await update_multi_platform_task_progress(task_id, progress)
                     await log_multi_platform_task_step(task_id, "multi", "platform_start", f"开始执行平台 {platform}")
                     
-                    result_count = await run_single_platform_crawler(task_id, platform, request, account_strategy, execution_mode)
+                    result_count = await run_single_platform_crawler(task_id, platform, request, account_strategy, execution_mode, proxy_info)
                     platform_results[platform] = result_count
                     
                     await log_multi_platform_task_step(task_id, "multi", "platform_completed", f"平台 {platform} 执行完成，获取 {result_count} 条数据")
@@ -783,7 +864,7 @@ async def get_multi_platform_health():
         }
 
 @router.get("/multi-platform/info")
-async def get_multi_platform_info():
+async def get_multi_platform_crawler_info():
     """获取多平台功能信息"""
     return {
         "supported_platforms": MultiPlatformCrawlerFactory.SUPPORTED_PLATFORMS,

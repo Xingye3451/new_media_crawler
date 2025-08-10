@@ -417,6 +417,14 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             if proxy_info and request.use_proxy:
                 crawler.proxy_info = proxy_info
                 utils.logger.info(f"[TASK_{task_id}] 🔧 设置代理: {proxy_info.ip}:{proxy_info.port}")
+                # 🆕 打印代理使用信息
+                utils.logger.info(f"[TASK_{task_id}] 🌐 代理使用信息:")
+                utils.logger.info(f"[TASK_{task_id}]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                utils.logger.info(f"[TASK_{task_id}]   ├─ 代理类型: {proxy_info.proxy_type}")
+                utils.logger.info(f"[TASK_{task_id}]   ├─ 认证信息: {proxy_info.username}:{proxy_info.password}")
+                utils.logger.info(f"[TASK_{task_id}]   ├─ 区域: {proxy_info.area}")
+                utils.logger.info(f"[TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
+                utils.logger.info(f"[TASK_{task_id}]   └─ 使用方式: curl -x {proxy_info.proxy_type}://{proxy_info.username}:{proxy_info.password}@{proxy_info.ip}:{proxy_info.port} https://httpbin.org/ip")
                 await log_task_step(task_id, request.platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO", 42)
             
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
@@ -651,18 +659,93 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         
         utils.logger.info(f"[CRAWLER_START] 平台 {request.platform} 登录状态正常")
         
-        # 🆕 获取登录时使用的代理信息
+        # 🆕 获取代理信息
         proxy_info = None
-        if request.use_proxy and request.account_id:
-            try:
-                from api.login_proxy_helper import get_proxy_from_login_token
-                proxy_info = await get_proxy_from_login_token(request.account_id, request.platform)
-                if proxy_info:
-                    utils.logger.info(f"[CRAWLER_START] 获取到登录代理: {proxy_info.ip}:{proxy_info.port}")
-                else:
-                    utils.logger.info(f"[CRAWLER_START] 未找到登录代理，将使用新代理")
-            except Exception as e:
-                utils.logger.warning(f"[CRAWLER_START] 获取登录代理失败: {e}")
+        if request.use_proxy:
+            if hasattr(request, 'proxy_ip') and request.proxy_ip:
+                # 手动指定代理IP
+                try:
+                    from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+                    proxy_manager = await get_qingguo_proxy_manager()
+                    
+                    # 从数据库获取指定IP的代理信息
+                    db = await get_db_connection()
+                    if db:
+                        query = "SELECT * FROM proxy_pool WHERE ip = %s AND status = 'active' AND enabled = 1"
+                        proxy_data = await db.get_first(query, request.proxy_ip)
+                        
+                        if proxy_data:
+                            from proxy.qingguo_long_term_proxy import ProxyInfo, ProxyStatus
+                            proxy_info = ProxyInfo(
+                                id=str(proxy_data['id']),
+                                ip=proxy_data['ip'],
+                                port=proxy_data['port'],
+                                username=proxy_data.get('username', ''),
+                                password=proxy_data.get('password', ''),
+                                proxy_type=proxy_data['proxy_type'],
+                                expire_ts=proxy_data.get('expire_ts', 0),
+                                created_at=proxy_data['created_at'],
+                                status=ProxyStatus(proxy_data.get('status', 'active')),
+                                enabled=proxy_data.get('enabled', True),
+                                area=proxy_data.get('area'),
+                                description=proxy_data.get('description')
+                            )
+                            utils.logger.info(f"[CRAWLER_START] 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
+                            # 🆕 打印代理详细信息
+                            utils.logger.info(f"[CRAWLER_START] 📋 代理详细信息:")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 代理类型: {proxy_info.proxy_type}")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 用户名: {proxy_info.username}")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 区域: {proxy_info.area}")
+                            utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
+                            utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
+                        else:
+                            utils.logger.warning(f"[CRAWLER_START] 指定的代理IP {request.proxy_ip} 不可用")
+                except Exception as e:
+                    utils.logger.warning(f"[CRAWLER_START] 获取指定代理失败: {e}")
+            elif request.account_id:
+                # 使用登录时的代理
+                try:
+                    from api.login_proxy_helper import get_proxy_from_login_token
+                    proxy_info = await get_proxy_from_login_token(request.account_id, request.platform)
+                    if proxy_info:
+                        utils.logger.info(f"[CRAWLER_START] 获取到登录代理: {proxy_info.ip}:{proxy_info.port}")
+                        # 🆕 打印代理详细信息
+                        utils.logger.info(f"[CRAWLER_START] 📋 登录代理详细信息:")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理类型: {proxy_info.proxy_type}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 用户名: {proxy_info.username}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 区域: {proxy_info.area}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
+                        utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
+                    else:
+                        utils.logger.info(f"[CRAWLER_START] 未找到登录代理，将使用新代理")
+                except Exception as e:
+                    utils.logger.warning(f"[CRAWLER_START] 获取登录代理失败: {e}")
+            
+            # 如果没有获取到代理，尝试自动获取
+            if not proxy_info:
+                try:
+                    from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+                    proxy_manager = await get_qingguo_proxy_manager()
+                    proxy_info = await proxy_manager.get_available_proxy()
+                    if proxy_info:
+                        utils.logger.info(f"[CRAWLER_START] 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
+                        # 🆕 打印代理详细信息
+                        utils.logger.info(f"[CRAWLER_START] 📋 自动代理详细信息:")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 代理类型: {proxy_info.proxy_type}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 用户名: {proxy_info.username}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 区域: {proxy_info.area}")
+                        utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
+                        utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
+                except Exception as e:
+                    utils.logger.warning(f"[CRAWLER_START] 自动获取代理失败: {e}")
+        else:
+            utils.logger.info(f"[CRAWLER_START] 未启用代理功能")
         
         # 生成任务ID
         task_id = str(uuid.uuid4())

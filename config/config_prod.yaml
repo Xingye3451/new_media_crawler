@@ -30,26 +30,6 @@ logging:
   api_log_level: "INFO"      # API相关日志级别
   db_log_level: "WARNING"    # 数据库相关日志级别
 
-# ==================== 代理配置 ====================
-proxy:
-  # 代理提供商配置
-  provider_name: "qingguo"  # 生产环境推荐使用青果代理
-  enabled: true
-  pool_count: 20  # 生产环境增加代理池大小
-  validate_ip: true
-  
-  # 青果代理配置
-  qingguo_key: "${QINGGUO_KEY}"  # 从环境变量读取敏感信息
-  qingguo_pwd: "${QINGGUO_PWD}"  # 可选
-  
-  # 快代理配置
-  kuaidaili_secret_id: "${KUAIDAILI_SECRET_ID}"
-  kuaidaili_signature: "${KUAIDAILI_SIGNATURE}"
-  kuaidaili_user_name: "${KUAIDAILI_USERNAME}"
-  kuaidaili_user_pwd: "${KUAIDAILI_PASSWORD}"
-  
-  # 极速HTTP代理配置
-  jisu_http_key: "${JISU_HTTP_KEY}"
 
 # ==================== 爬虫配置 ====================
 crawler:

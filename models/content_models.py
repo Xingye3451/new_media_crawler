@@ -116,7 +116,7 @@ class CrawlerRequest(BaseModel):
     get_comments: Optional[bool] = Field(default=True, description="是否获取评论", example=True)
     save_data_option: Optional[str] = Field(default="db", description="数据保存选项", example="db")
     use_proxy: Optional[bool] = Field(default=False, description="是否使用代理", example=False)
-    proxy_strategy: Optional[str] = Field(default="disabled", description="代理策略", example="disabled")
+    proxy_ip: Optional[str] = Field(default=None, description="指定代理IP地址", example="192.168.1.100")
     
     # 创作者主页模式参数
     selected_creators: Optional[List[str]] = Field(default=None, description="选中的创作者ID列表（创作者主页模式使用）", example=["creator_1", "creator_2"])
@@ -142,7 +142,7 @@ class MultiPlatformCrawlerRequest(BaseModel):
     account_ids: Optional[Dict[str, int]] = Field(default=None, description="各平台的账号ID")
     # 新增代理相关参数
     use_proxy: bool = Field(default=False, description="是否使用代理")
-    proxy_strategy: str = Field(default="round_robin", description="代理策略: round_robin, random, weighted, failover, geo_based, smart, disabled")
+    proxy_ip: Optional[str] = Field(default=None, description="指定代理IP地址")
     # 新增账号策略和执行模式参数
     account_strategy: str = Field(default="smart", description="账号策略: random, round_robin, priority, smart, single")
     execution_mode: str = Field(default="parallel", description="执行模式: parallel(并行), sequential(顺序)")

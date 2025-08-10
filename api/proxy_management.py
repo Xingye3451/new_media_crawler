@@ -15,6 +15,65 @@ from var import media_crawler_db_var
 proxy_router = APIRouter(tags=["代理管理"])
 
 # 数据模型
+class ProxyAccount(BaseModel):
+    """代理账号模型"""
+    id: int
+    account_id: str
+    provider: str
+    provider_name: str
+    api_key: str
+    api_secret: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    signature: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    is_active: bool = True
+    is_default: bool = False
+    max_pool_size: int = 10
+    validate_ip: bool = True
+    description: Optional[str] = None
+    config_json: Optional[Dict] = None
+    last_used_at: Optional[datetime] = None
+    usage_count: int = 0
+    success_count: int = 0
+    fail_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+class ProxyAccountCreate(BaseModel):
+    """创建代理账号请求模型"""
+    account_id: str = Field(..., description="账号唯一标识")
+    provider: str = Field(..., description="代理提供商")
+    provider_name: str = Field(..., description="提供商中文名称")
+    api_key: str = Field(..., description="API密钥")
+    api_secret: Optional[str] = Field(None, description="API密钥（可选）")
+    username: Optional[str] = Field(None, description="用户名（可选）")
+    password: Optional[str] = Field(None, description="密码（可选）")
+    signature: Optional[str] = Field(None, description="签名（可选）")
+    endpoint_url: Optional[str] = Field(None, description="API端点URL")
+    is_active: bool = Field(True, description="是否启用")
+    is_default: bool = Field(False, description="是否默认账号")
+    max_pool_size: int = Field(10, description="最大代理池大小")
+    validate_ip: bool = Field(True, description="是否验证IP")
+    description: Optional[str] = Field(None, description="账号描述")
+    config_json: Optional[Dict] = Field(None, description="额外配置JSON")
+
+class ProxyAccountUpdate(BaseModel):
+    """更新代理账号请求模型"""
+    provider_name: Optional[str] = Field(None, description="提供商中文名称")
+    api_key: Optional[str] = Field(None, description="API密钥")
+    api_secret: Optional[str] = Field(None, description="API密钥（可选）")
+    username: Optional[str] = Field(None, description="用户名（可选）")
+    password: Optional[str] = Field(None, description="密码（可选）")
+    signature: Optional[str] = Field(None, description="签名（可选）")
+    endpoint_url: Optional[str] = Field(None, description="API端点URL")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+    is_default: Optional[bool] = Field(None, description="是否默认账号")
+    max_pool_size: Optional[int] = Field(None, description="最大代理池大小")
+    validate_ip: Optional[bool] = Field(None, description="是否验证IP")
+    description: Optional[str] = Field(None, description="账号描述")
+    config_json: Optional[Dict] = Field(None, description="额外配置JSON")
+
 class ProxyInfo(BaseModel):
     """代理信息模型"""
     id: int
@@ -30,6 +89,7 @@ class ProxyInfo(BaseModel):
     success_rate: Optional[float] = None
     expire_ts: Optional[int] = None
     provider: str = "qingguo"
+    account_id: Optional[str] = None
     usage_count: int = 0
     success_count: int = 0
     fail_count: int = 0
@@ -56,7 +116,7 @@ class ProxyCreate(BaseModel):
     success_rate: Optional[float] = Field(None, description="成功率")
     expire_ts: Optional[int] = Field(None, description="过期时间戳")
     platform: Optional[str] = Field(None, description="关联平台")
-    account_id: Optional[int] = Field(None, description="关联账号ID")
+    account_id: Optional[str] = Field(None, description="关联账号ID")
     provider: str = Field(default="qingguo", description="代理提供商")
 
 class ProxyUpdate(BaseModel):
@@ -72,7 +132,7 @@ class ProxyUpdate(BaseModel):
     success_rate: Optional[float] = Field(None, description="成功率")
     expire_ts: Optional[int] = Field(None, description="过期时间戳")
     platform: Optional[str] = Field(None, description="关联平台")
-    account_id: Optional[int] = Field(None, description="关联账号ID")
+    account_id: Optional[str] = Field(None, description="关联账号ID")
     provider: Optional[str] = Field(None, description="代理提供商")
     status: Optional[str] = Field(None, description="代理状态")
 
@@ -161,6 +221,7 @@ async def get_proxies(
                 success_rate=row.get('success_rate'),
                 expire_ts=row.get('expire_ts'),
                 provider=row.get('provider', 'qingguo'),
+                account_id=row.get('account_id'),
                 usage_count=row.get('usage_count', 0),
                 success_count=row.get('success_count', 0),
                 fail_count=row.get('fail_count', 0),
@@ -307,53 +368,55 @@ async def update_proxy(proxy_id: str, proxy: ProxyUpdate):
         utils.logger.error(f"更新代理失败: {e}")
         raise HTTPException(status_code=500, detail=f"更新代理失败: {str(e)}")
 
-@proxy_router.delete("/proxies/{proxy_id}")
-async def release_proxy(proxy_id: str):
-    """释放代理"""
-    try:
-        db = await get_db()
-        
-        # 检查代理是否存在并获取代理信息
-        check_query = "SELECT * FROM proxy_pool WHERE proxy_id = %s"
-        proxy = await db.get_first(check_query, proxy_id)
-        
-        if not proxy:
-            raise HTTPException(status_code=404, detail="代理不存在")
-        
-        # 如果是青果代理，尝试调用青果API删除
-        api_delete_success = False
-        if proxy.get('provider') == 'qingguo':
-            from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
-            
-            proxy_manager = await get_qingguo_proxy_manager()
-            
-            # 调用青果API删除代理
-            api_delete_success = await proxy_manager.delete_proxy_from_api(proxy['ip'])
-            
-            if not api_delete_success:
-                utils.logger.warning(f"青果API删除失败（可能没有权限），但仍会从数据库删除代理: {proxy_id}")
-        
-        # 从数据库删除代理
-        delete_query = "DELETE FROM proxy_pool WHERE proxy_id = %s"
-        await db.execute(delete_query, proxy_id)
-        
-        # 根据API删除结果返回不同的消息
-        if proxy.get('provider') == 'qingguo' and not api_delete_success:
-            return {
-                "success": True,
-                "message": "代理已从数据库释放（青果API删除失败，请手动处理）"
-            }
-        else:
-            return {
-                "success": True,
-                "message": "代理释放成功"
-            }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        utils.logger.error(f"释放代理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"释放代理失败: {str(e)}")
+# 释放代理功能已移除 - 动态型代理不支持释放IP
+# 请使用启用/禁用功能来管理代理状态
+# @proxy_router.delete("/proxies/{proxy_id}")
+# async def release_proxy(proxy_id: str):
+#     """释放代理"""
+#     try:
+#         db = await get_db()
+#         
+#         # 检查代理是否存在并获取代理信息
+#         check_query = "SELECT * FROM proxy_pool WHERE proxy_id = %s"
+#         proxy = await db.get_first(check_query, proxy_id)
+#         
+#         if not proxy:
+#             raise HTTPException(status_code=404, detail="代理不存在")
+#         
+#         # 如果是青果代理，尝试调用青果API删除
+#         api_delete_success = False
+#         if proxy.get('provider') == 'qingguo':
+#             from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+#             
+#             proxy_manager = await get_qingguo_proxy_manager()
+#             
+#             # 调用青果API删除代理
+#             api_delete_success = await proxy_manager.delete_proxy_from_api(proxy['ip'])
+#             
+#             if not api_delete_success:
+#                 utils.logger.warning(f"青果API删除失败（可能没有权限），但仍会从数据库删除代理: {proxy_id}")
+#         
+#         # 从数据库删除代理
+#         delete_query = "DELETE FROM proxy_pool WHERE proxy_id = %s"
+#         await db.execute(delete_query, proxy_id)
+#         
+#         # 根据API删除结果返回不同的消息
+#         if proxy.get('provider') == 'qingguo' and not api_delete_success:
+#             return {
+#                 "success": True,
+#                 "message": "代理已从数据库释放（青果API删除失败，请手动处理）"
+#             }
+#         else:
+#             return {
+#                 "success": True,
+#                 "message": "代理释放成功"
+#             }
+#         
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         utils.logger.error(f"释放代理失败: {e}")
+#         raise HTTPException(status_code=500, detail=f"释放代理失败: {str(e)}")
 
 @proxy_router.get("/proxies/stats/overview", response_model=ProxyStats)
 async def get_proxy_stats():
@@ -663,8 +726,9 @@ async def cleanup_expired_proxies():
 
 @proxy_router.post("/qingguo/extract")
 async def extract_qingguo_proxy(
-    region: str = Query("北京", description="区域名称"),
-    isp: str = Query("电信", description="运营商名称"),
+    account_id: str = Query(..., description="代理账号ID"),
+    region: Optional[str] = Query(None, description="区域名称，为空时自动选择"),
+    isp: Optional[str] = Query(None, description="运营商名称，为空时自动选择"),
     description: Optional[str] = Query(None, description="描述信息")
 ):
     """提取青果长效代理"""
@@ -673,8 +737,23 @@ async def extract_qingguo_proxy(
         
         proxy_manager = await get_qingguo_proxy_manager()
         
+        # 验证代理账号
+        db = await get_db()
+        account_query = "SELECT * FROM proxy_accounts WHERE account_id = %s AND provider = 'qingguo'"
+        account = await db.get_first(account_query, account_id)
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="代理账号不存在或不是青果代理")
+        
+        # 如果区域或运营商为空，自动选择
+        if not region or not isp:
+            auto_region, auto_isp = await proxy_manager.get_random_available_region()
+            region = region or auto_region
+            isp = isp or auto_isp
+            utils.logger.info(f"[提取代理] 自动选择区域: {region}, 运营商: {isp}")
+        
         # 提取代理
-        proxy_info = await proxy_manager.extract_proxy(region, isp, description)
+        proxy_info = await proxy_manager.extract_proxy(region, isp, description, account_id)
         
         if not proxy_info:
             raise HTTPException(status_code=500, detail="提取代理失败")
@@ -682,13 +761,21 @@ async def extract_qingguo_proxy(
         return {
             "success": True,
             "proxy": {
-                "proxy_id": proxy_info.proxy_id,
+                "proxy_id": proxy_info.id,
                 "ip": proxy_info.ip,
                 "port": proxy_info.port,
                 "username": proxy_info.username,
                 "password": proxy_info.password,
                 "expire_ts": proxy_info.expire_ts,
-                "platform": proxy_info.platform,
+                "area": proxy_info.area,
+                "description": proxy_info.description,
+                "proxy_type": proxy_info.proxy_type,
+                "usage_count": proxy_info.usage_count,
+                "success_count": proxy_info.success_count,
+                "fail_count": proxy_info.fail_count,
+                "status": proxy_info.status.value,
+                "enabled": proxy_info.enabled,
+                "created_at": proxy_info.created_at.isoformat() if proxy_info.created_at else None,
                 "account_id": proxy_info.account_id
             }
         }
@@ -718,7 +805,18 @@ async def get_qingguo_in_use_proxies():
                     "area": proxy.area,
                     "description": proxy.description,
                     "expire_ts": proxy.expire_ts,
-                    "status": proxy.status.value
+                    "status": proxy.status.value,
+                    "username": proxy.username,
+                    "password": proxy.password,
+                    "proxy_type": proxy.proxy_type,
+                    "usage_count": proxy.usage_count,
+                    "success_count": proxy.success_count,
+                    "fail_count": proxy.fail_count,
+                    "last_used_at": proxy.last_used_at.isoformat() if proxy.last_used_at else None,
+                    "created_at": proxy.created_at.isoformat() if proxy.created_at else None,
+                    "task_id": proxy.task_id,
+                    "proxy_ip": proxy.proxy_ip,
+                    "account_id": proxy.account_id
                 }
                 for proxy in proxies
             ],
@@ -729,28 +827,92 @@ async def get_qingguo_in_use_proxies():
         utils.logger.error(f"查询青果在用代理失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询青果在用代理失败: {str(e)}")
 
-@proxy_router.delete("/qingguo/release/{proxy_id}")
-async def release_qingguo_proxy(proxy_id: str):
-    """释放青果代理"""
+# 青果代理释放功能已移除 - 动态型代理不支持释放IP
+# 请使用启用/禁用功能来管理代理状态
+# @proxy_router.delete("/qingguo/release/{proxy_id}")
+# async def release_qingguo_proxy(proxy_id: str):
+#     """释放青果代理"""
+#     try:
+#         from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+#         
+#         proxy_manager = await get_qingguo_proxy_manager()
+#         
+#         # 释放代理
+#         success = await proxy_manager.release_proxy(proxy_id)
+#         
+#         if not success:
+#             raise HTTPException(status_code=500, detail="释放代理失败")
+#         
+#         return {
+#             "success": True,
+#             "message": "代理释放成功"
+#         }
+#         
+#     except Exception as e:
+#         utils.logger.error(f"释放青果代理失败: {e}")
+#         raise HTTPException(status_code=500, detail=f"释放青果代理失败: {str(e)}")
+
+@proxy_router.post("/proxies/{proxy_id}/sync")
+async def sync_proxy(proxy_id: str):
+    """同步单个代理信息"""
     try:
-        from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+        db = await get_db()
         
-        proxy_manager = await get_qingguo_proxy_manager()
+        # 检查代理是否存在并获取代理信息
+        check_query = "SELECT * FROM proxy_pool WHERE proxy_id = %s"
+        proxy = await db.get_first(check_query, proxy_id)
         
-        # 释放代理
-        success = await proxy_manager.release_proxy(proxy_id)
+        if not proxy:
+            raise HTTPException(status_code=404, detail="代理不存在")
         
-        if not success:
-            raise HTTPException(status_code=500, detail="释放代理失败")
+        # 如果是青果代理，进行同步
+        if proxy.get('provider') == 'qingguo':
+            from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
+            
+            proxy_manager = await get_qingguo_proxy_manager()
+            
+            # 获取代理的账号信息
+            account_id = proxy.get('account_id', 'qingguo_default')
+            
+            # 同步该账号下的所有代理
+            synced_proxies = await proxy_manager.sync_proxies_from_query(account_id)
+            
+            # 查找同步后的代理信息
+            updated_query = "SELECT * FROM proxy_pool WHERE proxy_id = %s"
+            updated_proxy = await db.get_first(updated_query, proxy_id)
+            
+            if updated_proxy:
+                return {
+                    "success": True,
+                    "message": f"代理同步成功，共同步 {len(synced_proxies)} 个代理",
+                    "proxy": {
+                        "proxy_id": updated_proxy['proxy_id'],
+                        "ip": updated_proxy['ip'],
+                        "port": updated_proxy['port'],
+                        "area": updated_proxy.get('area'),
+                        "expire_ts": updated_proxy.get('expire_ts'),
+                        "status": updated_proxy.get('status'),
+                        "enabled": updated_proxy.get('enabled'),
+                        "task_id": updated_proxy.get('task_id'),
+                        "proxy_ip": updated_proxy.get('proxy_ip')
+                    }
+                }
+            else:
+                return {
+                    "success": True,
+                    "message": f"代理同步成功，但当前代理可能已被更新，共同步 {len(synced_proxies)} 个代理"
+                }
+        else:
+            return {
+                "success": False,
+                "message": "只支持青果代理的同步功能"
+            }
         
-        return {
-            "success": True,
-            "message": "代理释放成功"
-        }
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        utils.logger.error(f"释放青果代理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"释放青果代理失败: {str(e)}")
+        utils.logger.error(f"同步代理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"同步代理失败: {str(e)}")
 
 @proxy_router.get("/qingguo/channels")
 async def get_qingguo_channels():
@@ -832,7 +994,17 @@ async def sync_qingguo_proxies_from_query():
                     "ip": proxy.ip,
                     "port": proxy.port,
                     "area": proxy.area,
-                    "description": proxy.description
+                    "description": proxy.description,
+                    "username": proxy.username,
+                    "password": proxy.password,
+                    "proxy_type": proxy.proxy_type,
+                    "usage_count": proxy.usage_count,
+                    "success_count": proxy.success_count,
+                    "fail_count": proxy.fail_count,
+                    "status": proxy.status.value,
+                    "enabled": proxy.enabled,
+                    "created_at": proxy.created_at.isoformat() if proxy.created_at else None,
+                    "account_id": proxy.account_id
                 }
                 for proxy in synced_proxies
             ],
@@ -931,8 +1103,9 @@ async def get_qingguo_balance():
 
 @proxy_router.post("/qingguo/batch-extract")
 async def batch_extract_qingguo_proxies(
-    region: str = Query("北京", description="区域名称"),
-    isp: str = Query("电信", description="运营商名称"),
+    account_id: str = Query(..., description="代理账号ID"),
+    region: Optional[str] = Query(None, description="区域名称，为空时自动选择"),
+    isp: Optional[str] = Query(None, description="运营商名称，为空时自动选择"),
     count: int = Query(5, ge=1, le=10, description="批量提取数量")
 ):
     """批量提取青果长效代理"""
@@ -940,6 +1113,14 @@ async def batch_extract_qingguo_proxies(
         from proxy.qingguo_long_term_proxy import get_qingguo_proxy_manager
         
         proxy_manager = await get_qingguo_proxy_manager()
+        
+        # 验证代理账号
+        db = await get_db()
+        account_query = "SELECT * FROM proxy_accounts WHERE account_id = %s AND provider = 'qingguo'"
+        account = await db.get_first(account_query, account_id)
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="代理账号不存在或不是青果代理")
         
         # 首先检查通道空闲数
         channels = await proxy_manager.get_channels()
@@ -968,6 +1149,13 @@ async def batch_extract_qingguo_proxies(
         else:
             actual_count = count
         
+        # 如果区域或运营商为空，自动选择
+        if not region or not isp:
+            auto_region, auto_isp = await proxy_manager.get_random_available_region()
+            region = region or auto_region
+            isp = isp or auto_isp
+            utils.logger.info(f"[批量提取] 自动选择区域: {region}, 运营商: {isp}")
+        
         # 批量提取代理
         results = []
         success_count = 0
@@ -978,7 +1166,8 @@ async def batch_extract_qingguo_proxies(
                 proxy_info = await proxy_manager.extract_proxy(
                     region=region,
                     isp=isp,
-                    description=f"批量提取-{i+1}"
+                    description=f"批量提取-{i+1}",
+                    account_id=account_id
                 )
                 if proxy_info:
                     results.append({
@@ -989,7 +1178,17 @@ async def batch_extract_qingguo_proxies(
                             "ip": proxy_info.ip,
                             "port": proxy_info.port,
                             "area": proxy_info.area,
-                            "description": proxy_info.description
+                            "description": proxy_info.description,
+                            "username": proxy_info.username,
+                            "password": proxy_info.password,
+                            "proxy_type": proxy_info.proxy_type,
+                            "usage_count": proxy_info.usage_count,
+                            "success_count": proxy_info.success_count,
+                            "fail_count": proxy_info.fail_count,
+                            "status": proxy_info.status.value,
+                            "enabled": proxy_info.enabled,
+                            "created_at": proxy_info.created_at.isoformat() if proxy_info.created_at else None,
+                            "account_id": proxy_info.account_id
                         }
                     })
                     success_count += 1
@@ -1047,7 +1246,17 @@ async def health_check_qingguo_proxies():
                     "port": proxy['port'],
                     "success": test_result.get("success", False),
                     "speed": test_result.get("speed"),
-                    "error": test_result.get("error")
+                    "error": test_result.get("error"),
+                    "area": proxy.get('area'),
+                    "description": proxy.get('description'),
+                    "username": proxy.get('username'),
+                    "password": proxy.get('password'),
+                    "proxy_type": proxy.get('proxy_type', 'http'),
+                    "usage_count": proxy.get('usage_count', 0),
+                    "success_count": proxy.get('success_count', 0),
+                    "fail_count": proxy.get('fail_count', 0),
+                    "status": proxy.get('status', 'active'),
+                    "enabled": proxy.get('enabled', True)
                 })
                 
             except Exception as e:
@@ -1056,7 +1265,17 @@ async def health_check_qingguo_proxies():
                     "ip": proxy['ip'],
                     "port": proxy['port'],
                     "success": False,
-                    "error": str(e)
+                    "error": str(e),
+                    "area": proxy.get('area'),
+                    "description": proxy.get('description'),
+                    "username": proxy.get('username'),
+                    "password": proxy.get('password'),
+                    "proxy_type": proxy.get('proxy_type', 'http'),
+                    "usage_count": proxy.get('usage_count', 0),
+                    "success_count": proxy.get('success_count', 0),
+                    "fail_count": proxy.get('fail_count', 0),
+                    "status": proxy.get('status', 'active'),
+                    "enabled": proxy.get('enabled', True)
                 })
         
         success_count = sum(1 for r in results if r["success"])
@@ -1074,3 +1293,452 @@ async def health_check_qingguo_proxies():
     except Exception as e:
         utils.logger.error(f"青果代理健康检查失败: {e}")
         raise HTTPException(status_code=500, detail=f"青果代理健康检查失败: {str(e)}")
+
+# ==================== 代理账号管理API ====================
+
+@proxy_router.get("/proxy-accounts/", response_model=List[ProxyAccount])
+async def get_proxy_accounts(
+    provider: Optional[str] = Query(None, description="提供商筛选"),
+    is_active: Optional[bool] = Query(None, description="启用状态筛选"),
+    is_default: Optional[bool] = Query(None, description="默认账号筛选")
+):
+    """获取代理账号列表"""
+    try:
+        db = await get_db()
+        
+        # 构建查询条件
+        conditions = []
+        params = []
+        
+        if provider:
+            conditions.append("provider = %s")
+            params.append(provider)
+        
+        if is_active is not None:
+            conditions.append("is_active = %s")
+            params.append(1 if is_active else 0)
+        
+        if is_default is not None:
+            conditions.append("is_default = %s")
+            params.append(1 if is_default else 0)
+        
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        
+        # 查询代理账号列表
+        query = f"""
+            SELECT * FROM proxy_accounts{where_clause}
+            ORDER BY is_default DESC, created_at DESC
+        """
+        
+        results = await db.query(query, *params)
+        
+        # 转换结果
+        accounts = []
+        for row in results:
+            account = ProxyAccount(
+                id=row['id'],
+                account_id=row['account_id'],
+                provider=row['provider'],
+                provider_name=row['provider_name'],
+                api_key=row['api_key'],
+                api_secret=row.get('api_secret'),
+                username=row.get('username'),
+                password=row.get('password'),
+                signature=row.get('signature'),
+                endpoint_url=row.get('endpoint_url'),
+                is_active=bool(row['is_active']),
+                is_default=bool(row['is_default']),
+                max_pool_size=row['max_pool_size'],
+                validate_ip=bool(row['validate_ip']),
+                description=row.get('description'),
+                config_json=json.loads(row['config_json']) if row.get('config_json') else None,
+                last_used_at=row.get('last_used_at'),
+                usage_count=row.get('usage_count', 0),
+                success_count=row.get('success_count', 0),
+                fail_count=row.get('fail_count', 0),
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
+            )
+            accounts.append(account)
+        
+        return accounts
+        
+    except Exception as e:
+        utils.logger.error(f"获取代理账号列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取代理账号列表失败: {str(e)}")
+
+@proxy_router.get("/proxy-accounts/{account_id}", response_model=ProxyAccount)
+async def get_proxy_account(account_id: str):
+    """获取单个代理账号详情"""
+    try:
+        db = await get_db()
+        
+        query = "SELECT * FROM proxy_accounts WHERE account_id = %s"
+        row = await db.get_first(query, account_id)
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="代理账号不存在")
+        
+        account = ProxyAccount(
+            id=row['id'],
+            account_id=row['account_id'],
+            provider=row['provider'],
+            provider_name=row['provider_name'],
+            api_key=row['api_key'],
+            api_secret=row.get('api_secret'),
+            username=row.get('username'),
+            password=row.get('password'),
+            signature=row.get('signature'),
+            endpoint_url=row.get('endpoint_url'),
+            is_active=bool(row['is_active']),
+            is_default=bool(row['is_default']),
+            max_pool_size=row['max_pool_size'],
+            validate_ip=bool(row['validate_ip']),
+            description=row.get('description'),
+            config_json=json.loads(row['config_json']) if row.get('config_json') else None,
+            last_used_at=row.get('last_used_at'),
+            usage_count=row.get('usage_count', 0),
+            success_count=row.get('success_count', 0),
+            fail_count=row.get('fail_count', 0),
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
+        )
+        
+        return account
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"获取代理账号详情失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取代理账号详情失败: {str(e)}")
+
+@proxy_router.post("/proxy-accounts/", response_model=ProxyAccount)
+async def create_proxy_account(account: ProxyAccountCreate):
+    """创建新代理账号"""
+    try:
+        db = await get_db()
+        
+        # 检查账号是否已存在
+        check_query = "SELECT COUNT(*) FROM proxy_accounts WHERE account_id = %s"
+        result = await db.get_first(check_query, account.account_id)
+        
+        if result and list(result.values())[0] > 0:
+            raise HTTPException(status_code=400, detail="代理账号ID已存在")
+        
+        # 如果设置为默认账号，先取消其他默认账号
+        if account.is_default:
+            await db.execute("UPDATE proxy_accounts SET is_default = 0 WHERE provider = %s", account.provider)
+        
+        # 插入新代理账号
+        insert_query = """
+            INSERT INTO proxy_accounts (
+                account_id, provider, provider_name, api_key, api_secret,
+                username, password, signature, endpoint_url, is_active,
+                is_default, max_pool_size, validate_ip, description, config_json,
+                created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        await db.execute(insert_query,
+            account.account_id, account.provider, account.provider_name,
+            account.api_key, account.api_secret, account.username, account.password,
+            account.signature, account.endpoint_url, 1 if account.is_active else 0,
+            1 if account.is_default else 0, account.max_pool_size,
+            1 if account.validate_ip else 0, account.description,
+            json.dumps(account.config_json) if account.config_json else None,
+            datetime.now(), datetime.now()
+        )
+        
+        # 获取新创建的代理账号
+        return await get_proxy_account(account.account_id)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"创建代理账号失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建代理账号失败: {str(e)}")
+
+@proxy_router.put("/proxy-accounts/{account_id}", response_model=ProxyAccount)
+async def update_proxy_account(account_id: str, account: ProxyAccountUpdate):
+    """更新代理账号信息"""
+    try:
+        db = await get_db()
+        
+        # 检查代理账号是否存在
+        check_query = "SELECT COUNT(*) FROM proxy_accounts WHERE account_id = %s"
+        result = await db.get_first(check_query, account_id)
+        
+        if not result or list(result.values())[0] == 0:
+            raise HTTPException(status_code=404, detail="代理账号不存在")
+        
+        # 如果设置为默认账号，先取消其他默认账号
+        if account.is_default:
+            current_account = await get_proxy_account(account_id)
+            await db.execute("UPDATE proxy_accounts SET is_default = 0 WHERE provider = %s", current_account.provider)
+        
+        # 构建更新语句
+        updates = []
+        params = []
+        
+        for field, value in account.dict(exclude_unset=True).items():
+            if value is not None:
+                if field in ['is_active', 'is_default', 'validate_ip']:
+                    updates.append(f"{field} = %s")
+                    params.append(1 if value else 0)
+                elif field == 'config_json':
+                    updates.append(f"{field} = %s")
+                    params.append(json.dumps(value) if value else None)
+                else:
+                    updates.append(f"{field} = %s")
+                    params.append(value)
+        
+        if not updates:
+            raise HTTPException(status_code=400, detail="没有提供要更新的字段")
+        
+        # 执行更新
+        update_query = f"UPDATE proxy_accounts SET {', '.join(updates)}, updated_at = %s WHERE account_id = %s"
+        params.extend([datetime.now(), account_id])
+        
+        await db.execute(update_query, *params)
+        
+        # 返回更新后的代理账号
+        return await get_proxy_account(account_id)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"更新代理账号失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新代理账号失败: {str(e)}")
+
+@proxy_router.delete("/proxy-accounts/{account_id}")
+async def delete_proxy_account(account_id: str):
+    """删除代理账号"""
+    try:
+        db = await get_db()
+        
+        # 检查代理账号是否存在
+        check_query = "SELECT COUNT(*) FROM proxy_accounts WHERE account_id = %s"
+        result = await db.get_first(check_query, account_id)
+        
+        if not result or list(result.values())[0] == 0:
+            raise HTTPException(status_code=404, detail="代理账号不存在")
+        
+        # 检查是否为默认账号
+        account = await get_proxy_account(account_id)
+        if account.is_default:
+            raise HTTPException(status_code=400, detail="不能删除默认代理账号")
+        
+        # 删除代理账号
+        delete_query = "DELETE FROM proxy_accounts WHERE account_id = %s"
+        await db.execute(delete_query, account_id)
+        
+        return {
+            "success": True,
+            "message": "代理账号删除成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"删除代理账号失败: {e}")
+        raise HTTPException(status_code=500, detail=f"删除代理账号失败: {str(e)}")
+
+@proxy_router.post("/proxy-accounts/{account_id}/test")
+async def test_proxy_account(account_id: str):
+    """测试代理账号连接"""
+    try:
+        db = await get_db()
+        
+        # 获取代理账号信息
+        query = "SELECT * FROM proxy_accounts WHERE account_id = %s"
+        row = await db.get_first(query, account_id)
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="代理账号不存在")
+        
+        # 根据提供商测试连接
+        provider = row['provider']
+        success = False
+        error_message = None
+        response_time = None
+        
+        try:
+            if provider == 'qingguo':
+                # 测试青果代理连接
+                import httpx
+                import time
+                
+                start_time = time.time()
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://longterm.proxy.qg.net/query",
+                        params={
+                            "key": row['api_key'],
+                            "pwd": row['api_secret']
+                        }
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("code") == "SUCCESS":
+                            success = True
+                            response_time = int((time.time() - start_time) * 1000)
+                        else:
+                            error_message = f"API返回错误: {data.get('message', '未知错误')}"
+                    else:
+                        error_message = f"HTTP错误: {response.status_code}"
+                        
+            else:
+                error_message = f"暂不支持测试 {provider} 提供商"
+                
+        except Exception as e:
+            error_message = str(e)
+        
+        # 记录测试结果
+        log_query = """
+            INSERT INTO proxy_account_logs (
+                account_id, provider, operation, success, response_time, error_message, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        await db.execute(log_query, account_id, provider, "test", 1 if success else 0, 
+                        response_time, error_message, datetime.now())
+        
+        # 更新账号统计
+        if success:
+            update_query = """
+                UPDATE proxy_accounts SET 
+                    success_count = success_count + 1, last_used_at = %s, updated_at = %s
+                WHERE account_id = %s
+            """
+            await db.execute(update_query, datetime.now(), datetime.now(), account_id)
+        else:
+            update_query = """
+                UPDATE proxy_accounts SET 
+                    fail_count = fail_count + 1, last_used_at = %s, updated_at = %s
+                WHERE account_id = %s
+            """
+            await db.execute(update_query, datetime.now(), datetime.now(), account_id)
+        
+        return {
+            "success": success,
+            "response_time": response_time,
+            "error_message": error_message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"测试代理账号失败: {e}")
+        raise HTTPException(status_code=500, detail=f"测试代理账号失败: {str(e)}")
+
+@proxy_router.get("/proxy-accounts/{account_id}/logs")
+async def get_proxy_account_logs(
+    account_id: str,
+    operation: Optional[str] = Query(None, description="操作类型筛选"),
+    success: Optional[bool] = Query(None, description="成功状态筛选"),
+    start_date: Optional[datetime] = Query(None, description="开始日期"),
+    end_date: Optional[datetime] = Query(None, description="结束日期"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量")
+):
+    """获取代理账号使用日志"""
+    try:
+        db = await get_db()
+        
+        # 构建查询条件
+        conditions = ["account_id = %s"]
+        params = [account_id]
+        
+        if operation:
+            conditions.append("operation = %s")
+            params.append(operation)
+        
+        if success is not None:
+            conditions.append("success = %s")
+            params.append(1 if success else 0)
+        
+        if start_date:
+            conditions.append("created_at >= %s")
+            params.append(start_date)
+        
+        if end_date:
+            conditions.append("created_at <= %s")
+            params.append(end_date)
+        
+        where_clause = " WHERE " + " AND ".join(conditions)
+        
+        # 计算偏移量
+        offset = (page - 1) * page_size
+        
+        # 查询使用日志
+        query = f"""
+            SELECT * FROM proxy_account_logs{where_clause}
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s
+        """
+        
+        results = await db.query(query, *(params + [page_size, offset]))
+        
+        return {
+            "logs": results,
+            "page": page,
+            "page_size": page_size,
+            "total": len(results)
+        }
+        
+    except Exception as e:
+        utils.logger.error(f"获取代理账号使用日志失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取代理账号使用日志失败: {str(e)}")
+
+@proxy_router.get("/proxy-accounts/stats/overview")
+async def get_proxy_account_stats():
+    """获取代理账号统计概览"""
+    try:
+        db = await get_db()
+        
+        # 基础统计
+        total_query = "SELECT COUNT(*) as total FROM proxy_accounts"
+        total_result = await db.get_first(total_query)
+        total_accounts = total_result['total'] if total_result else 0
+        
+        # 活跃账号统计
+        active_query = "SELECT COUNT(*) as active FROM proxy_accounts WHERE is_active = 1"
+        active_result = await db.get_first(active_query)
+        active_accounts = active_result['active'] if active_result else 0
+        
+        # 提供商统计
+        provider_query = """
+            SELECT provider, COUNT(*) as count 
+            FROM proxy_accounts 
+            GROUP BY provider
+        """
+        provider_results = await db.query(provider_query)
+        by_provider = {row['provider']: row['count'] for row in provider_results}
+        
+        # 成功率统计
+        success_rate_query = """
+            SELECT 
+                SUM(success_count) as total_success,
+                SUM(usage_count) as total_usage
+            FROM proxy_accounts 
+            WHERE usage_count > 0
+        """
+        success_rate_result = await db.get_first(success_rate_query)
+        
+        total_success = success_rate_result['total_success'] if success_rate_result and success_rate_result['total_success'] else 0
+        total_usage = success_rate_result['total_usage'] if success_rate_result and success_rate_result['total_usage'] else 0
+        
+        avg_success_rate = round((total_success / total_usage * 100) if total_usage > 0 else 0, 2)
+        
+        return {
+            "total_accounts": total_accounts,
+            "active_accounts": active_accounts,
+            "by_provider": by_provider,
+            "avg_success_rate": avg_success_rate,
+            "total_usage": total_usage,
+            "total_success": total_success
+        }
+        
+    except Exception as e:
+        utils.logger.error(f"获取代理账号统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取代理账号统计失败: {str(e)}")

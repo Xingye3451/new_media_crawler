@@ -141,7 +141,7 @@ class BilibiliLoginMigrationGuide:
   - 登录成功率显著提升
 
 💡 B站登录特点:
-  - 通常需要在passport.bilibili.com进行认证
+  - 通常需要在account.bilibili.com/account/home进行认证
   - 登录成功后会自动跳转到主站
   - SESSDATA和bili_jct是关键认证cookies
   - 支持各种B站功能访问

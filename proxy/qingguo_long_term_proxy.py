@@ -61,6 +61,9 @@ class ProxyInfo(BaseModel):
     distinct: Optional[bool] = False  # 是否独享
     speed: Optional[int] = None  # 速度(ms)
     description: Optional[str] = None  # 描述信息
+    account_id: Optional[str] = None  # 关联的代理账号ID
+    task_id: Optional[str] = None  # 青果代理的task_id
+    proxy_ip: Optional[str] = None  # 真实出口IP地址
 
 
 class QingguoLongTermProxy:
@@ -84,7 +87,7 @@ class QingguoLongTermProxy:
                 self.db = media_crawler_db_var.get()
         return self.db
     
-    async def extract_proxy(self, region: str = "北京", isp: str = "电信", description: str = None) -> Optional[ProxyInfo]:
+    async def extract_proxy(self, region: str = "北京", isp: str = "电信", description: str = None, account_id: str = None) -> Optional[ProxyInfo]:
         """提取长效代理IP"""
         try:
             # 首先检查通道空闲数
@@ -214,7 +217,8 @@ class QingguoLongTermProxy:
                     created_at=datetime.now(),
                     area=area,
                     distinct=distinct,
-                    description=description or f"青果代理 - {region} {isp}"
+                    description=description or f"青果代理 - {region} {isp}",
+                    account_id=account_id or 'qingguo_default'
                 )
                 
                 # 保存到数据库
@@ -247,13 +251,15 @@ class QingguoLongTermProxy:
                 update_query = """
                     UPDATE proxy_pool SET 
                         expire_ts = %s, status = %s, updated_at = %s,
-                        username = %s, password = %s, provider = %s
+                        username = %s, password = %s, provider = %s,
+                        task_id = %s, proxy_ip = %s, description = %s
                     WHERE id = %s
                 """
                 await db.execute(update_query, 
                     proxy_info.expire_ts, proxy_info.status.value, 
                     datetime.now(), proxy_info.username, proxy_info.password,
-                    'qingguo', existing['id']
+                    'qingguo', proxy_info.task_id, proxy_info.proxy_ip, 
+                    proxy_info.description, existing['id']
                 )
                 proxy_info.id = existing['id']
             else:
@@ -261,14 +267,17 @@ class QingguoLongTermProxy:
                 insert_query = """
                     INSERT INTO proxy_pool (
                         proxy_id, ip, port, username, password, proxy_type, expire_ts,
-                        provider, status, enabled, area, description, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        provider, account_id, status, enabled, area, description, 
+                        task_id, proxy_ip, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 await db.execute(insert_query,
                     proxy_id, proxy_info.ip, proxy_info.port, proxy_info.username,
                     proxy_info.password, proxy_info.proxy_type, proxy_info.expire_ts,
-                    'qingguo', proxy_info.status.value, proxy_info.enabled,
+                    'qingguo', proxy_info.account_id or 'qingguo_default', 
+                    proxy_info.status.value, proxy_info.enabled,
                     proxy_info.area, proxy_info.description,
+                    proxy_info.task_id, proxy_info.proxy_ip,
                     proxy_info.created_at, datetime.now()
                 )
                 
@@ -316,7 +325,10 @@ class QingguoLongTermProxy:
                     fail_count=result.get('fail_count', 0),
                     area=result.get('area'),
                     speed=result.get('speed'),
-                    description=result.get('description')
+                    description=result.get('description'),
+                    task_id=result.get('task_id'),
+                    proxy_ip=result.get('proxy_ip'),
+                    account_id=result.get('account_id')
                 )
                 
                 # 更新使用时间
@@ -471,9 +483,15 @@ class QingguoLongTermProxy:
         
         # 添加区域和独享信息
         if proxy_info.area:
-            utils.logger.info(f"[PROXY_USAGE] 🌍 区域编码: {proxy_info.area}")
+            utils.logger.info(f"[PROXY_USAGE] 🌍 区域: {proxy_info.area}")
         if proxy_info.distinct is not None:
             utils.logger.info(f"[PROXY_USAGE] 🔒 独享代理: {proxy_info.distinct}")
+        
+        # 添加task_id和真实出口IP信息
+        if proxy_info.task_id:
+            utils.logger.info(f"[PROXY_USAGE] 🆔 Task ID: {proxy_info.task_id}")
+        if proxy_info.proxy_ip:
+            utils.logger.info(f"[PROXY_USAGE] 🌐 真实出口IP: {proxy_info.proxy_ip}")
         
         # 打印curl使用示例
         curl_example = f"curl -x http://{proxy_info.username}:{proxy_info.password}@{proxy_info.ip}:{proxy_info.port} https://httpbin.org/ip"
@@ -548,6 +566,16 @@ class QingguoLongTermProxy:
         try:
             db = await self.get_db()
             
+            # 先通过proxy_id查找数据库记录
+            check_query = "SELECT id FROM proxy_pool WHERE proxy_id = %s"
+            result = await db.get_first(check_query, proxy_id)
+            
+            if not result:
+                utils.logger.error(f"[QingguoLongTermProxy] 代理不存在: {proxy_id}")
+                return False
+            
+            db_id = result['id']
+            
             update_query = """
                 UPDATE proxy_pool SET 
                     enabled = 1,
@@ -555,7 +583,7 @@ class QingguoLongTermProxy:
                 WHERE id = %s
             """
             
-            await db.execute(update_query, datetime.now(), proxy_id)
+            await db.execute(update_query, datetime.now(), db_id)
             utils.logger.info(f"[QingguoLongTermProxy] 代理启用成功: {proxy_id}")
             return True
             
@@ -568,6 +596,16 @@ class QingguoLongTermProxy:
         try:
             db = await self.get_db()
             
+            # 先通过proxy_id查找数据库记录
+            check_query = "SELECT id FROM proxy_pool WHERE proxy_id = %s"
+            result = await db.get_first(check_query, proxy_id)
+            
+            if not result:
+                utils.logger.error(f"[QingguoLongTermProxy] 代理不存在: {proxy_id}")
+                return False
+            
+            db_id = result['id']
+            
             update_query = """
                 UPDATE proxy_pool SET 
                     enabled = 0,
@@ -575,7 +613,7 @@ class QingguoLongTermProxy:
                 WHERE id = %s
             """
             
-            await db.execute(update_query, datetime.now(), proxy_id)
+            await db.execute(update_query, datetime.now(), db_id)
             utils.logger.info(f"[QingguoLongTermProxy] 代理禁用成功: {proxy_id}")
             return True
             
@@ -589,7 +627,7 @@ class QingguoLongTermProxy:
             db = await self.get_db()
             
             # 获取代理信息
-            query = "SELECT * FROM proxy_pool WHERE id = %s"
+            query = "SELECT * FROM proxy_pool WHERE proxy_id = %s"
             proxy = await db.get_first(query, proxy_id)
             
             if not proxy:
@@ -617,7 +655,7 @@ class QingguoLongTermProxy:
                             updated_at = %s
                         WHERE id = %s
                     """
-                    await db.execute(update_query, speed, datetime.now(), proxy_id)
+                    await db.execute(update_query, speed, datetime.now(), proxy['id'])
                     
                     return {
                         "success": True,
@@ -962,7 +1000,7 @@ class QingguoLongTermProxy:
             utils.logger.error(f"[QingguoLongTermProxy] 删除白名单异常: {e}")
             return False
 
-    async def sync_proxies_from_query(self):
+    async def sync_proxies_from_query(self, account_id: str = None):
         """从query API同步代理信息到数据库"""
         try:
             # 调用query API获取当前代理
@@ -991,7 +1029,12 @@ class QingguoLongTermProxy:
                         # 同步到数据库
                         synced_proxies = []
                         for proxy_data in proxy_list:
-                            proxy_info = await self._sync_proxy_to_db(proxy_data)
+                            # 如果指定了账号ID，只同步该账号的代理
+                            if account_id:
+                                proxy_info = await self._sync_proxy_to_db(proxy_data, account_id)
+                            else:
+                                proxy_info = await self._sync_proxy_to_db(proxy_data)
+                            
                             if proxy_info:
                                 synced_proxies.append(proxy_info)
                         
@@ -1008,31 +1051,45 @@ class QingguoLongTermProxy:
             utils.logger.error(f"[QingguoLongTermProxy] 同步代理信息异常: {e}")
             return []
 
-    async def _sync_proxy_to_db(self, proxy_data: dict) -> Optional[ProxyInfo]:
+    async def _sync_proxy_to_db(self, proxy_data: dict, account_id: str = None) -> Optional[ProxyInfo]:
         """将单个代理信息同步到数据库"""
         try:
             server = proxy_data.get("server", "")
+            proxy_ip = proxy_data.get("proxy_ip", "")
+            task_id = proxy_data.get("task_id", "")
             area = proxy_data.get("area", "")
-            distinct = proxy_data.get("distinct", False)
+            isp = proxy_data.get("isp", "")
+            deadline = proxy_data.get("deadline", "")
             
             if not server or ":" not in server:
                 utils.logger.error(f"[QingguoLongTermProxy] 代理服务器格式错误: {server}")
                 return None
             
-            # 解析服务器地址
+            # 解析服务器地址（这是真正挂代理的地址）
             host, port = server.split(":", 1)
-            ip = host
+            server_ip = host
             port = int(port)
             
-            # 生成代理ID
-            proxy_id = f"qingguo_{ip}_{port}_{int(time.time())}"
+            # 生成代理ID（使用task_id如果可用）
+            if task_id:
+                proxy_id = f"qingguo_{task_id}"
+            else:
+                proxy_id = f"qingguo_{server_ip}_{port}_{int(time.time())}"
             
-            # 长效代理的过期时间（默认24小时）
-            expire_ts = int(time.time()) + 24 * 3600
+            # 解析过期时间
+            expire_ts = int(time.time()) + 24 * 3600  # 默认24小时
+            if deadline:
+                try:
+                    # 解析 "2025-09-09 22:01:22" 格式的日期
+                    deadline_dt = datetime.strptime(deadline, "%Y-%m-%d %H:%M:%S")
+                    expire_ts = int(deadline_dt.timestamp())
+                    utils.logger.info(f"[QingguoLongTermProxy] 解析过期时间: {deadline} -> {expire_ts}")
+                except Exception as e:
+                    utils.logger.warning(f"[QingguoLongTermProxy] 解析过期时间失败: {deadline}, 使用默认24小时, 错误: {e}")
             
             # 创建代理信息对象
             proxy_info = ProxyInfo(
-                ip=ip,
+                ip=server_ip,  # 使用server中的IP（真正挂代理的IP）
                 port=port,
                 username=self.config.key,  # 使用key作为用户名
                 password=self.config.pwd or "",  # 使用pwd作为密码
@@ -1042,14 +1099,28 @@ class QingguoLongTermProxy:
                 status=ProxyStatus.ACTIVE,
                 enabled=True,
                 area=area,
-                distinct=distinct,
-                description=f"青果长效代理 - {area}"
+                distinct=False,  # 长效代理不是独享的
+                description=f"青果长效代理 - {area} ({isp}) - 出口IP: {proxy_ip}",
+                account_id=account_id or "qingguo_default",  # 使用指定的账号ID或默认值
+                task_id=task_id,  # 保存task_id
+                proxy_ip=proxy_ip  # 保存真实出口IP
             )
             
             # 保存到数据库
             await self.save_proxy_to_db(proxy_info)
             
-            utils.logger.info(f"[QingguoLongTermProxy] 同步代理成功: {ip}:{port}")
+            # 确保proxy_info.id被正确设置
+            if not proxy_info.id:
+                # 如果ID没有被设置，从数据库查询
+                db = await self.get_db()
+                result = await db.get_first(
+                    "SELECT id FROM proxy_pool WHERE ip = %s AND port = %s ORDER BY created_at DESC LIMIT 1",
+                    server_ip, port
+                )
+                if result:
+                    proxy_info.id = str(result['id'])
+            
+            utils.logger.info(f"[QingguoLongTermProxy] 同步代理成功: {server_ip}:{port}, ID: {proxy_info.id}")
             return proxy_info
             
         except Exception as e:
@@ -1109,13 +1180,18 @@ async def get_qingguo_proxy_manager() -> QingguoLongTermProxy:
     global _qingguo_proxy_manager
     
     if not _qingguo_proxy_manager:
-        # 从配置加载
-        from config.config_manager import config_manager
-        proxy_config = config_manager.get_proxy_config()
+        # 从代理账号管理器加载配置
+        from proxy.proxy_account_manager import get_qingguo_proxy_config
+        
+        proxy_config = await get_qingguo_proxy_config()
+        
+        if not proxy_config:
+            utils.logger.error("未找到青果代理账号配置，请先在代理管理界面添加青果代理账号")
+            raise RuntimeError("未找到青果代理账号配置")
         
         config = QingguoLongTermProxyConfig(
-            key=proxy_config.qingguo_key or os.getenv("QG_PROXY_KEY", ""),
-            pwd=proxy_config.qingguo_pwd or os.getenv("QG_PROXY_PWD", ""),
+            key=proxy_config["key"],
+            pwd=proxy_config["pwd"],
             bandwidth="10Mbps",
             tunnel_forwarding=True,
             channel_count=1,

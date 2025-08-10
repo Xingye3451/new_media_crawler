@@ -57,7 +57,7 @@ class UnifiedRemoteLogin(ABC):
             "xhs": "https://www.xiaohongshu.com/login",
             "dy": "https://www.douyin.com/",
             "ks": "https://www.kuaishou.com/",
-            "bili": "https://passport.bilibili.com/login",
+            "bili": "https://account.bilibili.com/account/home",
             "wb": "https://weibo.com/login.php",
             "tieba": "https://tieba.baidu.com/",
             "zhihu": "https://www.zhihu.com/signin"

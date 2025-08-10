@@ -17,7 +17,6 @@
 from .config_manager import config_manager
 
 # 获取配置对象
-proxy_config = config_manager.get_proxy_config()
 crawler_config = config_manager.get_crawler_config()
 database_config = config_manager.get_database_config()
 app_config = config_manager.get_app_config()
@@ -37,17 +36,18 @@ login_status_check_config = scheduled_tasks_config.get("login_status_check", {})
 scheduler_config = scheduled_tasks_config.get("scheduler", {})
 
 # ==================== 代理配置 ====================
+# 代理配置现在从数据库获取，这里保留默认值
 # 是否开启 IP 代理
-ENABLE_IP_PROXY = proxy_config.enabled
+ENABLE_IP_PROXY = True  # 默认启用代理
 
 # 代理IP池数量
-IP_PROXY_POOL_COUNT = proxy_config.pool_count
+IP_PROXY_POOL_COUNT = 10  # 默认代理池大小
 
 # 代理IP提供商名称
-IP_PROXY_PROVIDER_NAME = proxy_config.provider_name
+IP_PROXY_PROVIDER_NAME = "qingguo"  # 默认提供商
 
 # 代理IP验证
-PROXY_VALIDATE_IP = proxy_config.validate_ip
+PROXY_VALIDATE_IP = True  # 默认验证IP
 
 # ==================== 爬虫配置 ====================
 # 基础配置

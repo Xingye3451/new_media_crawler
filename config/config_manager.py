@@ -34,26 +34,27 @@ class ConfigSource(Enum):
     MEMORY = "memory"     # 内存配置
 
 
-@dataclass
-class ProxyConfig:
-    """代理配置模型"""
-    provider_name: str = "kuaidaili"
-    enabled: bool = False
-    pool_count: int = 5
-    validate_ip: bool = True
-    
-    # 青果代理配置
-    qingguo_key: str = ""
-    qingguo_pwd: str = ""
-    
-    # 快代理配置
-    kuaidaili_secret_id: str = ""
-    kuaidaili_signature: str = ""
-    kuaidaili_user_name: str = ""
-    kuaidaili_user_pwd: str = ""
-    
-    # 极速HTTP代理配置
-    jisu_http_key: str = ""
+# 代理配置现在从数据库获取，移除ProxyConfig类
+# @dataclass
+# class ProxyConfig:
+#     """代理配置模型"""
+#     provider_name: str = "kuaidaili"
+#     enabled: bool = False
+#     pool_count: int = 5
+#     validate_ip: bool = True
+#     
+#     # 青果代理配置
+#     qingguo_key: str = ""
+#     qingguo_pwd: str = ""
+#     
+#     # 快代理配置
+#     kuaidaili_secret_id: str = ""
+#     kuaidaili_signature: str = ""
+#     kuaidaili_user_name: str = ""
+#     kuaidaili_user_pwd: str = ""
+#     
+#     # 极速HTTP代理配置
+#     jisu_http_key: str = ""
 
 
 @dataclass
@@ -258,7 +259,8 @@ class ConfigManager:
         
         # 配置缓存
         self._config_cache: Dict[str, Any] = {}
-        self._proxy_config: Optional[ProxyConfig] = None
+        # 代理配置现在从数据库获取，移除_proxy_config
+        # self._proxy_config: Optional[ProxyConfig] = None
         self._crawler_config: Optional[CrawlerConfig] = None
         self._database_config: Optional[DatabaseConfig] = None
         self._storage_config: Optional[StorageConfig] = None
@@ -441,20 +443,20 @@ class ConfigManager:
     
     def _init_config_objects(self):
         """初始化配置对象"""
-        # 代理配置
-        self._proxy_config = ProxyConfig(
-            provider_name=self.get("proxy.provider_name", "kuaidaili"),
-            enabled=self.get("proxy.enabled", False),
-            pool_count=self.get("proxy.pool_count", 5),
-            validate_ip=self.get("proxy.validate_ip", True),
-            qingguo_key=self.get("proxy.qingguo_key", ""),
-            qingguo_pwd=self.get("proxy.qingguo_pwd", ""),
-            kuaidaili_secret_id=self.get("proxy.kuaidaili_secret_id", ""),
-            kuaidaili_signature=self.get("proxy.kuaidaili_signature", ""),
-            kuaidaili_user_name=self.get("proxy.kuaidaili_user_name", ""),
-            kuaidaili_user_pwd=self.get("proxy.kuaidaili_user_pwd", ""),
-            jisu_http_key=self.get("proxy.jisu_http_key", ""),
-        )
+        # 代理配置现在从数据库获取，移除代理配置初始化
+        # self._proxy_config = ProxyConfig(
+        #     provider_name=self.get("proxy.provider_name", "kuaidaili"),
+        #     enabled=self.get("proxy.enabled", False),
+        #     pool_count=self.get("proxy.pool_count", 5),
+        #     validate_ip=self.get("proxy.validate_ip", True),
+        #     qingguo_key=self.get("proxy.qingguo_key", ""),
+        #     qingguo_pwd=self.get("proxy.qingguo_pwd", ""),
+        #     kuaidaili_secret_id=self.get("proxy.kuaidaili_secret_id", ""),
+        #     kuaidaili_signature=self.get("proxy.kuaidaili_signature", ""),
+        #     kuaidaili_user_name=self.get("proxy.kuaidaili_user_name", ""),
+        #     kuaidaili_user_pwd=self.get("proxy.kuaidaili_user_pwd", ""),
+        #     jisu_http_key=self.get("proxy.jisu_http_key", ""),
+        # )
         
         # 爬虫配置
         self._crawler_config = CrawlerConfig(
@@ -614,9 +616,10 @@ class ConfigManager:
             test_mode=self.get("development.test_mode", False),
         )
     
-    def get_proxy_config(self) -> ProxyConfig:
-        """获取代理配置"""
-        return self._proxy_config
+    # 代理配置现在从数据库获取，移除get_proxy_config方法
+    # def get_proxy_config(self) -> ProxyConfig:
+    #     """获取代理配置"""
+    #     return self._proxy_config
     
     def get_crawler_config(self) -> CrawlerConfig:
         """获取爬虫配置"""
@@ -688,19 +691,20 @@ class ConfigManager:
         yaml_file = self.config_dir / f"config_{env}.yaml"
         
         config_dict = {
-            "proxy": {
-                "provider_name": self._proxy_config.provider_name,
-                "enabled": self._proxy_config.enabled,
-                "pool_count": self._proxy_config.pool_count,
-                "validate_ip": self._proxy_config.validate_ip,
-                "qingguo_key": self._proxy_config.qingguo_key,
-                "qingguo_pwd": self._proxy_config.qingguo_pwd,
-                "kuaidaili_secret_id": self._proxy_config.kuaidaili_secret_id,
-                "kuaidaili_signature": self._proxy_config.kuaidaili_signature,
-                "kuaidaili_user_name": self._proxy_config.kuaidaili_user_name,
-                "kuaidaili_user_pwd": self._proxy_config.kuaidaili_user_pwd,
-                "jisu_http_key": self._proxy_config.jisu_http_key,
-            },
+            # 代理配置现在从数据库获取，移除代理配置导出
+            # "proxy": {
+            #     "provider_name": self._proxy_config.provider_name,
+            #     "enabled": self._proxy_config.enabled,
+            #     "pool_count": self._proxy_config.pool_count,
+            #     "validate_ip": self._proxy_config.validate_ip,
+            #     "qingguo_key": self._proxy_config.qingguo_key,
+            #     "qingguo_pwd": self._proxy_config.qingguo_pwd,
+            #     "kuaidaili_secret_id": self._proxy_config.kuaidaili_secret_id,
+            #     "kuaidaili_signature": self._proxy_config.kuaidaili_signature,
+            #     "kuaidaili_user_name": self._proxy_config.kuaidaili_user_name,
+            #     "kuaidaili_user_pwd": self._proxy_config.kuaidaili_user_pwd,
+            #     "jisu_http_key": self._proxy_config.jisu_http_key,
+            # },
             "crawler": {
                 "platform": self._crawler_config.platform,
                 "keywords": self._crawler_config.keywords,
@@ -845,19 +849,20 @@ class ConfigManager:
         json_file = self.config_dir / f"config_{env}.json"
         
         config_dict = {
-            "proxy": {
-                "provider_name": self._proxy_config.provider_name,
-                "enabled": self._proxy_config.enabled,
-                "pool_count": self._proxy_config.pool_count,
-                "validate_ip": self._proxy_config.validate_ip,
-                "qingguo_key": self._proxy_config.qingguo_key,
-                "qingguo_pwd": self._proxy_config.qingguo_pwd,
-                "kuaidaili_secret_id": self._proxy_config.kuaidaili_secret_id,
-                "kuaidaili_signature": self._proxy_config.kuaidaili_signature,
-                "kuaidaili_user_name": self._proxy_config.kuaidaili_user_name,
-                "kuaidaili_user_pwd": self._proxy_config.kuaidaili_user_pwd,
-                "jisu_http_key": self._proxy_config.jisu_http_key,
-            },
+            # 代理配置现在从数据库获取，移除代理配置导出
+            # "proxy": {
+            #     "provider_name": self._proxy_config.provider_name,
+            #     "enabled": self._proxy_config.enabled,
+            #     "pool_count": self._proxy_config.pool_count,
+            #     "validate_ip": self._proxy_config.validate_ip,
+            #     "qingguo_key": self._proxy_config.qingguo_key,
+            #     "qingguo_pwd": self._proxy_config.qingguo_pwd,
+            #     "kuaidaili_secret_id": self._proxy_config.kuaidaili_secret_id,
+            #     "kuaidaili_signature": self._proxy_config.kuaidaili_signature,
+            #     "kuaidaili_user_name": self._proxy_config.kuaidaili_user_name,
+            #     "kuaidaili_user_pwd": self._proxy_config.kuaidaili_user_pwd,
+            #     "jisu_http_key": self._proxy_config.jisu_http_key,
+            # },
             "crawler": {
                 "platform": self._crawler_config.platform,
                 "keywords": self._crawler_config.keywords,

@@ -228,5 +228,234 @@
       "files_executed": 1
     },
     "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:07:58.660454",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:07:58.660400"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:07:58.688939",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.016813278198242188,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:08:43.227608",
+    "migration_type": "full",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:08:43.227538"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:08:43.376901",
+    "migration_type": "full",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.13513898849487305,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:23:43.627262",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:23:43.627199"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:23:43.654754",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.015930652618408203,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:35:11.520885",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:35:11.520813"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:35:11.576669",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.03616976737976074,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:35:43.995854",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:35:43.995792"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:35:44.132135",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.12368202209472656,
+      "files_executed": 2
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:50:04.665128",
+    "migration_type": "full",
+    "version": "v1.0.0",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T13:50:04.665072"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T13:50:05.286526",
+    "migration_type": "full",
+    "version": "v1.0.0",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/full/ddl/v1.0.0/01_create_tables.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/full/ddl/v1.0.0/01_create_tables.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T14:19:12.611352",
+    "migration_type": "incremental",
+    "version": "v1.0.2",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T14:19:12.611283"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T14:19:12.761282",
+    "migration_type": "incremental",
+    "version": "v1.0.2",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.1369643211364746,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T14:32:24.104712",
+    "migration_type": "incremental",
+    "version": "v1.0.2",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T14:32:24.104647"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T14:32:24.444641",
+    "migration_type": "incremental",
+    "version": "v1.0.2",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.32849740982055664,
+      "files_executed": 2
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T15:16:07.537224",
+    "migration_type": "full",
+    "version": "v1.0.3",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T15:16:07.537148"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T15:16:07.550494",
+    "migration_type": "full",
+    "version": "v1.0.3",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "No migration files found for full/v1.0.3"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T15:16:28.672685",
+    "migration_type": "incremental",
+    "version": "v1.0.3",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T15:16:28.672616"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T15:16:28.844200",
+    "migration_type": "incremental",
+    "version": "v1.0.3",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.158494234085083,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
   }
 ]

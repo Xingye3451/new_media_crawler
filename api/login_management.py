@@ -2917,7 +2917,7 @@ async def handle_bilibili_login(session_id: str, browser_context, page):
         utils.logger.info(f"📺 [B站] 开始增强登录流程")
         
         # 尝试访问B站登录页面
-        await page.goto("https://passport.bilibili.com/login", wait_until="domcontentloaded", timeout=60000)
+        await page.goto("https://account.bilibili.com/account/home", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(3)
         
         page_title = await page.title()
@@ -4407,7 +4407,7 @@ def get_platform_login_url(platform: str) -> str:
         "xhs": "https://www.xiaohongshu.com/login",
         "dy": "https://www.douyin.com/",
         "ks": "https://www.kuaishou.com/",
-        "bili": "https://passport.bilibili.com/login",
+        "bili": "https://account.bilibili.com/account/home",
         "wb": "https://weibo.com/login.php",
         "tieba": "https://tieba.baidu.com/",
         "zhihu": "https://www.zhihu.com/signin"

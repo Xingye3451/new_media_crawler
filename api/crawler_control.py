@@ -124,7 +124,7 @@ async def configure_crawler(request: CrawlerConfigRequest):
         raise HTTPException(status_code=500, detail=f"配置失败: {str(e)}")
 
 @router.post("/crawler/start", response_model=CrawlerResponse)
-async def start_crawler(request: CrawlerConfigRequest, background_tasks: BackgroundTasks):
+async def start_crawler_control(request: CrawlerConfigRequest, background_tasks: BackgroundTasks):
     """启动爬虫任务"""
     try:
         # 生成任务ID
@@ -211,7 +211,7 @@ async def start_batch_crawler(request: CrawlerBatchRequest, background_tasks: Ba
         raise HTTPException(status_code=500, detail=f"批量启动失败: {str(e)}")
 
 @router.get("/crawler/status/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str):
+async def get_task_status_control(task_id: str):
     """获取任务状态"""
     if task_id not in task_status:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -219,7 +219,7 @@ async def get_task_status(task_id: str):
     return TaskStatusResponse(**task_status[task_id])
 
 @router.get("/crawler/tasks")
-async def list_tasks():
+async def list_tasks_control():
     """获取所有任务列表"""
     return {
         "tasks": [
@@ -235,7 +235,7 @@ async def list_tasks():
     }
 
 @router.delete("/crawler/tasks/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task_control(task_id: str):
     """删除任务"""
     if task_id not in task_status:
         raise HTTPException(status_code=404, detail="任务不存在")
