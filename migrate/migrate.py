@@ -251,11 +251,24 @@ class DatabaseMigrator:
                 if statement:
                     try:
                         cursor.execute(statement)
-                        self.logger.info(f"Executed statement {i}/{len(statements)}")
+                        
+                        # 如果是SELECT语句，需要获取结果以避免"Unread result found"错误
+                        if statement.strip().upper().startswith('SELECT'):
+                            result = cursor.fetchall()
+                            self.logger.info(f"Executed SELECT statement {i}/{len(statements)} - returned {len(result)} rows")
+                        else:
+                            self.logger.info(f"Executed statement {i}/{len(statements)}")
+                            
                     except Error as e:
-                        self.logger.error(f"Failed to execute statement {i}: {e}")
-                        self.connection.rollback()
-                        return False
+                        # 检查是否是字段已存在的错误（1060）或索引已存在的错误（1061）
+                        error_code = e.errno if hasattr(e, 'errno') else 0
+                        if error_code in [1060, 1061]:  # Duplicate column name, Duplicate key name
+                            self.logger.warning(f"Statement {i} skipped (field/index already exists): {e}")
+                            continue
+                        else:
+                            self.logger.error(f"Failed to execute statement {i}: {e}")
+                            self.connection.rollback()
+                            return False
             
             self.connection.commit()
             self.logger.info(f"Successfully executed SQL file: {file_path}")

@@ -367,6 +367,19 @@
                     <a href="#" onclick="showSystemHealth()" class="btn btn-secondary">健康检查</a>
                 </div>
             </div>
+
+            <!-- 代理管理 -->
+            <div class="feature-card" onclick="window.location.href='/static/proxy_management.html'">
+                <span class="feature-icon">🔗</span>
+                <div class="feature-title">代理管理</div>
+                <div class="feature-desc">
+                    管理代理池、监控代理状态、优化代理使用，支持青果代理等多家服务商
+                </div>
+                <div class="feature-actions">
+                    <a href="/static/proxy_management.html" class="btn btn-primary">代理管理</a>
+                    <a href="#" onclick="showProxyStats()" class="btn btn-secondary">代理统计</a>
+                </div>
+            </div>
         </div>
 
         <!-- 快速操作 -->
@@ -434,6 +447,14 @@
                     <div class="action-text">
                         <div class="action-title">系统监控</div>
                         <div class="action-desc">实时监控系统资源使用</div>
+                    </div>
+                </a>
+                
+                <a href="/static/proxy_management.html" class="action-btn">
+                    <span class="action-icon">🔗</span>
+                    <div class="action-text">
+                        <div class="action-title">代理管理</div>
+                        <div class="action-desc">管理代理池和监控状态</div>
                     </div>
                 </a>
             </div>
@@ -618,6 +639,45 @@
                 alert(message);
             } catch (error) {
                 alert('❌ 获取系统健康状态失败: ' + error.message);
+            }
+        }
+
+        // 显示代理统计
+        async function showProxyStats() {
+            try {
+                const response = await fetch('/api/v1/proxies/stats/overview');
+                const stats = await response.json();
+                
+                let message = `🔗 代理统计概览\n\n`;
+                message += `总代理数: ${stats.total_proxies}\n`;
+                message += `活跃代理: ${stats.active_proxies}\n`;
+                message += `平均成功率: ${stats.avg_success_rate}%\n`;
+                message += `总使用次数: ${stats.total_usage_count}\n\n`;
+                
+                if (stats.by_provider && Object.keys(stats.by_provider).length > 0) {
+                    message += `📊 按提供商统计:\n`;
+                    Object.entries(stats.by_provider).forEach(([provider, count]) => {
+                        message += `• ${provider}: ${count}个\n`;
+                    });
+                    message += `\n`;
+                }
+                
+                if (stats.by_platform && Object.keys(stats.by_platform).length > 0) {
+                    message += `📱 按平台统计:\n`;
+                    Object.entries(stats.by_platform).forEach(([platform, count]) => {
+                        const platformNames = {
+                            'dy': '抖音',
+                            'xhs': '小红书', 
+                            'ks': '快手',
+                            'bili': 'B站'
+                        };
+                        message += `• ${platformNames[platform] || platform}: ${count}个\n`;
+                    });
+                }
+                
+                alert(message);
+            } catch (error) {
+                alert('❌ 获取代理统计失败: ' + error.message);
             }
         }
 

@@ -310,7 +310,7 @@ async def log_task_step(task_id: str, platform: str, step: str, message: str, lo
     except Exception as e:
         utils.logger.error(f"[TASK_LOG] 记录任务日志失败: {e}")
 
-async def run_crawler_task(task_id: str, request: CrawlerRequest):
+async def run_crawler_task(task_id: str, request: CrawlerRequest, proxy_info=None):
     """后台运行爬虫任务"""
     # 🆕 设置任务超时时间（30分钟）
     import asyncio
@@ -319,7 +319,7 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
     try:
         # 🆕 使用asyncio.wait_for添加超时机制
         await asyncio.wait_for(
-            _run_crawler_task_internal(task_id, request),
+            _run_crawler_task_internal(task_id, request, proxy_info),
             timeout=1800  # 30分钟超时
         )
     except TimeoutError:
@@ -337,7 +337,7 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest):
         await update_task_progress(task_id, 0.0, "failed")
         await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0)
 
-async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
+async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, proxy_info=None):
     """内部爬虫任务执行函数"""
     # 🆕 导入错误处理模块
     from utils.crawler_error_handler import create_error_handler, RetryConfig, ErrorType
@@ -412,6 +412,13 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest):
             crawler = CrawlerFactory.create_crawler(request.platform, task_id=task_id)
             # 🆕 标记浏览器由外部管理，避免重复关闭
             crawler._externally_managed = True
+            
+            # 🆕 设置代理信息
+            if proxy_info and request.use_proxy:
+                crawler.proxy_info = proxy_info
+                utils.logger.info(f"[TASK_{task_id}] 🔧 设置代理: {proxy_info.ip}:{proxy_info.port}")
+                await log_task_step(task_id, request.platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO", 42)
+            
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
             await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45)
         except PlatformComingSoonException as e:
@@ -644,6 +651,19 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         
         utils.logger.info(f"[CRAWLER_START] 平台 {request.platform} 登录状态正常")
         
+        # 🆕 获取登录时使用的代理信息
+        proxy_info = None
+        if request.use_proxy and request.account_id:
+            try:
+                from api.login_proxy_helper import get_proxy_from_login_token
+                proxy_info = await get_proxy_from_login_token(request.account_id, request.platform)
+                if proxy_info:
+                    utils.logger.info(f"[CRAWLER_START] 获取到登录代理: {proxy_info.ip}:{proxy_info.port}")
+                else:
+                    utils.logger.info(f"[CRAWLER_START] 未找到登录代理，将使用新代理")
+            except Exception as e:
+                utils.logger.warning(f"[CRAWLER_START] 获取登录代理失败: {e}")
+        
         # 生成任务ID
         task_id = str(uuid.uuid4())
         utils.logger.info(f"[CRAWLER_START] 生成任务ID: {task_id}")
@@ -665,7 +685,7 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         utils.logger.info("[CRAWLER_START] 任务状态已初始化")
         
         # 添加后台任务
-        background_tasks.add_task(run_crawler_task, task_id, request)
+        background_tasks.add_task(run_crawler_task, task_id, request, proxy_info)
         utils.logger.info("[CRAWLER_START] 后台任务已添加")
         
         # 构建响应数据

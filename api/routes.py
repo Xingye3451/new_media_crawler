@@ -28,6 +28,7 @@ from api.multi_platform_crawler import router as multi_platform_crawler_router
 from api.system_monitor import router as system_monitor_router
 from api.task_isolation import router as task_isolation_router
 from api.scheduled_tasks import scheduled_tasks_router
+from api.proxy_management import proxy_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -184,4 +185,11 @@ api_router.include_router(
     scheduled_tasks_router,
     prefix="/v1",
     tags=["scheduled-tasks"]
+)
+
+# 代理管理相关路由
+api_router.include_router(
+    proxy_router,
+    prefix="/v1",
+    tags=["proxy-management"]
 ) 

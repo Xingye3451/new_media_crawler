@@ -68,8 +68,9 @@ class LoginTokenCreate(BaseModel):
     token_type: str = Field(default="cookie", description="令牌类型")
     token_data: str = Field(..., description="令牌数据(JSON格式)")
     user_agent: Optional[str] = Field(None, description="用户代理")
-    proxy_info: Optional[str] = Field(None, description="代理信息")
+    proxy_info: Optional[str] = Field(None, description="代理信息(JSON格式)")
     expires_at: Optional[datetime] = Field(None, description="过期时间")
+    proxy_id: Optional[str] = Field(None, description="代理ID")
 
 class LoginTokenResponse(BaseModel):
     id: int
@@ -79,6 +80,7 @@ class LoginTokenResponse(BaseModel):
     token_data: str
     user_agent: Optional[str]
     proxy_info: Optional[str]
+    proxy_id: Optional[str]
     is_valid: bool
     expires_at: Optional[str]
     last_used_at: Optional[str]

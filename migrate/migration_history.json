@@ -1,0 +1,232 @@
+[
+  {
+    "timestamp": "2025-08-10T04:14:21.087429",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T04:14:21.087411"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T04:14:21.575105",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.4762396812438965,
+      "files_executed": 2
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:29:03.229793",
+    "migration_type": "incremental",
+    "version": "v1.0.0",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:29:03.229747"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:29:03.244309",
+    "migration_type": "incremental",
+    "version": "v1.0.0",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.0/01_add_proxy_id_to_login_tokens.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.0/01_add_proxy_id_to_login_tokens.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:29:59.717061",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:29:59.717021"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:29:59.917134",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:32:04.293167",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:32:04.293125"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:32:04.305751",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:32:33.254353",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:32:33.254295"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:32:33.270035",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:33:17.972046",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:33:17.971991"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:33:17.986525",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:34:15.594463",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:34:15.594406"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:34:15.647699",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:34:31.932333",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:34:31.932271"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:34:31.947636",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:35:10.847498",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:35:10.847444"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:35:10.862984",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table_backup.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/03_redesign_proxy_pool_table_backup.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:35:44.065319",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-10T05:35:44.065241"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-10T05:35:44.095601",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "success",
+    "details": {
+      "execution_time": 0.017608165740966797,
+      "files_executed": 1
+    },
+    "config_file": "config/config_local.yaml"
+  }
+]

@@ -34,13 +34,13 @@ logging:
 proxy:
   # 代理提供商配置
   provider_name: "qingguo"  # 可选: qingguo, kuaidaili, jisuhttp
-  enabled: false  # 本地环境建议关闭，避免资源消耗
+  enabled: true  # 启用代理功能
   pool_count: 5
   validate_ip: true
   
   # 青果代理配置
-  qingguo_key: "your_qingguo_key_here"
-  qingguo_pwd: "your_qingguo_pwd_here"  # 可选
+  qingguo_key: "EEFECFB3"
+  qingguo_pwd: "E169CFB91ACD"  # 青果代理密码
   
   # 快代理配置
   kuaidaili_secret_id: "your_kuaidaili_secret_id"

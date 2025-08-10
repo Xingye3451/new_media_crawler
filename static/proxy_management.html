@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代理管理 - MediaCrawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .stat-card p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .toolbar {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-weight: bold;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .filter-group select, .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .proxy-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .proxy-table th,
+        .proxy-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .proxy-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .proxy-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-expired {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-failed {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-rotating {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .provider-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .platform-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .platform-dy { background: #ff6b6b; color: white; }
+        .platform-xhs { background: #4ecdc4; color: white; }
+        .platform-ks { background: #45b7d1; color: white; }
+        .platform-bili { background: #96ceb4; color: white; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8em;
+        }
+
+        @media (max-width: 768px) {
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filters {
+                justify-content: center;
+            }
+            
+            .proxy-table {
+                font-size: 0.8em;
+            }
+            
+            .proxy-table th,
+            .proxy-table td {
+                padding: 8px 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 代理管理</h1>
+            <p>管理代理池、监控代理状态、优化代理使用</p>
+        </div>
+
+        <!-- 统计概览 -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3 id="totalProxies">-</h3>
+                <p>总代理数</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="activeProxies">-</h3>
+                <p>活跃代理</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="avgSuccessRate">-</h3>
+                <p>平均成功率</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="totalUsage">-</h3>
+                <p>总使用次数</p>
+            </div>
+        </div>
+
+        <!-- 主要内容 -->
+        <div class="main-content">
+            <!-- 工具栏 -->
+            <div class="toolbar">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>提供商</label>
+                        <select id="providerFilter">
+                            <option value="">全部提供商</option>
+                            <option value="qingguo">青果代理</option>
+                            <option value="kuaidaili">快代理</option>
+                            <option value="jisuhttp">极速HTTP</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>状态</label>
+                        <select id="statusFilter">
+                            <option value="">全部状态</option>
+                            <option value="active">活跃</option>
+                            <option value="expired">已过期</option>
+                            <option value="failed">失败</option>
+                            <option value="rotating">轮换中</option>
+                            <option value="disabled">已禁用</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>启用状态</label>
+                        <select id="enabledFilter">
+                            <option value="">全部</option>
+                            <option value="1">启用</option>
+                            <option value="0">禁用</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>区域</label>
+                        <input type="text" id="areaFilter" placeholder="输入区域">
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="loadProxies()">刷新</button>
+                    <button class="btn btn-success" onclick="showCreateModal()">添加代理</button>
+                    <button class="btn btn-warning" onclick="cleanupExpired()">清理过期</button>
+                    <button class="btn btn-info" onclick="loadStats()">更新统计</button>
+                    <button class="btn btn-info" onclick="showQingguoPanel()">青果代理</button>
+                </div>
+            </div>
+
+            <!-- 代理列表 -->
+            <div class="table-container">
+                <table class="proxy-table" id="proxyTable">
+                    <thead>
+                        <tr>
+                            <th>代理ID</th>
+                            <th>IP地址</th>
+                            <th>端口</th>
+                            <th>类型</th>
+                            <th>提供商</th>
+                            <th>状态</th>
+                            <th>启用</th>
+                            <th>速度</th>
+                            <th>成功率</th>
+                            <th>使用次数</th>
+                            <th>区域</th>
+                            <th>描述</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="proxyTableBody">
+                        <tr>
+                            <td colspan="13" class="loading">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 青果代理管理面板 -->
+    <div id="qingguoPanel" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>🔗 青果代理管理</h2>
+                <span class="close" onclick="closeQingguoPanel()">&times;</span>
+            </div>
+            <div class="qingguo-content">
+                <!-- 账户信息 -->
+                <div class="qingguo-section">
+                    <h3>📊 账户信息</h3>
+                    <div class="qingguo-grid">
+                        <div class="qingguo-card">
+                            <h4>通道状态</h4>
+                            <p id="qingguoChannels">加载中...</p>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>资源地区</h4>
+                            <p id="qingguoResources">加载中...</p>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>可用代理</h4>
+                            <p id="qingguoAvailableProxies">加载中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代理操作 -->
+                <div class="qingguo-section">
+                    <h3>🚀 代理操作</h3>
+                    <div class="qingguo-grid">
+                        <div class="qingguo-card">
+                            <h4>提取代理</h4>
+                            <div class="qingguo-form">
+                                <select id="extractRegion">
+                                    <option value="北京">北京</option>
+                                    <option value="上海">上海</option>
+                                    <option value="广州">广州</option>
+                                    <option value="深圳">深圳</option>
+                                    <option value="杭州">杭州</option>
+                                </select>
+                                <select id="extractIsp">
+                                    <option value="电信">电信</option>
+                                    <option value="联通">联通</option>
+                                    <option value="移动">移动</option>
+                                </select>
+                                <input type="text" id="extractDescription" placeholder="描述信息 (可选)">
+                                <button onclick="extractQingguoProxy()">提取</button>
+                            </div>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>批量提取</h4>
+                            <div class="qingguo-form">
+                                <select id="batchExtractRegion">
+                                    <option value="北京">北京</option>
+                                    <option value="上海">上海</option>
+                                    <option value="广州">广州</option>
+                                    <option value="深圳">深圳</option>
+                                    <option value="杭州">杭州</option>
+                                </select>
+                                <select id="batchExtractIsp">
+                                    <option value="电信">电信</option>
+                                    <option value="联通">联通</option>
+                                    <option value="移动">移动</option>
+                                </select>
+                                <input type="number" id="batchExtractCount" value="5" min="1" max="10">
+                                <button onclick="batchExtractQingguoProxies()">批量提取</button>
+                            </div>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>查询在用</h4>
+                            <div class="qingguo-form">
+                                <button onclick="getQingguoInUseProxies()">查询在用代理</button>
+                                <button onclick="syncQingguoProxiesFromQuery()">同步代理信息</button>
+                            </div>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>健康检查</h4>
+                            <div class="qingguo-form">
+                                <button onclick="healthCheckQingguoProxies()">开始检查</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 白名单管理 -->
+                <div class="qingguo-section">
+                    <h3>📋 白名单管理</h3>
+                    <div class="qingguo-grid">
+                        <div class="qingguo-card">
+                            <h4>添加白名单</h4>
+                            <div class="qingguo-form">
+                                <input type="text" id="addWhitelistIp" placeholder="IP地址">
+                                <button onclick="addQingguoWhitelist()">添加</button>
+                            </div>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>删除白名单</h4>
+                            <div class="qingguo-form">
+                                <input type="text" id="removeWhitelistIp" placeholder="IP地址">
+                                <button onclick="removeQingguoWhitelist()">删除</button>
+                            </div>
+                        </div>
+                        <div class="qingguo-card">
+                            <h4>查看白名单</h4>
+                            <div class="qingguo-form">
+                                <button onclick="getQingguoWhitelist()">查看</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 结果显示 -->
+                <div class="qingguo-section">
+                    <h3>📊 操作结果</h3>
+                    <div id="qingguoResults" class="qingguo-results">
+                        <p>操作结果将显示在这里...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .qingguo-content {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .qingguo-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .qingguo-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .qingguo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .qingguo-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .qingguo-card h4 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .qingguo-form {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .qingguo-form input,
+        .qingguo-form select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .qingguo-form button {
+            padding: 8px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .qingguo-form button:hover {
+            background: #5a6fd8;
+        }
+        
+        .qingguo-results {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 800px;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #000;
+        }
+    </style>
+
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadProxies();
+            
+            // 绑定筛选器事件
+            document.getElementById('providerFilter').addEventListener('change', loadProxies);
+            document.getElementById('statusFilter').addEventListener('change', loadProxies);
+            document.getElementById('enabledFilter').addEventListener('change', loadProxies);
+            document.getElementById('areaFilter').addEventListener('input', debounce(loadProxies, 500));
+        });
+
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // 加载代理统计
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/v1/proxies/stats/overview');
+                const stats = await response.json();
+                
+                document.getElementById('totalProxies').textContent = stats.total_proxies;
+                document.getElementById('activeProxies').textContent = stats.active_proxies;
+                document.getElementById('avgSuccessRate').textContent = stats.avg_success_rate + '%';
+                document.getElementById('totalUsage').textContent = stats.total_usage_count;
+                
+            } catch (error) {
+                console.error('加载统计失败:', error);
+                showError('加载统计信息失败');
+            }
+        }
+
+        // 加载代理列表
+        async function loadProxies() {
+            try {
+                            // 获取筛选条件
+            const filters = {
+                provider: document.getElementById('providerFilter').value,
+                status: document.getElementById('statusFilter').value,
+                enabled: document.getElementById('enabledFilter').value,
+                area: document.getElementById('areaFilter').value,
+                page: 1,
+                page_size: 20
+            };
+                
+                // 构建查询参数
+                const params = new URLSearchParams();
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value !== null && value !== '') {
+                        params.append(key, value);
+                    }
+                });
+                
+                const response = await fetch(`/api/v1/proxies/?${params.toString()}`);
+                const proxies = await response.json();
+                
+                renderProxyTable(proxies);
+                
+            } catch (error) {
+                console.error('加载代理列表失败:', error);
+                showError('加载代理列表失败');
+                document.getElementById('proxyTableBody').innerHTML = 
+                    '<tr><td colspan="13" class="error">加载失败</td></tr>';
+            }
+        }
+
+        // 渲染代理表格
+        function renderProxyTable(proxies) {
+            const tbody = document.getElementById('proxyTableBody');
+            
+            if (!proxies || proxies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="13" class="loading">暂无数据</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = proxies.map(proxy => `
+                <tr>
+                    <td>${proxy.proxy_id}</td>
+                    <td>${proxy.ip}</td>
+                    <td>${proxy.port}</td>
+                    <td>${proxy.proxy_type.toUpperCase()}</td>
+                    <td><span class="provider-badge">${getProviderName(proxy.provider)}</span></td>
+                    <td><span class="status-badge status-${proxy.status}">${getStatusName(proxy.status)}</span></td>
+                    <td>
+                        <span class="status-badge ${proxy.enabled ? 'status-active' : 'status-expired'}">
+                            ${proxy.enabled ? '启用' : '禁用'}
+                        </span>
+                    </td>
+                    <td>${proxy.speed ? proxy.speed + 'ms' : '-'}</td>
+                    <td>${proxy.success_rate ? proxy.success_rate + '%' : '-'}</td>
+                    <td>${proxy.usage_count}</td>
+                    <td>${proxy.area || '-'}</td>
+                    <td>${proxy.description || '-'}</td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn btn-info btn-sm" onclick="testProxy('${proxy.proxy_id}')">测试</button>
+                            <button class="btn btn-success btn-sm" onclick="toggleProxy('${proxy.proxy_id}', ${proxy.enabled})">
+                                ${proxy.enabled ? '禁用' : '启用'}
+                            </button>
+                            <button class="btn btn-warning btn-sm" onclick="editProxy('${proxy.proxy_id}')">编辑</button>
+                            <button class="btn btn-danger btn-sm" onclick="releaseProxy('${proxy.proxy_id}')">释放</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 获取平台名称
+        function getPlatformName(platform) {
+            const names = {
+                'dy': '抖音',
+                'xhs': '小红书',
+                'ks': '快手',
+                'bili': 'B站'
+            };
+            return names[platform] || platform;
+        }
+
+        // 获取提供商名称
+        function getProviderName(provider) {
+            const names = {
+                'qingguo': '青果代理',
+                'kuaidaili': '快代理',
+                'jisuhttp': '极速HTTP'
+            };
+            return names[provider] || provider;
+        }
+
+        // 获取状态名称
+        function getStatusName(status) {
+            const names = {
+                'active': '活跃',
+                'expired': '已过期',
+                'failed': '失败',
+                'rotating': '轮换中'
+            };
+            return names[status] || status;
+        }
+
+        // 格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 测试代理
+        async function testProxy(proxyId) {
+            try {
+                const response = await fetch(`/api/v1/proxies/${proxyId}/test`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess(`代理测试成功，速度: ${result.speed}ms`);
+                } else {
+                    showError(`代理测试失败: ${result.error}`);
+                }
+                
+                loadProxies(); // 刷新列表以更新状态
+                
+            } catch (error) {
+                console.error('测试代理失败:', error);
+                showError('测试代理失败');
+            }
+        }
+
+        // 切换代理启用/禁用状态
+        async function toggleProxy(proxyId, currentEnabled) {
+            try {
+                const action = currentEnabled ? 'disable' : 'enable';
+                const response = await fetch(`/api/v1/proxies/${proxyId}/${action}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    showSuccess(`代理${currentEnabled ? '禁用' : '启用'}成功`);
+                    loadProxies();
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || `${currentEnabled ? '禁用' : '启用'}失败`);
+                }
+                
+            } catch (error) {
+                console.error(`${currentEnabled ? '禁用' : '启用'}代理失败:`, error);
+                showError(`${currentEnabled ? '禁用' : '启用'}代理失败`);
+            }
+        }
+
+        // 编辑代理
+        function editProxy(proxyId) {
+            showError('编辑功能开发中...');
+        }
+
+        // 释放代理
+        async function releaseProxy(proxyId) {
+            if (!confirm('确定要释放这个代理吗？释放后将从青果API和数据库中删除。')) return;
+            
+            try {
+                const response = await fetch(`/api/v1/proxies/${proxyId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showSuccess(result.message || '代理释放成功');
+                    loadProxies();
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showError(error.detail || '释放失败');
+                }
+                
+            } catch (error) {
+                console.error('释放代理失败:', error);
+                showError('释放代理失败');
+            }
+        }
+
+        // 清理过期代理
+        async function cleanupExpired() {
+            if (!confirm('确定要清理所有过期的代理吗？')) return;
+            
+            try {
+                const response = await fetch('/api/v1/proxies/cleanup/expired', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                showSuccess(`清理完成，共清理 ${result.affected_rows} 个过期代理`);
+                loadProxies();
+                loadStats();
+                
+            } catch (error) {
+                console.error('清理过期代理失败:', error);
+                showError('清理过期代理失败');
+            }
+        }
+
+        // 显示创建模态框
+        function showCreateModal() {
+            showError('添加代理功能开发中...');
+        }
+
+        // 显示成功消息
+        function showSuccess(message) {
+            const div = document.createElement('div');
+            div.className = 'success';
+            div.textContent = message;
+            document.querySelector('.container').insertBefore(div, document.querySelector('.stats-grid'));
+            
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        // 显示错误消息
+        function showError(message) {
+            const div = document.createElement('div');
+            div.className = 'error';
+            div.textContent = message;
+            document.querySelector('.container').insertBefore(div, document.querySelector('.stats-grid'));
+            
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        // ==================== 青果代理管理功能 ====================
+
+        // 显示青果代理面板
+        function showQingguoPanel() {
+            document.getElementById('qingguoPanel').style.display = 'block';
+            loadQingguoAccountInfo();
+        }
+
+        // 关闭青果代理面板
+        function closeQingguoPanel() {
+            document.getElementById('qingguoPanel').style.display = 'none';
+        }
+
+        // 加载青果账户信息
+        async function loadQingguoAccountInfo() {
+            try {
+                // 加载通道状态
+                const channelsResponse = await fetch('/api/v1/qingguo/channels');
+                if (channelsResponse.ok) {
+                    const channelsData = await channelsResponse.json();
+                    if (channelsData.success) {
+                        const channels = channelsData.channels;
+                        document.getElementById('qingguoChannels').textContent = 
+                            `总数: ${channels.total}, 空闲: ${channels.idle}, 使用中: ${channels.in_use}`;
+                    } else {
+                        document.getElementById('qingguoChannels').textContent = '获取失败';
+                    }
+                }
+
+                // 加载资源地区
+                const resourcesResponse = await fetch('/api/v1/qingguo/resources');
+                if (resourcesResponse.ok) {
+                    const resourcesData = await resourcesResponse.json();
+                    if (resourcesData.success) {
+                        const resources = resourcesData.resources;
+                        const regionCount = new Set(resources.map(r => r.area)).size;
+                        document.getElementById('qingguoResources').textContent = 
+                            `${regionCount} 个地区可用`;
+                    } else {
+                        document.getElementById('qingguoResources').textContent = '获取失败';
+                    }
+                }
+
+                // 加载可用代理数量
+                const proxiesResponse = await fetch('/api/v1/qingguo/available-count');
+                if (proxiesResponse.ok) {
+                    const proxiesData = await proxiesResponse.json();
+                    if (proxiesData.success) {
+                        document.getElementById('qingguoAvailableProxies').textContent = 
+                            `${proxiesData.count} 个可用`;
+                    } else {
+                        document.getElementById('qingguoAvailableProxies').textContent = '获取失败';
+                    }
+                }
+
+            } catch (error) {
+                console.error('加载青果账户信息失败:', error);
+                showQingguoResult('加载账户信息失败: ' + error.message);
+            }
+        }
+
+        // 提取青果代理
+        async function extractQingguoProxy() {
+            const region = document.getElementById('extractRegion').value;
+            const isp = document.getElementById('extractIsp').value;
+            const description = document.getElementById('extractDescription').value;
+
+            try {
+                const params = new URLSearchParams();
+                params.append('region', region);
+                params.append('isp', isp);
+                if (description) params.append('description', description);
+
+                const response = await fetch(`/api/v1/qingguo/extract?${params.toString()}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showQingguoResult(`✅ 代理提取成功！\n\nIP: ${result.proxy.ip}\n端口: ${result.proxy.port}\n区域: ${result.proxy.area}\n描述: ${result.proxy.description}`);
+                    loadProxies(); // 刷新代理列表
+                } else {
+                    showQingguoResult(`❌ 代理提取失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('提取青果代理失败:', error);
+                showQingguoResult('提取代理失败: ' + error.message);
+            }
+        }
+
+        // 批量提取青果代理
+        async function batchExtractQingguoProxies() {
+            const region = document.getElementById('batchExtractRegion').value;
+            const isp = document.getElementById('batchExtractIsp').value;
+            const count = document.getElementById('batchExtractCount').value;
+
+            try {
+                const params = new URLSearchParams();
+                params.append('region', region);
+                params.append('isp', isp);
+                params.append('count', count);
+
+                const response = await fetch(`/api/v1/qingguo/batch-extract?${params.toString()}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = `✅ 批量提取完成！\n\n总计: ${result.total}\n成功: ${result.success_count}\n失败: ${result.fail_count}\n\n`;
+                    
+                    result.results.forEach(item => {
+                        if (item.success) {
+                            message += `✅ ${item.index}. ${item.proxy.ip}:${item.proxy.port} (${item.proxy.area})\n`;
+                        } else {
+                            message += `❌ ${item.index}. ${item.error}\n`;
+                        }
+                    });
+
+                    showQingguoResult(message);
+                    loadProxies(); // 刷新代理列表
+                } else {
+                    showQingguoResult(`❌ 批量提取失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('批量提取青果代理失败:', error);
+                showQingguoResult('批量提取失败: ' + error.message);
+            }
+        }
+
+        // 查询青果在用代理
+        async function getQingguoInUseProxies() {
+            try {
+                const response = await fetch('/api/v1/qingguo/in-use');
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = `📊 在用代理查询结果\n\n总计: ${result.total}个\n\n`;
+                    
+                    result.proxies.forEach(proxy => {
+                        message += `• ${proxy.ip}:${proxy.port} (${proxy.area || '未知区域'})\n`;
+                    });
+
+                    showQingguoResult(message);
+                } else {
+                    showQingguoResult(`❌ 查询失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('查询青果在用代理失败:', error);
+                showQingguoResult('查询失败: ' + error.message);
+            }
+        }
+
+        // 青果代理健康检查
+        async function healthCheckQingguoProxies() {
+            try {
+                const response = await fetch('/api/v1/qingguo/health-check', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = `🔍 健康检查结果\n\n总计: ${result.total}个\n成功: ${result.success_count}个\n失败: ${result.fail_count}个\n成功率: ${result.success_rate}%\n\n`;
+                    
+                    result.results.forEach(item => {
+                        if (item.success) {
+                            message += `✅ ${item.ip}:${item.port} (${item.speed}ms)\n`;
+                        } else {
+                            message += `❌ ${item.ip}:${item.port} (${item.error})\n`;
+                        }
+                    });
+
+                    showQingguoResult(message);
+                } else {
+                    showQingguoResult(`❌ 健康检查失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('青果代理健康检查失败:', error);
+                showQingguoResult('健康检查失败: ' + error.message);
+            }
+        }
+
+        // 同步青果代理信息
+        async function syncQingguoProxiesFromQuery() {
+            try {
+                const response = await fetch('/api/v1/qingguo/sync-from-query', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = `✅ 同步完成\n\n${result.message}\n\n`;
+                    
+                    if (result.proxies && result.proxies.length > 0) {
+                        message += "同步的代理列表:\n";
+                        result.proxies.forEach(proxy => {
+                            message += `• ${proxy.ip}:${proxy.port} (${proxy.area || '未知区域'})\n`;
+                        });
+                    }
+
+                    showQingguoResult(message);
+                    loadProxies(); // 刷新代理列表
+                } else {
+                    showQingguoResult(`❌ 同步失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('同步青果代理信息失败:', error);
+                showQingguoResult('同步失败: ' + error.message);
+            }
+        }
+
+        // 添加青果白名单
+        async function addQingguoWhitelist() {
+            const ip = document.getElementById('addWhitelistIp').value;
+            if (!ip) {
+                showQingguoResult('请输入IP地址');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/qingguo/whitelist/add?ip=${ip}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showQingguoResult(`✅ ${result.message}`);
+                    document.getElementById('addWhitelistIp').value = '';
+                } else {
+                    showQingguoResult(`❌ 添加失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('添加青果白名单失败:', error);
+                showQingguoResult('添加失败: ' + error.message);
+            }
+        }
+
+        // 删除青果白名单
+        async function removeQingguoWhitelist() {
+            const ip = document.getElementById('removeWhitelistIp').value;
+            if (!ip) {
+                showQingguoResult('请输入IP地址');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/qingguo/whitelist/remove?ip=${ip}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showQingguoResult(`✅ ${result.message}`);
+                    document.getElementById('removeWhitelistIp').value = '';
+                } else {
+                    showQingguoResult(`❌ 删除失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('删除青果白名单失败:', error);
+                showQingguoResult('删除失败: ' + error.message);
+            }
+        }
+
+        // 获取青果白名单
+        async function getQingguoWhitelist() {
+            try {
+                const response = await fetch('/api/v1/qingguo/whitelist');
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = `📋 白名单列表\n\n`;
+                    
+                    if (result.whitelist && result.whitelist.length > 0) {
+                        result.whitelist.forEach(ip => {
+                            message += `• ${ip}\n`;
+                        });
+                    } else {
+                        message += '暂无白名单记录';
+                    }
+
+                    showQingguoResult(message);
+                } else {
+                    showQingguoResult(`❌ 获取失败: ${result.detail}`);
+                }
+
+            } catch (error) {
+                console.error('获取青果白名单失败:', error);
+                showQingguoResult('获取失败: ' + error.message);
+            }
+        }
+
+        // 显示青果操作结果
+        function showQingguoResult(message) {
+            document.getElementById('qingguoResults').innerHTML = `<pre>${message}</pre>`;
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const qingguoPanel = document.getElementById('qingguoPanel');
+            if (event.target === qingguoPanel) {
+                closeQingguoPanel();
+            }
+        }
+    </script>
+</body>
+</html>
