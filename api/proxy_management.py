@@ -574,6 +574,11 @@ async def test_proxy(proxy_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="代理不存在")
         
+        # 打印代理信息
+        utils.logger.info(f"[代理测试] 开始测试代理: {proxy_id}")
+        utils.logger.info(f"[代理测试] 代理信息: IP={row['ip']}, Port={row['port']}, Type={row['proxy_type']}")
+        utils.logger.info(f"[代理测试] 用户名: {row.get('username', '无')}, 密码: {'***' if row.get('password') else '无'}")
+        
         # 测试代理连接
         import httpx
         import time
@@ -592,44 +597,131 @@ async def test_proxy(proxy_id: str):
             "https://": proxy_url
         }
         
+        utils.logger.info(f"[代理测试] 构建的代理URL: {proxy_url}")
+        utils.logger.info(f"[代理测试] 代理配置: {proxies}")
+        
         start_time = time.time()
         
+        # 只保留能成功连接的测试网站（优先使用ip-api.com，返回更丰富的信息）
+        test_urls = [
+            "http://ip-api.com/json"  # 返回详细的IP地理位置信息
+        ]
+        
+        utils.logger.info(f"[代理测试] 测试网站列表: {test_urls}")
+        
+        response = None
+        used_url = ""
+        
+        for test_url in test_urls:
+            utils.logger.info(f"[代理测试] 尝试测试URL: {test_url}")
+            
+            try:
+                utils.logger.info(f"[代理测试] 开始发送请求...")
+                async with httpx.AsyncClient(proxies=proxies, timeout=10.0) as client:
+                    response = await client.get(test_url)
+                    used_url = test_url
+                    break  # 如果成功，跳出循环
+                    
+            except Exception as e:
+                utils.logger.warning(f"[代理测试] URL {test_url} 测试失败: {e}")
+                continue
+        
+        if not response:
+            raise Exception("所有测试网站都无法访问")
+        
+        utils.logger.info(f"[代理测试] 成功使用URL: {used_url}")
+        utils.logger.info(f"[代理测试] 收到响应: HTTP {response.status_code}")
+        utils.logger.info(f"[代理测试] 响应头: {dict(response.headers)}")
+        
+        # 尝试获取响应内容
         try:
-            async with httpx.AsyncClient(proxies=proxies, timeout=10.0) as client:
-                response = await client.get("http://httpbin.org/ip")
+            response_text = response.text
+            utils.logger.info(f"[代理测试] 响应内容: {response_text}")
+            
+            if response.status_code == 200:
+                # 尝试解析JSON，如果失败则使用原始文本
+                try:
+                    response_json = response.json()
+                    utils.logger.info(f"[代理测试] 响应JSON: {response_json}")
+                    response_data = response_json
+                except Exception as json_error:
+                    utils.logger.info(f"[代理测试] 响应不是JSON格式，使用原始文本: {response_text}")
+                    # 对于纯文本IP地址，构造标准格式
+                    if response_text.strip().replace('.', '').isdigit() or ':' in response_text:
+                        # 看起来像IP地址
+                        response_data = {"origin": response_text.strip()}
+                    else:
+                        response_data = {"text": response_text.strip()}
                 
-                if response.status_code == 200:
-                    speed = int((time.time() - start_time) * 1000)
-                    
-                    # 更新代理信息
-                    update_query = """
-                        UPDATE proxy_pool SET 
-                            speed = %s, success_rate = 100, last_check = %s,
-                            success_count = success_count + 1, updated_at = %s
-                        WHERE proxy_id = %s
-                    """
-                    await db.execute(update_query, speed, datetime.now(), datetime.now(), proxy_id)
-                    
-                    return {
-                        "success": True,
-                        "speed": speed,
-                        "response": response.json()
+                speed = int((time.time() - start_time) * 1000)
+                utils.logger.info(f"[代理测试] 测试成功! 响应时间: {speed}ms")
+                
+                # 更新代理信息
+                update_query = """
+                    UPDATE proxy_pool SET 
+                        speed = %s, success_rate = 100, last_check = %s,
+                        success_count = success_count + 1, updated_at = %s
+                    WHERE proxy_id = %s
+                """
+                await db.execute(update_query, speed, datetime.now(), datetime.now(), proxy_id)
+                
+                return {
+                    "success": True,
+                    "speed": speed,
+                    "response": response_data,
+                    "test_url": used_url,
+                    "proxy_info": {
+                        "ip": row['ip'],
+                        "port": row['port'],
+                        "proxy_type": row['proxy_type'],
+                        "username": row.get('username'),
+                        "has_password": bool(row.get('password'))
                     }
-                else:
-                    # 更新失败信息
-                    update_query = """
-                        UPDATE proxy_pool SET 
-                            fail_count = fail_count + 1, last_check = %s, updated_at = %s
-                        WHERE proxy_id = %s
-                    """
-                    await db.execute(update_query, datetime.now(), datetime.now(), proxy_id)
-                    
-                    return {
-                        "success": False,
-                        "error": f"HTTP {response.status_code}"
+                }
+            else:
+                utils.logger.error(f"[代理测试] HTTP错误: {response.status_code}")
+                utils.logger.error(f"[代理测试] 错误响应: {response_text}")
+                
+                # 更新失败信息
+                update_query = """
+                    UPDATE proxy_pool SET 
+                        fail_count = fail_count + 1, last_check = %s, updated_at = %s
+                    WHERE proxy_id = %s
+                """
+                await db.execute(update_query, datetime.now(), datetime.now(), proxy_id)
+                
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}",
+                    "response_text": response_text,
+                    "test_url": used_url,
+                    "proxy_info": {
+                        "ip": row['ip'],
+                        "port": row['port'],
+                        "proxy_type": row['proxy_type']
                     }
+                }
+                
+        except Exception as parse_error:
+            utils.logger.error(f"[代理测试] 解析响应内容失败: {parse_error}")
+            utils.logger.error(f"[代理测试] 原始响应: {response_text}")
+            
+            return {
+                "success": False,
+                "error": f"响应解析失败: {str(parse_error)}",
+                "response_text": response_text,
+                "test_url": used_url,
+                "proxy_info": {
+                    "ip": row['ip'],
+                    "port": row['port'],
+                    "proxy_type": row['proxy_type']
+                }
+            }
                     
-        except Exception as e:
+        except httpx.ConnectTimeout:
+            error_msg = "连接超时"
+            utils.logger.error(f"[代理测试] {error_msg}")
+            
             # 更新失败信息
             update_query = """
                 UPDATE proxy_pool SET 
@@ -640,7 +732,57 @@ async def test_proxy(proxy_id: str):
             
             return {
                 "success": False,
-                "error": str(e)
+                "error": error_msg,
+                "proxy_info": {
+                    "ip": row['ip'],
+                    "port": row['port'],
+                    "proxy_type": row['proxy_type']
+                }
+            }
+            
+        except httpx.ProxyError as e:
+            error_msg = f"代理错误: {str(e)}"
+            utils.logger.error(f"[代理测试] {error_msg}")
+            
+            # 更新失败信息
+            update_query = """
+                UPDATE proxy_pool SET 
+                    fail_count = fail_count + 1, last_check = %s, updated_at = %s
+                WHERE proxy_id = %s
+            """
+            await db.execute(update_query, datetime.now(), datetime.now(), proxy_id)
+            
+            return {
+                "success": False,
+                "error": error_msg,
+                "proxy_info": {
+                    "ip": row['ip'],
+                    "port": row['port'],
+                    "proxy_type": row['proxy_type']
+                }
+            }
+            
+        except Exception as e:
+            error_msg = f"未知错误: {str(e)}"
+            utils.logger.error(f"[代理测试] {error_msg}")
+            utils.logger.error(f"[代理测试] 异常类型: {type(e).__name__}")
+            
+            # 更新失败信息
+            update_query = """
+                UPDATE proxy_pool SET 
+                    fail_count = fail_count + 1, last_check = %s, updated_at = %s
+                WHERE proxy_id = %s
+            """
+            await db.execute(update_query, datetime.now(), datetime.now(), proxy_id)
+            
+            return {
+                "success": False,
+                "error": error_msg,
+                "proxy_info": {
+                    "ip": row['ip'],
+                    "port": row['port'],
+                    "proxy_type": row['proxy_type']
+                }
             }
         
     except HTTPException:
@@ -1501,6 +1643,32 @@ async def update_proxy_account(account_id: str, account: ProxyAccountUpdate):
         
         await db.execute(update_query, *params)
         
+        # 清除该账号关联的所有代理IP
+        utils.logger.info(f"[账号更新] 开始清除账号 {account_id} 关联的代理IP")
+        
+        # 查询该账号关联的代理数量
+        count_query = "SELECT COUNT(*) as count FROM proxy_pool WHERE account_id = %s"
+        count_result = await db.get_first(count_query, account_id)
+        proxy_count = count_result['count'] if count_result else 0
+        
+        if proxy_count > 0:
+            # 删除关联的代理IP
+            delete_query = "DELETE FROM proxy_pool WHERE account_id = %s"
+            await db.execute(delete_query, account_id)
+            
+            utils.logger.info(f"[账号更新] 已清除账号 {account_id} 关联的 {proxy_count} 个代理IP")
+            
+            # 记录清理日志
+            log_query = """
+                INSERT INTO proxy_account_logs (
+                    account_id, provider, operation, success, response_time, error_message, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            await db.execute(log_query, account_id, "qingguo", "cleanup_proxies", 1, None, 
+                           f"清除关联的 {proxy_count} 个代理IP", datetime.now())
+        else:
+            utils.logger.info(f"[账号更新] 账号 {account_id} 没有关联的代理IP需要清除")
+        
         # 返回更新后的代理账号
         return await get_proxy_account(account_id)
         
@@ -1528,13 +1696,39 @@ async def delete_proxy_account(account_id: str):
         if account.is_default:
             raise HTTPException(status_code=400, detail="不能删除默认代理账号")
         
+        # 清除该账号关联的所有代理IP
+        utils.logger.info(f"[账号删除] 开始清除账号 {account_id} 关联的代理IP")
+        
+        # 查询该账号关联的代理数量
+        count_query = "SELECT COUNT(*) as count FROM proxy_pool WHERE account_id = %s"
+        count_result = await db.get_first(count_query, account_id)
+        proxy_count = count_result['count'] if count_result else 0
+        
+        if proxy_count > 0:
+            # 删除关联的代理IP
+            delete_proxy_query = "DELETE FROM proxy_pool WHERE account_id = %s"
+            await db.execute(delete_proxy_query, account_id)
+            
+            utils.logger.info(f"[账号删除] 已清除账号 {account_id} 关联的 {proxy_count} 个代理IP")
+            
+            # 记录清理日志
+            log_query = """
+                INSERT INTO proxy_account_logs (
+                    account_id, provider, operation, success, response_time, error_message, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            await db.execute(log_query, account_id, "qingguo", "cleanup_proxies", 1, None, 
+                           f"删除账号时清除关联的 {proxy_count} 个代理IP", datetime.now())
+        else:
+            utils.logger.info(f"[账号删除] 账号 {account_id} 没有关联的代理IP需要清除")
+        
         # 删除代理账号
         delete_query = "DELETE FROM proxy_accounts WHERE account_id = %s"
         await db.execute(delete_query, account_id)
         
         return {
             "success": True,
-            "message": "代理账号删除成功"
+            "message": f"代理账号删除成功，已清除 {proxy_count} 个关联代理IP"
         }
         
     except HTTPException:
@@ -1556,6 +1750,11 @@ async def test_proxy_account(account_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="代理账号不存在")
         
+        # 打印账号信息
+        utils.logger.info(f"[账号测试] 开始测试代理账号: {account_id}")
+        utils.logger.info(f"[账号测试] 账号信息: Provider={row['provider']}, Name={row['provider_name']}")
+        utils.logger.info(f"[账号测试] API Key: {row['api_key']}, API Secret: {'***' if row['api_secret'] else '无'}")
+        
         # 根据提供商测试连接
         provider = row['provider']
         success = False
@@ -1568,31 +1767,66 @@ async def test_proxy_account(account_id: str):
                 import httpx
                 import time
                 
+                test_url = "https://longterm.proxy.qg.net/query"
+                test_params = {
+                    "key": row['api_key'],
+                    "pwd": row['api_secret']
+                }
+                
+                utils.logger.info(f"[账号测试] 测试URL: {test_url}")
+                utils.logger.info(f"[账号测试] 请求参数: {test_params}")
+                
                 start_time = time.time()
+                utils.logger.info(f"[账号测试] 开始发送请求...")
+                
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(
-                        "https://longterm.proxy.qg.net/query",
-                        params={
-                            "key": row['api_key'],
-                            "pwd": row['api_secret']
-                        }
-                    )
+                    response = await client.get(test_url, params=test_params)
                     
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get("code") == "SUCCESS":
-                            success = True
-                            response_time = int((time.time() - start_time) * 1000)
+                    utils.logger.info(f"[账号测试] 收到响应: HTTP {response.status_code}")
+                    utils.logger.info(f"[账号测试] 响应头: {dict(response.headers)}")
+                    
+                    # 尝试获取响应内容
+                    try:
+                        response_text = response.text
+                        utils.logger.info(f"[账号测试] 响应内容: {response_text}")
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            utils.logger.info(f"[账号测试] 响应JSON: {data}")
+                            
+                            if data.get("code") == "SUCCESS":
+                                success = True
+                                response_time = int((time.time() - start_time) * 1000)
+                                utils.logger.info(f"[账号测试] 测试成功! 响应时间: {response_time}ms")
+                            else:
+                                error_message = f"API返回错误: {data.get('message', '未知错误')}"
+                                utils.logger.error(f"[账号测试] {error_message}")
                         else:
-                            error_message = f"API返回错误: {data.get('message', '未知错误')}"
-                    else:
-                        error_message = f"HTTP错误: {response.status_code}"
+                            error_message = f"HTTP错误: {response.status_code}"
+                            utils.logger.error(f"[账号测试] {error_message}")
+                            utils.logger.error(f"[账号测试] 错误响应: {response_text}")
+                            
+                    except Exception as parse_error:
+                        utils.logger.error(f"[账号测试] 解析响应内容失败: {parse_error}")
+                        utils.logger.error(f"[账号测试] 原始响应: {response_text}")
+                        error_message = f"响应解析失败: {str(parse_error)}"
                         
             else:
                 error_message = f"暂不支持测试 {provider} 提供商"
+                utils.logger.warning(f"[账号测试] {error_message}")
                 
+        except httpx.ConnectTimeout:
+            error_message = "连接超时"
+            utils.logger.error(f"[账号测试] {error_message}")
+            
+        except httpx.RequestError as e:
+            error_message = f"请求错误: {str(e)}"
+            utils.logger.error(f"[账号测试] {error_message}")
+            
         except Exception as e:
-            error_message = str(e)
+            error_message = f"未知错误: {str(e)}"
+            utils.logger.error(f"[账号测试] {error_message}")
+            utils.logger.error(f"[账号测试] 异常类型: {type(e).__name__}")
         
         # 记录测试结果
         log_query = """
@@ -1611,6 +1845,7 @@ async def test_proxy_account(account_id: str):
                 WHERE account_id = %s
             """
             await db.execute(update_query, datetime.now(), datetime.now(), account_id)
+            utils.logger.info(f"[账号测试] 已更新账号成功统计")
         else:
             update_query = """
                 UPDATE proxy_accounts SET 
@@ -1618,11 +1853,17 @@ async def test_proxy_account(account_id: str):
                 WHERE account_id = %s
             """
             await db.execute(update_query, datetime.now(), datetime.now(), account_id)
+            utils.logger.info(f"[账号测试] 已更新账号失败统计")
         
         return {
             "success": success,
             "response_time": response_time,
-            "error_message": error_message
+            "error_message": error_message,
+            "account_info": {
+                "account_id": account_id,
+                "provider": provider,
+                "provider_name": row['provider_name']
+            }
         }
         
     except HTTPException:
@@ -1689,6 +1930,77 @@ async def get_proxy_account_logs(
     except Exception as e:
         utils.logger.error(f"获取代理账号使用日志失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取代理账号使用日志失败: {str(e)}")
+
+@proxy_router.post("/proxy-accounts/{account_id}/cleanup-proxies")
+async def cleanup_account_proxies(account_id: str):
+    """清理指定账号关联的所有代理IP"""
+    try:
+        db = await get_db()
+        
+        # 检查代理账号是否存在
+        check_query = "SELECT COUNT(*) FROM proxy_accounts WHERE account_id = %s"
+        result = await db.get_first(check_query, account_id)
+        
+        if not result or list(result.values())[0] == 0:
+            raise HTTPException(status_code=404, detail="代理账号不存在")
+        
+        utils.logger.info(f"[手动清理] 开始清理账号 {account_id} 关联的代理IP")
+        
+        # 查询该账号关联的代理信息
+        proxy_query = """
+            SELECT proxy_id, ip, port, status, created_at 
+            FROM proxy_pool 
+            WHERE account_id = %s
+        """
+        proxies = await db.query(proxy_query, account_id)
+        proxy_count = len(proxies)
+        
+        if proxy_count > 0:
+            # 删除关联的代理IP
+            delete_query = "DELETE FROM proxy_pool WHERE account_id = %s"
+            await db.execute(delete_query, account_id)
+            
+            utils.logger.info(f"[手动清理] 已清除账号 {account_id} 关联的 {proxy_count} 个代理IP")
+            
+            # 记录清理日志
+            log_query = """
+                INSERT INTO proxy_account_logs (
+                    account_id, provider, operation, success, response_time, error_message, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            await db.execute(log_query, account_id, "qingguo", "manual_cleanup", 1, None, 
+                           f"手动清理关联的 {proxy_count} 个代理IP", datetime.now())
+            
+            return {
+                "success": True,
+                "message": f"成功清理 {proxy_count} 个关联代理IP",
+                "cleaned_proxies": [
+                    {
+                        "proxy_id": proxy['proxy_id'],
+                        "ip": proxy['ip'],
+                        "port": proxy['port'],
+                        "status": proxy['status'],
+                        "created_at": proxy['created_at'].isoformat() if proxy['created_at'] else None
+                    }
+                    for proxy in proxies
+                ],
+                "count": proxy_count
+            }
+        else:
+            utils.logger.info(f"[手动清理] 账号 {account_id} 没有关联的代理IP需要清理")
+            
+            return {
+                "success": True,
+                "message": "没有关联的代理IP需要清理",
+                "cleaned_proxies": [],
+                "count": 0
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        utils.logger.error(f"清理账号代理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清理账号代理失败: {str(e)}")
 
 @proxy_router.get("/proxy-accounts/stats/overview")
 async def get_proxy_account_stats():
