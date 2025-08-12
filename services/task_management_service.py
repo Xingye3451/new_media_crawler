@@ -293,6 +293,37 @@ class TaskManagementService:
                 if item.get("completed_at"):
                     if isinstance(item["completed_at"], datetime):
                         item["completed_at"] = item["completed_at"].isoformat()
+                
+                # 🆕 为已完成的任务动态查询关联的视频数量
+                if item.get("status") in ["completed", "success"]:
+                    try:
+                        # 查询该任务关联的视频数量
+                        video_count_sql = "SELECT COUNT(*) as video_count FROM unified_content WHERE task_id = %s"
+                        video_count_result = await db.get_first(video_count_sql, item["id"])
+                        actual_video_count = video_count_result['video_count'] if video_count_result else 0
+                        
+                        # 更新任务的视频数量
+                        item["actual_video_count"] = actual_video_count
+                        item["statistics"] = {
+                            "total_videos": actual_video_count
+                        }
+                        
+                        # 如果数据库中的result_count为0但实际有视频，更新result_count
+                        if item.get("result_count", 0) == 0 and actual_video_count > 0:
+                            item["result_count"] = actual_video_count
+                            
+                    except Exception as e:
+                        logger.warning(f"查询任务 {item['id']} 的视频数量失败: {e}")
+                        item["actual_video_count"] = item.get("result_count", 0)
+                        item["statistics"] = {
+                            "total_videos": item.get("result_count", 0)
+                        }
+                else:
+                    # 未完成的任务使用数据库中的result_count
+                    item["actual_video_count"] = item.get("result_count", 0)
+                    item["statistics"] = {
+                        "total_videos": item.get("result_count", 0)
+                    }
             
             return {
                 'total': total,
