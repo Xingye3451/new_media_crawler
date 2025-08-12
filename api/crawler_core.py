@@ -175,7 +175,8 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
         task_params = {
             "platform": request.platform,
             "keywords": request.keywords,
-            "max_count": request.max_notes_count,
+            "max_notes_count": request.max_notes_count,
+            "crawler_type": request.crawler_type,
             "account_id": request.account_id,
             "session_id": request.session_id,
             "login_type": request.login_type,
@@ -183,7 +184,7 @@ async def create_task_record(task_id: str, request: CrawlerRequest) -> None:
             "get_comments": request.get_comments,
             "save_data_option": request.save_data_option,
             "use_proxy": request.use_proxy,
-            "proxy_strategy": request.proxy_strategy
+            "proxy_ip": request.proxy_ip  # 🆕 修复：使用proxy_ip而不是proxy_strategy
         }
         
         # 处理创作者ID列表
@@ -348,7 +349,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
         utils.logger.info(f"[TASK_{task_id}] 📝 请求参数详情:")
         utils.logger.info(f"[TASK_{task_id}]   ├─ platform: {request.platform}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ keywords: {request.keywords}")
-        utils.logger.info(f"[TASK_{task_id}]   ├─ max_count: {request.max_notes_count}")
+        utils.logger.info(f"[TASK_{task_id}]   ├─ max_notes_count: {request.max_notes_count}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ account_id: {request.account_id}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ session_id: {request.session_id}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ login_type: {request.login_type}")
@@ -356,8 +357,10 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
         utils.logger.info(f"[TASK_{task_id}]   ├─ get_comments: {request.get_comments}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ save_data_option: {request.save_data_option}")
         utils.logger.info(f"[TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
-        utils.logger.info(f"[TASK_{task_id}]   ├─ proxy_strategy: {request.proxy_strategy}")
-        utils.logger.info(f"[TASK_{task_id}]   └─ selected_creators: {getattr(request, 'selected_creators', None)}")
+        utils.logger.info(f"[TASK_{task_id}]   ├─ proxy_ip: {request.proxy_ip}")  # 🆕 修复：使用proxy_ip而不是proxy_strategy
+        utils.logger.info(f"[TASK_{task_id}]   ├─ video_priority: {getattr(request, 'video_priority', False)}")
+        utils.logger.info(f"[TASK_{task_id}]   ├─ video_only: {getattr(request, 'video_only', False)}")
+        utils.logger.info(f"[TASK_{task_id}]   └─ start_page: {getattr(request, 'start_page', 1)}")
         
         # 🆕 创建错误处理器 - 减少重试次数避免嵌套重试过多
         retry_config = RetryConfig(
@@ -454,8 +457,9 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             # 🆕 使用错误处理器包装爬取操作
             async def execute_crawling():
                 """执行爬取操作"""
+                # 执行爬虫任务
                 if request.crawler_type == "search":
-                    return await crawler.search_by_keywords(
+                    results = await crawler.search_by_keywords(
                         keywords=request.keywords,
                         max_count=request.max_notes_count,
                         account_id=request.account_id,
@@ -464,7 +468,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                         get_comments=request.get_comments,
                         save_data_option=request.save_data_option,
                         use_proxy=request.use_proxy,
-                        proxy_strategy=request.proxy_strategy,
+                        proxy_ip=request.proxy_ip,  # 🆕 修复：使用proxy_ip而不是proxy_strategy
                         start_page=getattr(request, 'start_page', 1)
                     )
                 elif request.crawler_type == "creator":

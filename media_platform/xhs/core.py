@@ -855,7 +855,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled", start_page: int = 1) -> List[Dict]:
+                                proxy_ip: str = None, start_page: int = 1) -> List[Dict]:
         """
         根据关键词搜索小红书笔记
         :param keywords: 搜索关键词
@@ -866,7 +866,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
         :param get_comments: 是否获取评论
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
-        :param proxy_strategy: 代理策略
+        :param proxy_ip: 指定代理IP地址
         :return: 搜索结果列表
         """
         try:
@@ -943,7 +943,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             account_id: str = None, session_id: str = None,
                             login_type: str = "qrcode", get_comments: bool = False,
                             save_data_option: str = "db", use_proxy: bool = False,
-                            proxy_strategy: str = "disabled", video_only: bool = False) -> List[Dict]:
+                            proxy_ip: str = None, video_only: bool = False) -> List[Dict]:
         """
         获取用户发布的笔记
         :param user_id: 用户ID
@@ -954,8 +954,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
         :param get_comments: 是否获取评论
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
-        :param proxy_strategy: 代理策略
-        :param video_only: 是否只获取视频内容
+        :param proxy_ip: 指定代理IP地址
+        :param video_only: 是否只获取视频
         :return: 笔记列表
         """
         try:

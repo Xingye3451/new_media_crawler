@@ -824,7 +824,7 @@ class DouYinCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled", start_page: int = 1) -> List[Dict]:
+                                proxy_ip: str = None, start_page: int = 1) -> List[Dict]:
         """
         根据关键词搜索抖音视频（参考B站和快手实现）
         :param keywords: 搜索关键词
@@ -835,7 +835,7 @@ class DouYinCrawler(AbstractCrawler):
         :param get_comments: 是否获取评论
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
-        :param proxy_strategy: 代理策略
+        :param proxy_ip: 指定代理IP地址
         :return: 搜索结果列表
         """
         try:

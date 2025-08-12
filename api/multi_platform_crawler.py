@@ -124,7 +124,7 @@ async def create_multi_platform_task_record(task_id: str, request: MultiPlatform
             "enable_images": request.enable_images,
             "save_format": request.save_format,
             "use_proxy": request.use_proxy,
-            "proxy_strategy": request.proxy_strategy,
+            "proxy_ip": request.proxy_ip,  # 🆕 修复：使用proxy_ip而不是proxy_strategy
             "account_strategy": request.account_strategy if hasattr(request, 'account_strategy') else "smart",
             "execution_mode": request.execution_mode if hasattr(request, 'execution_mode') else "parallel"
         }
@@ -407,7 +407,7 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
                 get_comments=request.enable_comments,
                 save_data_option="db",
                 use_proxy=request.use_proxy,
-                proxy_strategy=request.proxy_strategy,
+                proxy_ip=request.proxy_ip,  # 🆕 修复：使用proxy_ip而不是proxy_strategy
                 start_page=1  # 多平台爬取默认从第1页开始
             )
         
@@ -504,7 +504,7 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ enable_images: {request.enable_images}")
         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ save_format: {request.save_format}")
         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ use_proxy: {request.use_proxy}")
-        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ proxy_strategy: {request.proxy_strategy}")
+        utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ proxy_ip: {request.proxy_ip}")  # 🆕 修复：使用proxy_ip而不是proxy_strategy
         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ account_strategy: {getattr(request, 'account_strategy', 'smart')}")
         utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ execution_mode: {getattr(request, 'execution_mode', 'parallel')}")
         

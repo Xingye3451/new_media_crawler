@@ -12,11 +12,8 @@ from api.video_downloads import router as video_downloads_router
 from api.minio_management import router as minio_management_router
 from api.task_management import router as task_management_router
 from api.crawler_core import router as crawler_core_router
-from api.crawler_control import router as crawler_control_router
-from api.config_management import router as config_management_router
 from api.content_management import router as content_management_router
 from api.platform_management import router as platform_management_router
-from api.system_management import router as system_management_router
 from api.account_management import account_router
 from api.login_management import login_router
 from api.curl_video_proxy import router as curl_video_proxy_router
@@ -26,7 +23,6 @@ from api.thumbnail_proxy import router as thumbnail_proxy_router
 from api.creator_management import router as creator_management_router
 from api.multi_platform_crawler import router as multi_platform_crawler_router
 from api.system_monitor import router as system_monitor_router
-from api.task_isolation import router as task_isolation_router
 from api.scheduled_tasks import scheduled_tasks_router
 from api.proxy_management import proxy_router
 
@@ -38,20 +34,6 @@ api_router.include_router(
     crawler_core_router,
     prefix="/v1",
     tags=["crawler-core"]
-)
-
-# 爬虫控制路由 - 新增
-api_router.include_router(
-    crawler_control_router,
-    prefix="/v1",
-    tags=["crawler-control"]
-)
-
-# 配置管理路由 - 新增
-api_router.include_router(
-    config_management_router,
-    prefix="/v1",
-    tags=["config-management"]
 )
 
 # 内容管理路由
@@ -66,13 +48,6 @@ api_router.include_router(
     platform_management_router,
     prefix="/v1",
     tags=["platform-management"]
-)
-
-# 系统管理路由
-api_router.include_router(
-    system_management_router,
-    prefix="/v1",
-    tags=["system-management"]
 )
 
 # 任务结果相关路由
@@ -171,13 +146,6 @@ api_router.include_router(
     system_monitor_router,
     prefix="/v1",
     tags=["system-monitor"]
-)
-
-# 任务隔离相关路由
-api_router.include_router(
-    task_isolation_router,
-    prefix="/v1",
-    tags=["task-isolation"]
 )
 
 # 定时任务相关路由

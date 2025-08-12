@@ -122,7 +122,6 @@ class ZhihuCrawler(AbstractCrawler):
             # if not await self.zhihu_client.pong():
             #     # 从数据库读取cookies，支持账号选择
             #     account_id = getattr(config, 'ACCOUNT_ID', None) or os.environ.get('CRAWLER_ACCOUNT_ID')
-            #     cookie_str = await get_cookies_from_database("zhihu", account_id)
             #     
             #     if account_id:
             #         utils.logger.info(f"[ZhiHuCrawler] 使用指定账号: {account_id}")
@@ -517,7 +516,7 @@ class ZhihuCrawler(AbstractCrawler):
                                 account_id: str = None, session_id: str = None,
                                 login_type: str = "qrcode", get_comments: bool = False,
                                 save_data_option: str = "db", use_proxy: bool = False,
-                                proxy_strategy: str = "disabled") -> List[Dict]:
+                                proxy_ip: str = None) -> List[Dict]:
         """
         根据关键词搜索知乎内容
         :param keywords: 搜索关键词
@@ -528,7 +527,7 @@ class ZhihuCrawler(AbstractCrawler):
         :param get_comments: 是否获取评论
         :param save_data_option: 数据保存方式
         :param use_proxy: 是否使用代理
-        :param proxy_strategy: 代理策略
+        :param proxy_ip: 指定代理IP地址
         :return: 搜索结果列表
         """
         try:
