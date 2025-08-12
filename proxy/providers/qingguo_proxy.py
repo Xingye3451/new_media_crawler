@@ -214,11 +214,11 @@ def new_qingguo_proxy() -> QingguoProxy:
         QingguoProxy: 青果代理实例
 
     """
-    # 从配置管理器获取配置
-    from config.config_manager import config_manager
-    proxy_config = config_manager.get_proxy_config()
+    # 🆕 修复：代理配置现在从proxy_management.py管理，不再使用config_manager.get_proxy_config()
+    # 改为从环境变量或默认值获取配置
+    import os
     
     return QingguoProxy(
-        qg_key=proxy_config.qingguo_key or os.getenv("qg_key", "你的青果代理Key"),
-        qg_pwd=proxy_config.qingguo_pwd or os.getenv("qg_pwd", ""),  # 青果代理密码可选
+        qg_key=os.getenv("qg_key", "你的青果代理Key"),
+        qg_pwd=os.getenv("qg_pwd", ""),  # 青果代理密码可选
     )

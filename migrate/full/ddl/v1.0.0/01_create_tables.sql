@@ -252,6 +252,7 @@ CREATE TABLE `crawler_task_logs` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `task_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Task ID',
   `platform` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Platform name',
+  `account_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Account ID',
   `log_level` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Log level: DEBUG, INFO, WARNING, ERROR',
   `message` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Log message',
   `step` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Execution step',
@@ -261,10 +262,12 @@ CREATE TABLE `crawler_task_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_task_id` (`task_id`),
   KEY `idx_platform` (`platform`),
+  KEY `idx_account_id` (`account_id`),
   KEY `idx_log_level` (`log_level`),
   KEY `idx_add_ts` (`add_ts`),
   KEY `idx_task_id_log_level` (`task_id`,`log_level`),
-  KEY `idx_platform_log_level` (`platform`,`log_level`)
+  KEY `idx_platform_log_level` (`platform`,`log_level`),
+  KEY `idx_account_id_log_level` (`account_id`,`log_level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Crawler task logs table';
 
 -- =============================================

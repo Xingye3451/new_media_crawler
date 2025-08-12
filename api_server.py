@@ -229,11 +229,24 @@ async def startup_event():
         await redis_manager.ping()
         utils.logger.info("✅ Redis连接初始化完成")
         
-        # 🆕 启动任务清理机制
+        # 🆕 启动任务清理机制 - 已整合到api_server.py中，无需额外导入
         try:
-            from api.task_cleanup_init import init_task_cleanup
-            await init_task_cleanup()
-            utils.logger.debug("✅ 任务清理机制初始化完成")
+            import asyncio
+            utils.logger.info("🔄 启动任务清理机制...")
+            
+            # 导入清理函数
+            from api.crawler_core import start_task_cleanup
+            from api.multi_platform_crawler import start_multi_platform_task_cleanup
+            
+            # 启动单平台任务清理
+            asyncio.create_task(start_task_cleanup())
+            utils.logger.info("✅ 单平台任务清理已启动")
+            
+            # 启动多平台任务清理
+            asyncio.create_task(start_multi_platform_task_cleanup())
+            utils.logger.info("✅ 多平台任务清理已启动")
+            
+            utils.logger.info("✅ 任务清理机制初始化完成")
         except Exception as e:
             utils.logger.warning(f"⚠️ 任务清理机制初始化失败: {e}")
         

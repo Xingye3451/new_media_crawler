@@ -30,20 +30,10 @@ def show_config():
     """显示当前配置"""
     print("=== 当前配置信息 ===")
     
-    # 代理配置
-    proxy_config = config_manager.get_proxy_config()
+    # 🆕 修复：代理配置现在从proxy_management.py管理，不再使用config_manager.get_proxy_config()
     print("\n📡 代理配置:")
-    print(f"  提供商: {proxy_config.provider_name}")
-    print(f"  启用状态: {proxy_config.enabled}")
-    print(f"  代理池大小: {proxy_config.pool_count}")
-    print(f"  IP验证: {proxy_config.validate_ip}")
-    
-    if proxy_config.provider_name == "qingguo":
-        print(f"  青果代理Key: {proxy_config.qingguo_key[:10]}..." if proxy_config.qingguo_key else "  青果代理Key: 未设置")
-        print(f"  青果代理密码: {'已设置' if proxy_config.qingguo_pwd else '未设置'}")
-    elif proxy_config.provider_name == "kuaidaili":
-        print(f"  快代理Secret ID: {proxy_config.kuaidaili_secret_id[:10]}..." if proxy_config.kuaidaili_secret_id else "  快代理Secret ID: 未设置")
-        print(f"  快代理用户名: {proxy_config.kuaidaili_user_name}")
+    print("  代理配置现在通过 proxy_management.py 统一管理")
+    print("  请使用 /api/v1/proxies/ 相关接口查看代理信息")
     
     # 爬虫配置
     crawler_config = config_manager.get_crawler_config()

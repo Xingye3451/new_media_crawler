@@ -137,13 +137,13 @@ def new_kuai_daili_proxy() -> KuaiDaiLiProxy:
     Returns:
 
     """
-    # 从配置管理器获取配置
-    from config.config_manager import config_manager
-    proxy_config = config_manager.get_proxy_config()
+    # 🆕 修复：代理配置现在从proxy_management.py管理，不再使用config_manager.get_proxy_config()
+    # 改为从环境变量或默认值获取配置
+    import os
     
     return KuaiDaiLiProxy(
-        kdl_secret_id=proxy_config.kuaidaili_secret_id or os.getenv("kdl_secret_id", "你的快代理secert_id"),
-        kdl_signature=proxy_config.kuaidaili_signature or os.getenv("kdl_signature", "你的快代理签名"),
-        kdl_user_name=proxy_config.kuaidaili_user_name or os.getenv("kdl_user_name", "你的快代理用户名"),
-        kdl_user_pwd=proxy_config.kuaidaili_user_pwd or os.getenv("kdl_user_pwd", "你的快代理密码"),
+        kdl_secret_id=os.getenv("kdl_secret_id", "你的快代理secert_id"),
+        kdl_signature=os.getenv("kdl_signature", "你的快代理签名"),
+        kdl_user_name=os.getenv("kdl_user_name", "你的快代理用户名"),
+        kdl_user_pwd=os.getenv("kdl_user_pwd", "你的快代理密码"),
     )

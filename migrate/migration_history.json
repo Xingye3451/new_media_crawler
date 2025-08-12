@@ -1,1 +1,71 @@
-[]
+[
+  {
+    "timestamp": "2025-08-12T15:47:35.693119",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-12T15:47:35.693085"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-12T15:47:35.843042",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-12T15:48:15.394048",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-12T15:48:15.393999"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-12T15:48:15.407370",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-12T15:48:48.703499",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "in_progress",
+    "details": {
+      "start_time": "2025-08-12T15:48:48.703435"
+    },
+    "config_file": "config/config_local.yaml"
+  },
+  {
+    "timestamp": "2025-08-12T15:48:48.718417",
+    "migration_type": "incremental",
+    "version": "v1.0.1",
+    "action": "migrate",
+    "status": "failed",
+    "details": {
+      "error": "Failed to execute migration file: /home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql",
+      "failed_file": "/home/yxdevuser1/Projects/pyProjects/AiVideoProjects/media_crawler/migrate/incremental/ddl/v1.0.1/01_add_account_id_to_task_logs.sql"
+    },
+    "config_file": "config/config_local.yaml"
+  }
+]

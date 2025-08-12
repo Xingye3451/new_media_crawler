@@ -213,219 +213,128 @@ class BilibiliCrawler(AbstractCrawler):
             max_retries = 3
             retry_count = 0
             
-            while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
-                    if page < start_page:
-                        utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
-                        page += 1
-                        continue
+            # 🆕 修复：使用实例变量max_notes_count，而不是config.CRAWLER_MAX_NOTES_COUNT
+            while (page - start_page + 1) * bili_limit_count <= max_notes_count:
+                if page < start_page:
+                    utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
+                    page += 1
+                    continue
 
-                    try:
-                        utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, page: {page}")
-                        video_id_list: List[str] = []
-                        videos_res = await self.bili_client.search_video_by_keyword(
-                            keyword=keyword,
-                            page=page,
-                            page_size=bili_limit_count,
-                            order=SearchOrderType.DEFAULT,
-                            pubtime_begin_s=0,  # 作品发布日期起始时间戳
-                            pubtime_end_s=0  # 作品发布日期结束日期时间戳
-                        )
-                        video_list: List[Dict] = videos_res.get("result")
+                try:
+                    utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, page: {page}")
+                    video_id_list: List[str] = []
+                    videos_res = await self.bili_client.search_video_by_keyword(
+                        keyword=keyword,
+                        page=page,
+                        page_size=bili_limit_count,
+                        order=SearchOrderType.DEFAULT,
+                        pubtime_begin_s=0,  # 作品发布日期起始时间戳
+                        pubtime_end_s=0  # 作品发布日期结束日期时间戳
+                    )
+                    video_list: List[Dict] = videos_res.get("result")
+                    
+                    # 🆕 检查搜索结果是否为空
+                    if not video_list:
+                        utils.logger.info(f"[BilibiliCrawler.search] 关键词 '{keyword}' 第 {page} 页搜索结果为空，停止搜索")
+                        break
 
-                        # 限制并发数量，避免资源耗尽
-                        max_concurrent = min(5, len(video_list))  # 🆕 修复：使用固定值替代config.MAX_CONCURRENCY_NUM
-                        semaphore = asyncio.Semaphore(max_concurrent)
+                    # 限制并发数量，避免资源耗尽
+                    max_concurrent = min(5, len(video_list))  # 🆕 修复：使用固定值替代config.MAX_CONCURRENCY_NUM
+                    semaphore = asyncio.Semaphore(max_concurrent)
+                    
+                    # 分批处理视频详情
+                    batch_size = 5  # 每批处理5个视频
+                    video_items = []
+                    
+                    for i in range(0, len(video_list), batch_size):
+                        batch_videos = video_list[i:i + batch_size]
+                        utils.logger.info(f"[BilibiliCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_videos)}")
                         
-                        # 分批处理视频详情
-                        batch_size = 5  # 每批处理5个视频
-                        video_items = []
-                        
-                        for i in range(0, len(video_list), batch_size):
-                            batch_videos = video_list[i:i + batch_size]
-                            utils.logger.info(f"[BilibiliCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_videos)}")
-                            
-                            task_list = []
-                            try:
-                                task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in batch_videos]
-                            except Exception as e:
-                                utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
-                                continue
-                            
-                            try:
-                                # 添加超时控制
-                                batch_results = await asyncio.wait_for(
-                                    asyncio.gather(*task_list, return_exceptions=True),
-                                    timeout=60  # 60秒超时
-                                )
-                                video_items.extend([r for r in batch_results if not isinstance(r, Exception)])
-                            except asyncio.TimeoutError:
-                                utils.logger.warning(f"[BilibiliCrawler.search] Video batch timeout, skipping remaining items")
-                                break
-                            except Exception as e:
-                                utils.logger.error(f"[BilibiliCrawler.search] Video batch processing error: {e}")
-                                continue
-                            
-                            # 添加间隔，避免请求过于频繁
-                            await asyncio.sleep(1)
-                        
-                        # 处理视频详情
-                        for video_item in video_items:
-                            if video_item:
-                                try:
-                                    import json
-                                    utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_item, ensure_ascii=False)}")
-                                    
-                                    # 获取视频播放地址
-                                    video_info = video_item.get("View", {})
-                                    aid = video_info.get("aid")
-                                    cid = video_info.get("cid")
-                                    
-                                    if aid and cid:
-                                        # 获取播放地址
-                                        utils.logger.info(f"[BilibiliCrawler] 开始获取播放地址 - aid: {aid}, cid: {cid}")
-                                        play_url_result = await self.get_video_play_url_task(aid, cid, semaphore)
-                                        if play_url_result:
-                                            # 将播放地址数据合并到视频信息中
-                                            video_item.update(play_url_result)
-                                            utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
-                                        else:
-                                            utils.logger.warning(f"[BilibiliCrawler] 获取播放地址失败 - aid: {aid}, cid: {cid}")
-                                    else:
-                                        utils.logger.warning(f"[BilibiliCrawler] 缺少aid或cid - aid: {aid}, cid: {cid}")
-                                    
-                                    video_id_list.append(aid)
-                                    await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
-                                    await self.bilibili_store.update_up_info(video_item)
-                                    await self.get_bilibili_video(video_item, semaphore)
-                                    processed_count += 1
-                                except Exception as e:
-                                    utils.logger.error(f"[BilibiliCrawler.search] Failed to process video: {e}")
-                                    continue
-                        
-                        # 检查处理时间，避免长时间运行
-                        elapsed_time = time.time() - start_time
-                        if elapsed_time > 300:  # 5分钟超时
-                            utils.logger.warning(f"[BilibiliCrawler.search] Processing time exceeded 5 minutes, stopping")
-                            break
-                        
-                        # 获取评论（如果启用）
-                        # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
-                        get_comments = getattr(self, 'get_comments', False)
-                        if get_comments and video_id_list:
-                            try:
-                                await self.batch_get_video_comments(video_id_list)
-                            except Exception as e:
-                                utils.logger.error(f"[BilibiliCrawler.search] Failed to get comments: {e}")
-                        
-                        page += 1
-                        
-                    except Exception as e:
-                        utils.logger.error(f"[BilibiliCrawler.search] Unexpected error during search: {e}")
-                        page += 1
-                        continue
-                        
-            # 🆕 修复：移除对config.START_DAY和config.END_DAY的依赖，默认使用最近7天
-            # 按照日期范围进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
-            else:
-                # 使用最近7天作为默认日期范围
-                from datetime import datetime, timedelta
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=7)
-                
-                for day in pd.date_range(start=start_date, end=end_date, freq='D'):
-                    # 按照每一天进行爬取的时间戳参数
-                    pubtime_begin_s, pubtime_end_s = await self.get_pubtime_datetime(start=day.strftime('%Y-%m-%d'), end=day.strftime('%Y-%m-%d'))
-                    page = 1
-                    #!该段 while 语句在发生异常时（通常情况下为当天数据为空时）会自动跳转到下一天，以实现最大程度爬取该关键词下当天的所有视频
-                    #!除了仅保留现在原有的 try, except Exception 语句外，不要再添加其他的异常处理！！！否则将使该段代码失效，使其仅能爬取当天一天数据而无法跳转到下一天
-                    #!除非将该段代码的逻辑进行重构以实现相同的功能，否则不要进行修改！！！
-                    while (page - start_page + 1) * bili_limit_count <= max_notes_count:
-                        #! Catch any error if response return nothing, go to next day
+                        task_list = []
                         try:
-                            #! Don't skip any page, to make sure gather all video in one day
-                            # if page < start_page:
-                            #     utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
-                            #     page += 1
-                            #     continue
-
-                            utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, date: {day.ctime()}, page: {page}")
-                            video_id_list: List[str] = []
-                            videos_res = await self.bili_client.search_video_by_keyword(
-                                keyword=keyword,
-                                page=page,
-                                page_size=bili_limit_count,
-                                order=SearchOrderType.DEFAULT,
-                                pubtime_begin_s=pubtime_begin_s,  # 作品发布日期起始时间戳
-                                pubtime_end_s=pubtime_end_s  # 作品发布日期结束日期时间戳
-                            )
-                            video_list: List[Dict] = videos_res.get("result")
-
-                            # 限制并发数量
-                            max_concurrent = min(config.MAX_CONCURRENCY_NUM, len(video_list))
-                            semaphore = asyncio.Semaphore(max_concurrent)
-                            
-                            # 分批处理视频详情
-                            batch_size = 5
-                            video_items = []
-                            
-                            for i in range(0, len(video_list), batch_size):
-                                batch_videos = video_list[i:i + batch_size]
-                                task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in batch_videos]
-                                
-                                try:
-                                    batch_results = await asyncio.wait_for(
-                                        asyncio.gather(*task_list, return_exceptions=True),
-                                        timeout=60
-                                    )
-                                    video_items.extend([r for r in batch_results if not isinstance(r, Exception)])
-                                except asyncio.TimeoutError:
-                                    utils.logger.warning(f"[BilibiliCrawler.search] Video batch timeout")
-                                    break
-                                except Exception as e:
-                                    utils.logger.error(f"[BilibiliCrawler.search] Video batch error: {e}")
-                                    continue
-                                
-                                await asyncio.sleep(1)
-                            
-                            for video_item in video_items:
-                                if video_item:
-                                    try:
-                                        import json
-                                        utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_item, ensure_ascii=False)}")
-                                        
-                                        # 获取视频播放地址
-                                        video_info = video_item.get("View", {})
-                                        aid = video_info.get("aid")
-                                        cid = video_info.get("cid")
-                                        
-                                        if aid and cid:
-                                            # 获取播放地址
-                                            utils.logger.info(f"[BilibiliCrawler] 开始获取播放地址 - aid: {aid}, cid: {cid}")
-                                            play_url_result = await self.get_video_play_url_task(aid, cid, semaphore)
-                                            if play_url_result:
-                                                # 将播放地址数据合并到视频信息中
-                                                video_item.update(play_url_result)
-                                                utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
-                                        else:
-                                            utils.logger.warning(f"[BilibiliCrawler] 缺少aid或cid - aid: {aid}, cid: {cid}")
-                                        
-                                        video_id_list.append(aid)
-                                        await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
-                                        await self.bilibili_store.update_up_info(video_item)
-                                        await self.get_bilibili_video(video_item, semaphore)
-                                        processed_count += 1
-                                    except Exception as e:
-                                        utils.logger.error(f"[BilibiliCrawler.search] Failed to process video: {e}")
-                                        continue
-                            
-                            page += 1
-                            await self.batch_get_video_comments(video_id_list)
-                        # go to next day
+                            task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in batch_videos]
                         except Exception as e:
-                            print(e)
+                            utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
+                            continue
+                        
+                        try:
+                            # 添加超时控制
+                            batch_results = await asyncio.wait_for(
+                                asyncio.gather(*task_list, return_exceptions=True),
+                                timeout=60  # 60秒超时
+                            )
+                            video_items.extend([r for r in batch_results if not isinstance(r, Exception)])
+                        except asyncio.TimeoutError:
+                            utils.logger.warning(f"[BilibiliCrawler.search] Video batch timeout, skipping remaining items")
                             break
+                        except Exception as e:
+                            utils.logger.error(f"[BilibiliCrawler.search] Video batch processing error: {e}")
+                            continue
+                        
+                        # 添加间隔，避免请求过于频繁
+                        await asyncio.sleep(1)
+                    
+                    # 处理视频详情
+                    for video_item in video_items:
+                        if video_item:
+                            try:
+                                import json
+                                utils.logger.info(f"[BilibiliCrawler] 原始视频数据: {json.dumps(video_item, ensure_ascii=False)}")
+                                
+                                # 获取视频播放地址
+                                video_info = video_item.get("View", {})
+                                aid = video_info.get("aid")
+                                cid = video_info.get("cid")
+                                
+                                if aid and cid:
+                                    # 获取播放地址
+                                    utils.logger.info(f"[BilibiliCrawler] 开始获取播放地址 - aid: {aid}, cid: {cid}")
+                                    play_url_result = await self.get_video_play_url_task(aid, cid, semaphore)
+                                    if play_url_result:
+                                        # 将播放地址数据合并到视频信息中
+                                        video_item.update(play_url_result)
+                                        utils.logger.info(f"[BilibiliCrawler] 获取到播放地址数据: {json.dumps(play_url_result, ensure_ascii=False)}")
+                                    else:
+                                        utils.logger.warning(f"[BilibiliCrawler] 获取播放地址失败 - aid: {aid}, cid: {cid}")
+                                else:
+                                    utils.logger.warning(f"[BilibiliCrawler] 缺少aid或cid - aid: {aid}, cid: {cid}")
+                                
+                                video_id_list.append(aid)
+                                await self.bilibili_store.update_bilibili_video(video_item, task_id=self.task_id)
+                                await self.bilibili_store.update_up_info(video_item)
+                                await self.get_bilibili_video(video_item, semaphore)
+                                processed_count += 1
+                            except Exception as e:
+                                utils.logger.error(f"[BilibiliCrawler.search] Failed to process video: {e}")
+                                continue
+                    
+                    # 检查处理时间，避免长时间运行
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 300:  # 5分钟超时
+                        utils.logger.warning(f"[BilibiliCrawler.search] Processing time exceeded 5 minutes, stopping")
+                        break
+                    
+                    # 获取评论（如果启用）
+                    # 🆕 修复：使用实例变量替代config.ENABLE_GET_COMMENTS
+                    get_comments = getattr(self, 'get_comments', False)
+                    if get_comments and video_id_list:
+                        try:
+                            await self.batch_get_video_comments(video_id_list)
+                        except Exception as e:
+                            utils.logger.error(f"[BilibiliCrawler.search] Failed to get comments: {e}")
+                    
+                    page += 1
+                    
+                except Exception as e:
+                    utils.logger.error(f"[BilibiliCrawler.search] Unexpected error during search: {e}")
+                    page += 1
+                    continue
+                        
+            # 🆕 修复：移除错误的else分支，这个分支会导致搜索推荐内容而不是关键词相关内容
+            # 原来的else分支逻辑是错误的，会导致搜索的不是关键词相关的内容
+            # 现在只保留主搜索循环，确保搜索的是关键词相关的内容
             
-            utils.logger.info(f"[BilibiliCrawler.search] Search completed. Total processed: {processed_count}")
+            utils.logger.info(f"[BilibiliCrawler.search] 关键词 '{keyword}' 搜索完成，共处理 {processed_count} 个视频")
 
     async def batch_get_video_comments(self, video_id_list: List[str]):
         """
@@ -1308,10 +1217,15 @@ class BilibiliCrawler(AbstractCrawler):
             utils.logger.error(f"[BilibiliCrawler.search_by_keywords] 搜索失败: {e}")
             raise
         finally:
-            # 安全关闭浏览器，避免重复关闭
+            # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
                 if hasattr(self, 'browser_context') and self.browser_context:
-                    await self.close()
+                    # 检查是否由外部管理（如crawler_core.py）
+                    if not hasattr(self, '_externally_managed') or not self._externally_managed:
+                        await self.close()
+                        utils.logger.info("[BilibiliCrawler.search_by_keywords] 浏览器已关闭")
+                    else:
+                        utils.logger.info("[BilibiliCrawler.search_by_keywords] 浏览器由外部管理，跳过关闭")
             except Exception as e:
                 utils.logger.warning(f"[BilibiliCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
 
@@ -1364,10 +1278,15 @@ class BilibiliCrawler(AbstractCrawler):
             utils.logger.error(f"[BilibiliCrawler.get_user_notes] 获取失败: {e}")
             raise
         finally:
-            # 安全关闭浏览器，避免重复关闭
+            # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
                 if hasattr(self, 'browser_context') and self.browser_context:
-                    await self.close()
+                    # 检查是否由外部管理（如crawler_core.py）
+                    if not hasattr(self, '_externally_managed') or not self._externally_managed:
+                        await self.close()
+                        utils.logger.info("[BilibiliCrawler.get_user_notes] 浏览器已关闭")
+                    else:
+                        utils.logger.info("[BilibiliCrawler.get_user_notes] 浏览器由外部管理，跳过关闭")
             except Exception as e:
                 utils.logger.warning(f"[BilibiliCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")
 

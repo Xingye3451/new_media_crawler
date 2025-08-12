@@ -201,16 +201,15 @@ async def log_multi_platform_task_step(task_id: str, platform: str, step: str, m
             utils.logger.error("[MULTI_TASK_LOG] 无法获取数据库连接")
             return
         
-        # 构建日志数据字典
+        # 构建日志数据字典 - 修复：移除不存在的account_id字段
         log_data = {
             'task_id': task_id,
             'platform': platform,
-            'account_id': None,
             'log_level': log_level,
             'message': message,
             'step': step,
             'progress': progress or 0,
-            'created_at': datetime.now()
+            'add_ts': int(datetime.now().timestamp())
         }
         
         await async_db_obj.item_to_table('crawler_task_logs', log_data)
@@ -425,29 +424,23 @@ async def run_single_platform_crawler(task_id: str, platform: str, request: Mult
             utils.logger.info(f"[MULTI_TASK_{task_id}] 📊 平台 {platform} 错误处理摘要: {error_summary}")
             await log_multi_platform_task_step(task_id, platform, "error_summary", f"错误处理摘要: {error_summary}", "INFO")
         
-        # 🆕 安全关闭爬虫资源
+        # 🆕 安全关闭爬虫资源 - 避免重复关闭
         try:
+            # 标记爬虫为外部管理，防止内部重复关闭
+            if hasattr(crawler, '_externally_managed'):
+                crawler._externally_managed = True
+                utils.logger.info(f"[MULTI_TASK_{task_id}] 标记爬虫为外部管理")
+            
+            # 只关闭爬虫资源，不关闭浏览器（由内部管理）
             if hasattr(crawler, 'close'):
                 await crawler.close()
                 utils.logger.info(f"[MULTI_TASK_{task_id}] 爬虫资源已关闭")
         except Exception as e:
             utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭爬虫资源时出现警告: {e}")
         
-        # 🆕 确保浏览器实例被正确关闭
-        try:
-            if hasattr(crawler, 'browser') and crawler.browser:
-                await crawler.browser.close()
-                utils.logger.info(f"[MULTI_TASK_{task_id}] 浏览器实例已关闭")
-        except Exception as e:
-            utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭浏览器实例时出现警告: {e}")
-        
-        # 🆕 清理Playwright上下文
-        try:
-            if hasattr(crawler, 'context') and crawler.context:
-                await crawler.context.close()
-                utils.logger.info(f"[MULTI_TASK_{task_id}] Playwright上下文已关闭")
-        except Exception as e:
-            utils.logger.warning(f"[MULTI_TASK_{task_id}] 关闭Playwright上下文时出现警告: {e}")
+        # 🆕 移除重复的浏览器关闭操作，避免重复关闭
+        # 浏览器关闭由爬虫内部管理，避免重复关闭导致错误
+        utils.logger.info(f"[MULTI_TASK_{task_id}] 浏览器资源由爬虫内部管理，跳过外部关闭")
         
         return result_count
         

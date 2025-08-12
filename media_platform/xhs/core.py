@@ -932,10 +932,15 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.error(f"[XiaoHongShuCrawler.search_by_keywords] 搜索失败: {e}")
             raise
         finally:
-            # 安全关闭浏览器，避免重复关闭
+            # 🆕 修复：避免重复关闭浏览器，只在没有外部管理时关闭
             try:
                 if hasattr(self, 'browser_context') and self.browser_context:
-                    await self.close()
+                    # 检查是否由外部管理（如crawler_core.py）
+                    if not hasattr(self, '_externally_managed') or not self._externally_managed:
+                        await self.close()
+                        utils.logger.info("[XiaoHongShuCrawler.search_by_keywords] 浏览器已关闭")
+                    else:
+                        utils.logger.info("[XiaoHongShuCrawler.search_by_keywords] 浏览器由外部管理，跳过关闭")
             except Exception as e:
                 utils.logger.warning(f"[XiaoHongShuCrawler.search_by_keywords] 关闭浏览器时出现警告: {e}")
 

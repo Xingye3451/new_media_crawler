@@ -245,7 +245,8 @@ def reload_config():
     global task_management_config, performance_config, monitoring_config, development_config
     global scheduled_tasks_config, login_status_check_config, scheduler_config
     
-    proxy_config = config_manager.get_proxy_config()
+    # 🆕 修复：代理配置现在从proxy_management.py管理，不再需要get_proxy_config
+    # proxy_config = config_manager.get_proxy_config()  # 已移除
     crawler_config = config_manager.get_crawler_config()
     database_config = config_manager.get_database_config()
     app_config = config_manager.get_app_config()

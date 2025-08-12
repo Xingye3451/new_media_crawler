@@ -283,7 +283,8 @@ async def update_task_creator_ref_ids(task_id: str, creator_ref_ids: List[str]):
     except Exception as e:
         utils.logger.error(f"[TASK_CREATOR_REF] 更新任务creator_ref_ids失败: {e}")
 
-async def log_task_step(task_id: str, platform: str, step: str, message: str, log_level: str = "INFO", progress: int = None):
+async def log_task_step(task_id: str, platform: str, step: str, message: str, 
+                       log_level: str = "INFO", progress: int = None, account_id: str = None):
     """记录任务步骤日志"""
     try:
         async_db_obj = await get_db_connection()
@@ -291,16 +292,16 @@ async def log_task_step(task_id: str, platform: str, step: str, message: str, lo
             utils.logger.error("[TASK_LOG] 无法获取数据库连接")
             return
         
-        # 构建日志数据字典
+        # 构建日志数据字典 - 修复：支持account_id字段
         log_data = {
             'task_id': task_id,
             'platform': platform,
-            'account_id': None,
+            'account_id': account_id,
             'log_level': log_level,
             'message': message,
             'step': step,
             'progress': progress or 0,
-            'created_at': datetime.now()
+            'add_ts': int(datetime.now().timestamp())
         }
         
         # 使用item_to_table方法
@@ -329,14 +330,14 @@ async def run_crawler_task(task_id: str, request: CrawlerRequest, proxy_info=Non
         task_status[task_id]["error"] = "任务执行超时，请检查网络连接或重试"
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
         await update_task_progress(task_id, 0.0, "timeout")
-        await log_task_step(task_id, request.platform, "task_timeout", "任务执行超时", "ERROR", 0)
+        await log_task_step(task_id, request.platform, "task_timeout", "任务执行超时", "ERROR", 0, request.account_id)
     except Exception as e:
         utils.logger.error(f"[TASK_{task_id}] ❌ 任务执行失败: {e}")
         task_status[task_id]["status"] = "failed"
         task_status[task_id]["error"] = str(e)
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
         await update_task_progress(task_id, 0.0, "failed")
-        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0)
+        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0, request.account_id)
 
 async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, proxy_info=None):
     """内部爬虫任务执行函数"""
@@ -396,20 +397,24 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
         
         # 🆕 更新数据库中的任务状态
         await update_task_progress(task_id, 0.0, "running")
-        await log_task_step(task_id, request.platform, "task_start", "任务开始执行", "INFO", 0)
+        await log_task_step(task_id, request.platform, "task_start", "任务开始执行", "INFO", 0, request.account_id)
         
-        # 设置爬虫配置
+        # 🆕 设置爬虫配置
         utils.logger.info(f"[TASK_{task_id}] ⚙️ 设置爬虫配置...")
-        await log_task_step(task_id, request.platform, "config_setup", "设置爬虫配置", "INFO", 35)
+        await log_task_step(task_id, request.platform, "config_setup", "设置爬虫配置", "INFO", 35, request.account_id)
         
+        # 🆕 设置配置
         import config
         config.PLATFORM = request.platform
+        config.KEYWORDS = request.keywords
+        config.CRAWLER_MAX_NOTES_COUNT = request.max_notes_count
         config.ENABLE_GET_COMMENTS = request.get_comments
         config.SAVE_DATA_OPTION = request.save_data_option
+        config.ENABLE_IP_PROXY = request.use_proxy
         
-        # 创建爬虫实例
+        # 🆕 创建爬虫实例
         utils.logger.info(f"[TASK_{task_id}] 🔧 创建爬虫实例...")
-        await log_task_step(task_id, request.platform, "crawler_init", "创建爬虫实例", "INFO", 40)
+        await log_task_step(task_id, request.platform, "crawler_init", "创建爬虫实例", "INFO", 40, request.account_id)
         
         try:
             crawler = CrawlerFactory.create_crawler(request.platform, task_id=task_id)
@@ -419,39 +424,25 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             # 🆕 设置代理信息
             if proxy_info and request.use_proxy:
                 crawler.proxy_info = proxy_info
-                utils.logger.info(f"[TASK_{task_id}] 🔧 设置代理: {proxy_info.ip}:{proxy_info.port}")
-                # 🆕 打印代理使用信息
-                utils.logger.info(f"[TASK_{task_id}] 🌐 代理使用信息:")
-                utils.logger.info(f"[TASK_{task_id}]   ├─ 代理地址: {proxy_info.ip}:{proxy_info.port}")
-                utils.logger.info(f"[TASK_{task_id}]   ├─ 代理类型: {proxy_info.proxy_type}")
-                utils.logger.info(f"[TASK_{task_id}]   ├─ 认证信息: {proxy_info.username}:{proxy_info.password}")
-                utils.logger.info(f"[TASK_{task_id}]   ├─ 区域: {proxy_info.area}")
-                utils.logger.info(f"[TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
-                utils.logger.info(f"[TASK_{task_id}]   └─ 使用方式: curl -x {proxy_info.proxy_type}://{proxy_info.username}:{proxy_info.password}@{proxy_info.ip}:{proxy_info.port} https://httpbin.org/ip")
-                await log_task_step(task_id, request.platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO", 42)
+                utils.logger.info(f"[TASK_{task_id}] 设置代理: {proxy_info.ip}:{proxy_info.port}")
+                await log_task_step(task_id, request.platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO", 42, request.account_id)
             
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
-            await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45)
-        except PlatformComingSoonException as e:
-            utils.logger.warning(f"[TASK_{task_id}] ⚠️ 平台即将支持: {e}")
-            task_status[task_id]["status"] = "failed"
-            task_status[task_id]["error"] = str(e)
-            task_status[task_id]["updated_at"] = datetime.now().isoformat()
-            await update_task_progress(task_id, 0.0, "failed")
-            await log_task_step(task_id, request.platform, "platform_coming_soon", str(e), "WARN", 0)
-            return
+            await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45, request.account_id)
+            
         except Exception as e:
-            utils.logger.error(f"[TASK_{task_id}] ❌ 创建爬虫实例失败: {e}")
-            task_status[task_id]["status"] = "failed"
-            task_status[task_id]["error"] = f"创建爬虫实例失败: {str(e)}"
-            task_status[task_id]["updated_at"] = datetime.now().isoformat()
-            await update_task_progress(task_id, 0.0, "failed")
-            await log_task_step(task_id, request.platform, "crawler_init_failed", f"创建爬虫实例失败: {str(e)}", "ERROR", 0)
-            return
+            if "coming soon" in str(e).lower():
+                utils.logger.warning(f"[TASK_{task_id}] ⚠️ 平台 {request.platform} 功能即将上线: {e}")
+                await log_task_step(task_id, request.platform, "platform_coming_soon", str(e), "WARN", 0, request.account_id)
+                raise Exception(f"平台 {request.platform} 功能即将上线，敬请期待！")
+            else:
+                utils.logger.error(f"[TASK_{task_id}] ❌ 创建爬虫实例失败: {e}")
+                await log_task_step(task_id, request.platform, "crawler_init_failed", f"创建爬虫实例失败: {str(e)}", "ERROR", 0, request.account_id)
+                raise
         
-        # 开始爬取
+        # 🆕 开始执行爬取
         utils.logger.info(f"[TASK_{task_id}] 🚀 开始执行爬取...")
-        await log_task_step(task_id, request.platform, "crawling_start", "开始执行爬取", "INFO", 50)
+        await log_task_step(task_id, request.platform, "crawling_start", "开始执行爬取", "INFO", 50, request.account_id)
         
         try:
             # 🆕 使用错误处理器包装爬取操作
@@ -550,10 +541,10 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             error_summary = error_handler.get_error_summary()
             if error_summary["total_errors"] > 0:
                 utils.logger.info(f"[TASK_{task_id}] 📊 错误处理摘要: {error_summary}")
-                await log_task_step(task_id, request.platform, "error_summary", f"错误处理摘要: {error_summary}", "INFO", 95)
+                await log_task_step(task_id, request.platform, "error_summary", f"错误处理摘要: {error_summary}", "INFO", 95, request.account_id)
             
             await update_task_progress(task_id, 100.0, "completed", len(results) if results else 0)
-            await log_task_step(task_id, request.platform, "crawling_completed", f"爬取完成，共获取 {len(results) if results else 0} 条数据", "INFO", 100)
+            await log_task_step(task_id, request.platform, "crawling_completed", f"爬取完成，共获取 {len(results) if results else 0} 条数据", "INFO", 100, request.account_id)
             
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬取任务完成，共获取 {len(results) if results else 0} 条数据")
             
@@ -568,7 +559,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             task_status[task_id]["error"] = f"爬取失败: {str(e)}"
             task_status[task_id]["updated_at"] = datetime.now().isoformat()
             await update_task_progress(task_id, 0.0, "failed")
-            await log_task_step(task_id, request.platform, "crawling_failed", f"爬取失败: {str(e)}", "ERROR", 0)
+            await log_task_step(task_id, request.platform, "crawling_failed", f"爬取失败: {str(e)}", "ERROR", 0, request.account_id)
             raise
         finally:
             # 🆕 安全关闭爬虫资源
@@ -605,12 +596,11 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
         utils.logger.error(f"[TASK_{task_id}] {traceback.format_exc()}")
         
         # 更新任务状态为失败
-        utils.logger.error(f"[TASK_{task_id}] 🔄 更新任务状态为失败...")
         task_status[task_id]["status"] = "failed"
         task_status[task_id]["error"] = str(e)
         task_status[task_id]["updated_at"] = datetime.now().isoformat()
         await update_task_progress(task_id, 0.0, "failed")
-        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0)
+        await log_task_step(task_id, request.platform, "task_failed", f"任务执行失败: {str(e)}", "ERROR", 0, request.account_id)
         utils.logger.error(f"[TASK_{task_id}] ✅ 任务状态已更新")
         utils.logger.error("█" * 100)
 
