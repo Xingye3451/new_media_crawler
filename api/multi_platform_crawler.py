@@ -714,18 +714,12 @@ async def start_multi_platform_crawler(request: MultiPlatformCrawlerRequest, bac
         
         for platform in request.platforms:
             try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        "http://localhost:8100/api/v1/login/check",
-                        json={"platform": platform},
-                        timeout=10.0
-                    )
-                    login_result = response.json()
+                from services.login_service import check_platform_login_status
+                login_result = await check_platform_login_status(platform)
+                
+                if login_result["code"] != 200:
+                    login_issues.append(f"{platform}: {login_result.get('message', 'unknown')}")
                     
-                    if login_result["code"] != 200:
-                        login_issues.append(f"{platform}: {login_result.get('message', 'unknown')}")
-                        
             except Exception as e:
                 login_issues.append(f"{platform}: 检查失败 - {str(e)}")
         

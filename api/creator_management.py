@@ -22,6 +22,24 @@ async def add_creator(creator_data: Dict[str, Any]):
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        original_platform = creator_data.get("platform")
+        mapped_platform = platform_mapping.get(original_platform, original_platform)
+        if original_platform != mapped_platform:
+            logger.info(f"平台代码映射: {original_platform} -> {mapped_platform}")
+            creator_data["platform"] = mapped_platform
+        
         # 验证必填字段
         required_fields = ["creator_id", "platform", "name"]
         for field in required_fields:
@@ -83,6 +101,23 @@ async def get_creators(
         db = await _get_db_connection()
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
+        
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 如果提供了平台参数，进行映射
+        if platform:
+            mapped_platform = platform_mapping.get(platform, platform)
+            logger.info(f"平台代码映射: {platform} -> {mapped_platform}")
+            platform = mapped_platform
         
         # 构建查询条件
         where_conditions = ["is_deleted = 0"]
@@ -168,11 +203,26 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        mapped_platform = platform_mapping.get(platform, platform)
+        logger.info(f"平台代码映射: {platform} -> {mapped_platform}")
+        
         query = """
             SELECT * FROM unified_creator 
             WHERE creator_id = %s AND platform = %s AND is_deleted = 0
         """
-        result = await db.get_first(query, creator_id, platform)
+        result = await db.get_first(query, creator_id, mapped_platform)
         
         if not result:
             raise HTTPException(status_code=404, detail="创作者不存在")
@@ -199,19 +249,34 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
         raise HTTPException(status_code=500, detail=f"获取创作者详情失败: {str(e)}")
 
 @router.get("/creators/{creator_id}/detail", response_model=Dict[str, Any])
-async def get_creator_detail(creator_id: str, platform: str = Query(..., description="平台")):
+async def get_creator_detail_info(creator_id: str, platform: str = Query(..., description="平台")):
     """获取创作者详细信息"""
     try:
         db = await _get_db_connection()
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        mapped_platform = platform_mapping.get(platform, platform)
+        logger.info(f"平台代码映射: {platform} -> {mapped_platform}")
+        
         # 获取创作者基本信息
         creator_query = """
             SELECT * FROM unified_creator 
             WHERE creator_id = %s AND platform = %s AND is_deleted = 0
         """
-        creator = await db.get_first(creator_query, creator_id, platform)
+        creator = await db.get_first(creator_query, creator_id, mapped_platform)
         
         if not creator:
             raise HTTPException(status_code=404, detail="创作者不存在")
@@ -233,7 +298,7 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
             FROM unified_content 
             WHERE author_id = %s AND platform = %s AND is_deleted = 0
         """
-        content_stats = await db.get_first(content_stats_query, creator_id, platform)
+        content_stats = await db.get_first(content_stats_query, creator_id, mapped_platform)
         
         # 获取创作者的最新内容（最近10条）
         recent_content_query = """
@@ -246,7 +311,7 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
             ORDER BY create_time DESC 
             LIMIT 10
         """
-        recent_content = await db.query(recent_content_query, creator_id, platform)
+        recent_content = await db.query(recent_content_query, creator_id, mapped_platform)
         
         # 获取创作者的内容趋势（按月份统计）
         trend_query = """
@@ -262,7 +327,7 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
             ORDER BY month DESC
             LIMIT 12
         """
-        content_trends = await db.query(trend_query, creator_id, platform)
+        content_trends = await db.query(trend_query, creator_id, mapped_platform)
         
         # 获取热门标签
         tags_query = """
@@ -272,7 +337,7 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
             WHERE author_id = %s AND platform = %s AND is_deleted = 0
             AND tags IS NOT NULL AND tags != ''
         """
-        tags_result = await db.query(tags_query, creator_id, platform)
+        tags_result = await db.query(tags_query, creator_id, mapped_platform)
         
         # 统计标签使用频率
         tag_frequency = {}
@@ -297,9 +362,9 @@ async def get_creator_detail(creator_id: str, platform: str = Query(..., descrip
             "content_trends": content_trends or [],
             "popular_tags": [{"tag": tag, "count": count} for tag, count in sorted_tags],
             "platform_info": {
-                "platform": platform,
-                "platform_name": get_platform_name(platform),
-                "creator_url": generate_creator_url(creator_id, platform, creator)
+                "platform": mapped_platform,
+                "platform_name": get_platform_name(mapped_platform),
+                "creator_url": generate_creator_url(creator_id, mapped_platform, creator)
             }
         }
         
@@ -392,6 +457,24 @@ async def update_creator(creator_id: str, creator_data: Dict[str, Any]):
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        original_platform = creator_data.get("platform")
+        mapped_platform = platform_mapping.get(original_platform, original_platform)
+        if original_platform != mapped_platform:
+            logger.info(f"平台代码映射: {original_platform} -> {mapped_platform}")
+            creator_data["platform"] = mapped_platform
+        
         # 检查是否存在
         check_query = """
             SELECT id FROM unified_creator 
@@ -449,6 +532,21 @@ async def delete_creator(creator_id: str, platform: str = Query(..., description
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        mapped_platform = platform_mapping.get(platform, platform)
+        logger.info(f"平台代码映射: {platform} -> {mapped_platform}")
+        
         # 软删除
         now_ts = int(time.time() * 1000)
         update_query = """
@@ -457,7 +555,7 @@ async def delete_creator(creator_id: str, platform: str = Query(..., description
             WHERE creator_id = %s AND platform = %s
         """
         
-        result = await db.execute(update_query, now_ts, creator_id, platform)
+        result = await db.execute(update_query, now_ts, creator_id, mapped_platform)
         
         if result == 0:
             raise HTTPException(status_code=404, detail="创作者不存在")
@@ -482,10 +580,24 @@ async def add_creator_from_content(content_data: Dict[str, Any]):
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
         # 从内容数据中提取创作者信息
+        original_platform = content_data.get("platform")
+        mapped_platform = platform_mapping.get(original_platform, original_platform)
+        
         creator_data = {
             "creator_id": content_data.get("author_id"),
-            "platform": content_data.get("platform"),
+            "platform": mapped_platform,
             "name": content_data.get("author_name"),
             "nickname": content_data.get("author_nickname"),
             "avatar": content_data.get("author_avatar"),
@@ -497,6 +609,9 @@ async def add_creator_from_content(content_data: Dict[str, Any]):
             "add_ts": int(time.time() * 1000),
             "last_modify_ts": int(time.time() * 1000)
         }
+        
+        if original_platform != mapped_platform:
+            logger.info(f"平台代码映射: {original_platform} -> {mapped_platform}")
         
         # 验证必填字段
         if not creator_data["creator_id"] or not creator_data["platform"]:
@@ -540,6 +655,22 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
         if not creator_id or not platform:
             raise HTTPException(status_code=400, detail="缺少创作者ID或平台信息")
         
+        # 🆕 平台代码映射：前端代码 -> 数据库代码
+        platform_mapping = {
+            'dy': 'douyin',
+            'ks': 'kuaishou',
+            'xhs': 'xhs',
+            'bili': 'bilibili',
+            'wb': 'weibo',
+            'tieba': 'tieba',
+            'zhihu': 'zhihu'
+        }
+        
+        # 进行平台代码映射
+        mapped_platform = platform_mapping.get(platform, platform)
+        if platform != mapped_platform:
+            logger.info(f"平台代码映射: {platform} -> {mapped_platform}")
+        
         db = await _get_db_connection()
         if not db:
             raise HTTPException(status_code=500, detail="数据库连接失败")
@@ -549,7 +680,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
             SELECT * FROM unified_creator 
             WHERE creator_id = %s AND platform = %s AND is_deleted = 0
         """
-        creator = await db.get_first(query, creator_id, platform)
+        creator = await db.get_first(query, creator_id, mapped_platform)
         
         if not creator:
             raise HTTPException(status_code=404, detail="创作者不存在")
@@ -557,7 +688,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
         # 根据平台获取最新数据
         updated_data = {}
         
-        if platform == "dy":  # 抖音
+        if mapped_platform == "douyin":  # 抖音
             try:
                 # TODO: 实现抖音创作者数据刷新
                 # 这里需要调用抖音的API获取最新数据
@@ -573,7 +704,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
                 logger.error(f"刷新抖音创作者数据失败: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"刷新抖音创作者数据失败: {str(e)}")
         
-        elif platform == "xhs":  # 小红书
+        elif mapped_platform == "xhs":  # 小红书
             try:
                 # TODO: 实现小红书创作者数据刷新
                 updated_data = {
@@ -587,7 +718,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
                 logger.error(f"刷新小红书创作者数据失败: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"刷新小红书创作者数据失败: {str(e)}")
         
-        elif platform == "ks":  # 快手
+        elif mapped_platform == "kuaishou":  # 快手
             try:
                 # TODO: 实现快手创作者数据刷新
                 updated_data = {
@@ -601,7 +732,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
                 logger.error(f"刷新快手创作者数据失败: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"刷新快手创作者数据失败: {str(e)}")
         
-        elif platform == "bili":  # B站
+        elif mapped_platform == "bilibili":  # B站
             try:
                 # TODO: 实现B站创作者数据刷新
                 updated_data = {
@@ -652,7 +783,7 @@ async def refresh_creator_data(creator_data: Dict[str, Any]):
             "message": "创作者数据刷新成功",
             "data": {
                 "creator_id": creator_id,
-                "platform": platform,
+                "platform": mapped_platform,
                 "updated_data": updated_data
             }
         }

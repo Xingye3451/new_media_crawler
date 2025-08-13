@@ -383,6 +383,7 @@ class KuaiShouClient(AbstractApiClient):
     async def get_all_videos_by_creator(
         self,
         user_id: str,
+        max_count: int = None,
         crawl_interval: float = 1.0,
         callback: Optional[Callable] = None,
     ) -> List[Dict]:
@@ -390,6 +391,7 @@ class KuaiShouClient(AbstractApiClient):
         获取指定用户下的所有发过的帖子，该方法会一直查找一个用户下的所有帖子信息
         Args:
             user_id: 用户ID
+            max_count: 最大获取数量（可选，None表示获取所有）
             crawl_interval: 爬取一次的延迟单位（秒）
             callback: 一次分页爬取结束后的更新回调函数
         Returns:
@@ -414,6 +416,10 @@ class KuaiShouClient(AbstractApiClient):
         iteration_count = 0
 
         while pcursor != "no_more" and iteration_count < max_iterations:
+            # 检查是否已达到数量限制
+            if max_count is not None and len(result) >= max_count:
+                utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 已达到数量限制 {max_count}，停止获取")
+                break
             iteration_count += 1
             utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 第 {iteration_count} 次查询，pcursor: {pcursor}")
             
@@ -429,8 +435,9 @@ class KuaiShouClient(AbstractApiClient):
                 vision_profile_photo_list = videos_res.get("visionProfilePhotoList", {})
                 result_code = vision_profile_photo_list.get("result")
                 if result_code and result_code != 1:
-                    utils.logger.error(f"[KuaiShouClient.get_all_videos_by_creator] API返回错误码: {result_code}")
+                    utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] API返回结果码: {result_code}")
                     
+                    # 只对真正的错误码抛出异常
                     if result_code == 400002:
                         utils.logger.error("🚨 检测到反爬虫机制：需要验证码验证")
                         raise Exception("反爬虫机制触发：需要验证码验证，请重新登录或稍后重试")
@@ -440,9 +447,13 @@ class KuaiShouClient(AbstractApiClient):
                     elif result_code == 403:
                         utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
                         raise Exception("反爬虫机制触发：访问被禁止")
+                    elif result_code == 2:
+                        # 错误码2通常表示"没有更多数据"或"正常结束"，不是错误
+                        utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 结果码2：没有更多数据，正常结束")
+                        break
                     else:
-                        utils.logger.error(f"🚨 未知错误码: {result_code}")
-                        raise Exception(f"API返回错误码: {result_code}")
+                        utils.logger.warning(f"⚠️ 未知结果码: {result_code}，继续处理")
+                        # 不抛出异常，继续处理
 
             # 🆕 添加详细调试日志
             utils.logger.debug(f"[KuaiShouClient.get_all_videos_by_creator] API响应: {videos_res}")
@@ -463,7 +474,19 @@ class KuaiShouClient(AbstractApiClient):
             if callback:
                 await callback(videos)
             await asyncio.sleep(crawl_interval)
-            result.extend(videos)
+            
+            # 添加视频到结果列表，但不超过数量限制
+            if max_count is not None:
+                remaining_count = max_count - len(result)
+                if remaining_count > 0:
+                    result.extend(videos[:remaining_count])
+                    if len(videos) > remaining_count:
+                        utils.logger.info(f"[KuaiShouClient.get_all_videos_by_creator] 已达到数量限制 {max_count}，停止获取更多视频")
+                        break
+                else:
+                    break
+            else:
+                result.extend(videos)
             
             # 如果连续多次没有获取到视频，提前结束
             if len(videos) == 0 and iteration_count > 3:
@@ -524,7 +547,7 @@ class KuaiShouClient(AbstractApiClient):
                     vision_search_photo = search_result.get("visionSearchPhoto", {})
                     if vision_search_photo.get("result") != 1:
                         result_code = vision_search_photo.get("result")
-                        utils.logger.error(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索失败，错误码: {result_code}")
+                        utils.logger.info(f"[KuaiShouClient.search_user_videos] 第 {current_page} 页搜索结果码: {result_code}")
                         
                         # 🆕 检测反爬虫机制
                         if result_code == 400002:
@@ -536,11 +559,14 @@ class KuaiShouClient(AbstractApiClient):
                         elif result_code == 403:
                             utils.logger.error("🚨 检测到反爬虫机制：访问被禁止")
                             raise Exception("反爬虫机制触发：访问被禁止")
+                        elif result_code == 2:
+                            # 错误码2通常表示"没有更多数据"或"正常结束"，不是错误
+                            utils.logger.info(f"[KuaiShouClient.search_user_videos] 结果码2：没有更多搜索结果，正常结束")
+                            break
                         else:
-                            utils.logger.error(f"🚨 未知错误码: {result_code}")
-                            raise Exception(f"搜索API返回错误码: {result_code}")
-                        
-                        break
+                            utils.logger.warning(f"⚠️ 未知结果码: {result_code}，继续处理")
+                            # 不抛出异常，继续处理
+                            break
                     
                     search_session_id = vision_search_photo.get("searchSessionId", "")
                     feeds = vision_search_photo.get("feeds", [])

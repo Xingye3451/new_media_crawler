@@ -585,7 +585,7 @@ class KuaishouCrawler(AbstractCrawler):
                                            keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
-                                           proxy_strategy: str = "disabled") -> List[Dict]:
+                                           proxy_ip: str = None) -> List[Dict]:
         """
         从数据库获取创作者列表进行爬取（参考B站实现）
         Args:
@@ -598,7 +598,7 @@ class KuaishouCrawler(AbstractCrawler):
             get_comments: 是否获取评论
             save_data_option: 数据保存方式
             use_proxy: 是否使用代理
-            proxy_strategy: 代理策略
+            proxy_ip: 指定代理IP地址
         Returns:
             List[Dict]: 爬取结果列表
         """
@@ -656,14 +656,15 @@ class KuaishouCrawler(AbstractCrawler):
                                 callback=self.fetch_creator_video_detail,
                             )
                     else:
-                        # 获取创作者的所有视频
-                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
+                        # 获取创作者的所有视频（限制数量）
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的视频（每个创作者限制: {max_count} 个）")
                         all_video_list = await self.ks_client.get_all_videos_by_creator(
                             user_id=user_id,
+                            max_count=max_count,  # 每个创作者都爬取指定数量
                             crawl_interval=random.random(),
                             callback=self.fetch_creator_video_detail,
                         )
-                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
+                        utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                     
                     if all_video_list:
                         utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 获取到 {len(all_video_list)} 个视频")
@@ -686,6 +687,8 @@ class KuaishouCrawler(AbstractCrawler):
                                 # 添加到结果列表
                                 all_results.append(video_item)
                                 utils.logger.debug(f"[KuaishouCrawler.get_creators_and_notes_from_db] 视频处理完成，已添加到结果列表")
+                                
+
                                 
                             except Exception as e:
                                 utils.logger.error(f"[KuaishouCrawler.get_creators_and_notes_from_db] 处理视频失败: {e}")

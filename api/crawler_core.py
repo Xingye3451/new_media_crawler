@@ -473,6 +473,21 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                     utils.logger.info(f"[TASK_{task_id}] selected_creators 属性存在: {hasattr(request, 'selected_creators')}")
                     utils.logger.info(f"[TASK_{task_id}] selected_creators 值: {getattr(request, 'selected_creators', None)}")
                     
+                    # 🆕 平台代码映射：前端代码 -> 数据库代码
+                    platform_mapping = {
+                        'dy': 'douyin',
+                        'ks': 'kuaishou',
+                        'xhs': 'xhs',
+                        'bili': 'bilibili',
+                        'wb': 'weibo',
+                        'tieba': 'tieba',
+                        'zhihu': 'zhihu'
+                    }
+                    
+                    # 进行平台代码映射
+                    mapped_platform = platform_mapping.get(request.platform, request.platform)
+                    utils.logger.info(f"[TASK_{task_id}] 平台代码映射: {request.platform} -> {mapped_platform}")
+                    
                     if hasattr(request, 'selected_creators') and request.selected_creators:
                         # 使用用户选择的创作者
                         utils.logger.info(f"[TASK_{task_id}] 使用用户选择的创作者，数量: {len(request.selected_creators)}")
@@ -482,7 +497,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                             WHERE platform = %s AND creator_id IN ({})
                             ORDER BY last_modify_ts DESC
                         """.format(','.join(['%s'] * len(request.selected_creators)))
-                        creators = await db.query(creators_query, request.platform, *request.selected_creators)
+                        creators = await db.query(creators_query, mapped_platform, *request.selected_creators)
                         utils.logger.info(f"[TASK_{task_id}] 用户选择了 {len(creators)} 个创作者")
                         utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
                     else:
@@ -495,12 +510,12 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                             ORDER BY last_modify_ts DESC
                             LIMIT %s
                         """
-                        creators = await db.query(creators_query, request.platform, request.max_notes_count)
+                        creators = await db.query(creators_query, mapped_platform, request.max_notes_count)
                         utils.logger.info(f"[TASK_{task_id}] 找到 {len(creators)} 个创作者（自动选择）")
                         utils.logger.info(f"[TASK_{task_id}] 创作者列表: {[c.get('name', c.get('nickname', '未知')) for c in creators]}")
                     
                     if not creators:
-                        raise Exception(f"平台 {request.platform} 没有找到可用的创作者")
+                        raise Exception(f"平台 {request.platform} (映射为 {mapped_platform}) 没有找到可用的创作者")
                     
                     # 先初始化爬虫（创建客户端等）
                     await crawler.start()
@@ -521,7 +536,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                         get_comments=request.get_comments,
                         save_data_option=request.save_data_option,
                         use_proxy=request.use_proxy,
-                        proxy_strategy=request.proxy_strategy
+                        proxy_ip=request.proxy_ip
                     )
                 else:
                     raise ValueError(f"不支持的爬虫类型: {request.crawler_type}")
@@ -620,18 +635,13 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         # 🆕 检查登录状态 - 在任务启动前检查
         utils.logger.info("[CRAWLER_START] 检查登录状态...")
         
-        # 直接调用登录检查API
-        import httpx
+        # 使用登录服务直接调用登录检查逻辑
+        from services.login_service import check_platform_login_status
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://localhost:8100/api/v1/login/check",
-                    json={"platform": request.platform},
-                    timeout=10.0
-                )
-                login_result = response.json()
+            login_result = await check_platform_login_status(request.platform)
+            utils.logger.info(f"[CRAWLER_START] 登录服务检查结果: {login_result}")
         except Exception as e:
-            utils.logger.error(f"[CRAWLER_START] 登录检查API调用失败: {e}")
+            utils.logger.error(f"[CRAWLER_START] 登录服务检查失败: {e}")
             login_result = {"code": 500, "message": f"登录检查失败: {str(e)}"}
         
         if login_result["code"] != 200:

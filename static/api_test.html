@@ -936,6 +936,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('页面初始化开始...');
             
+            // 设置默认平台
+            selectedPlatform = 'xhs';
+            console.log(`🎯 设置默认平台: ${selectedPlatform}`);
+            
             // 重置所有平台状态为检查中
             resetAllPlatformStatus();
             
@@ -1295,6 +1299,8 @@
 
         // 选择单平台
         async function selectPlatform(platform) {
+            console.log(`🎯 选择平台: ${platform}`);
+            
             // 移除所有平台的选中状态
             const platformCards = document.querySelectorAll('#single-platform .platform-card');
             platformCards.forEach(card => card.classList.remove('selected'));
@@ -1305,6 +1311,8 @@
                 selectedCard.classList.add('selected');
                 selectedPlatform = platform;
                 
+                console.log(`✅ 平台 ${platform} 选择成功，selectedPlatform = ${selectedPlatform}`);
+                
                 // 不再重复检查登录状态，避免覆盖
                 // await checkPlatformLoginStatus(platform);
                 
@@ -1313,8 +1321,16 @@
                 
                 // 如果当前是创作者模式，重新加载创作者列表
                 const crawlerType = document.getElementById('single-crawler-type').value;
+                console.log(`📝 当前爬取类型: ${crawlerType}`);
+                
                 if (crawlerType === 'creator') {
+                    console.log(`🔄 创作者模式，开始加载创作者列表...`);
+                    // 🆕 清空之前的创作者选择
+                    selectedCreators.clear();
+                    availableCreators = [];
                     loadCreatorsForPlatform(platform);
+                } else {
+                    console.log(`ℹ️ 非创作者模式，跳过创作者列表加载`);
                 }
             } else if (selectedCard && selectedCard.classList.contains('disabled')) {
                 showToast('该平台未登录，请先进行登录', 'warning');
@@ -1942,12 +1958,40 @@
         // 加载指定平台的创作者列表
         async function loadCreatorsForPlatform(platform) {
             try {
-                const response = await fetch(`/api/v1/creators?platform=${platform}&page_size=100`);
+                console.log(`🔄 开始加载平台 ${platform} 的创作者列表...`);
+                
+                // 显示加载状态
+                const container = document.getElementById('creator-selection-list');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="loading-creators">
+                            <div class="spinner" style="margin-bottom: 8px;"></div>
+                            <div>正在加载创作者列表...</div>
+                        </div>
+                    `;
+                }
+                
+                // 使用相对路径，避免硬编码localhost
+                const apiUrl = `/api/v1/creators?platform=${platform}&page_size=100`;
+                console.log(`🌐 请求API: ${apiUrl}`);
+                
+                const response = await fetch(apiUrl);
+                console.log(`📡 HTTP响应状态: ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log(`📊 API响应:`, data);
                 
                 if (data.code === 200) {
                     availableCreators = data.data.creators || [];
                     selectedCreators.clear(); // 清空之前的选择
+                    
+                    console.log(`✅ 成功加载 ${availableCreators.length} 个创作者`);
+                    console.log(`📊 创作者平台: ${platform}`);
+                    console.log(`📊 创作者ID列表: ${availableCreators.map(c => c.creator_id)}`);
                     
                     // 默认全选
                     availableCreators.forEach(creator => {
@@ -1956,13 +2000,34 @@
                     
                     renderCreatorSelectionList();
                     updateSelectedCreatorsCount();
+                    
+                    // 更新状态显示
+                    updateStatus('single-platform-result', 
+                        `🎯 创作者列表加载成功\n\n` +
+                        `平台: ${getPlatformName(platform)}\n` +
+                        `创作者数量: ${availableCreators.length} 个\n` +
+                        `已选择: ${selectedCreators.size} 个\n\n` +
+                        `可以开始爬取任务`
+                    );
                 } else {
-                    console.error('加载创作者列表失败:', data.message);
+                    console.error('❌ 加载创作者列表失败:', data.message);
                     showEmptyCreatorList('加载失败，请稍后重试');
+                    
+                    updateStatus('single-platform-result', 
+                        `❌ 创作者列表加载失败\n\n` +
+                        `错误信息: ${data.message}\n` +
+                        `请检查网络连接或重试`
+                    );
                 }
             } catch (error) {
-                console.error('加载创作者列表失败:', error);
-                showEmptyCreatorList('网络错误，请稍后重试');
+                console.error('❌ 加载创作者列表失败:', error);
+                showEmptyCreatorList(`网络错误: ${error.message}`);
+                
+                updateStatus('single-platform-result', 
+                    `❌ 创作者列表加载失败\n\n` +
+                    `网络错误: ${error.message}\n` +
+                    `请检查网络连接或重试`
+                );
             }
         }
 
@@ -1970,11 +2035,21 @@
         function renderCreatorSelectionList() {
             const container = document.getElementById('creator-selection-list');
             
+            console.log(`🎨 开始渲染创作者列表，数量: ${availableCreators.length}`);
+            
+            if (!container) {
+                console.error('❌ 找不到创作者列表容器');
+                return;
+            }
+            
             if (availableCreators.length === 0) {
+                console.log('⚠️ 没有创作者数据，显示空状态');
                 showEmptyCreatorList('该平台暂无创作者，请先在创作者管理页面添加');
                 return;
             }
 
+            console.log(`📝 渲染 ${availableCreators.length} 个创作者`);
+            
             container.innerHTML = availableCreators.map(creator => `
                 <div class="creator-item">
                     <div style="flex-shrink: 0;">
@@ -1998,11 +2073,21 @@
                     </div>
                 </div>
             `).join('');
+            
+            console.log('✅ 创作者列表渲染完成');
         }
 
         // 显示空创作者列表
         function showEmptyCreatorList(message) {
             const container = document.getElementById('creator-selection-list');
+            
+            console.log(`📋 显示空创作者列表: ${message}`);
+            
+            if (!container) {
+                console.error('❌ 找不到创作者列表容器');
+                return;
+            }
+            
             container.innerHTML = `
                 <div class="no-creators">
                     <div style="font-size: 2em; margin-bottom: 8px;">👤</div>
@@ -2013,6 +2098,8 @@
                     </button>
                 </div>
             `;
+            
+            console.log('✅ 空创作者列表显示完成');
         }
 
         // 切换创作者选择状态
@@ -2075,6 +2162,9 @@
             const creatorInfoRow = document.getElementById('creator-info-row');
             const creatorSelectionRow = document.getElementById('creator-selection-row');
             
+            console.log(`🔄 爬取类型变化: ${crawlerType}`);
+            console.log(`📊 当前选中平台: ${selectedPlatform}`);
+            
             // 添加视觉反馈
             showToast(`已切换到${crawlerType === 'creator' ? '创作者主页' : '关键词搜索'}模式`, 'info');
             
@@ -2082,17 +2172,28 @@
                 // 创作者主页模式：显示关键词字段，但标记为可选
                 if (keywordsRow) {
                     keywordsRow.style.display = 'flex';
-                                                // 更新关键词字段的样式，表示它是可选的
-                            const keywordsField = document.getElementById('single-keywords');
-                            if (keywordsField) {
-                                keywordsField.placeholder = "例如：编程副业 (使用原生搜索)";
-                            }
+                    // 更新关键词字段的样式，表示它是可选的
+                    const keywordsField = document.getElementById('single-keywords');
+                    if (keywordsField) {
+                        keywordsField.placeholder = "例如：编程副业 (使用原生搜索)";
+                    }
                 }
                 creatorInfoRow.style.display = 'block';
                 creatorSelectionRow.style.display = 'block';
                 
-                // 加载当前平台的创作者列表
-                loadCreatorsForPlatform(selectedPlatform);
+                // 检查是否有选中的平台
+                if (selectedPlatform) {
+                    console.log(`🔄 创作者模式，开始加载平台 ${selectedPlatform} 的创作者列表...`);
+                    loadCreatorsForPlatform(selectedPlatform);
+                } else {
+                    console.log(`⚠️ 没有选中平台，无法加载创作者列表`);
+                    showToast('请先选择一个平台', 'warning');
+                    updateStatus('single-platform-result', 
+                        `⚠️ 创作者主页爬取模式\n\n` +
+                        `请先选择一个平台，然后系统将自动加载该平台的创作者列表\n\n` +
+                        `可以开始爬取任务`
+                    );
+                }
                 
                 // 更新状态显示
                 updateStatus('single-platform-result', 
