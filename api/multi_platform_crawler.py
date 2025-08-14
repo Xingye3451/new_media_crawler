@@ -525,9 +525,13 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
         execution_mode = getattr(request, 'execution_mode', 'parallel')
         account_strategy = getattr(request, 'account_strategy', 'smart')
         
-        # 🆕 获取代理信息
+        # 🆕 获取代理信息 - 支持自动降级为直接访问
         proxy_info = None
+        proxy_fallback_used = False  # 标记是否使用了降级策略
+        
         if request.use_proxy:
+            utils.logger.info(f"[MULTI_TASK_{task_id}] 用户选择了代理模式，开始获取代理...")
+            
             if hasattr(request, 'proxy_ip') and request.proxy_ip:
                 # 手动指定代理IP
                 try:
@@ -556,7 +560,7 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
                                 area=proxy_data.get('area'),
                                 description=proxy_data.get('description')
                             )
-                            utils.logger.info(f"[MULTI_TASK_{task_id}] 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
+                            utils.logger.info(f"[MULTI_TASK_{task_id}] ✅ 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
                             # 🆕 打印代理详细信息
                             utils.logger.info(f"[MULTI_TASK_{task_id}] 📋 代理详细信息:")
                             utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理ID: {proxy_info.id}")
@@ -567,9 +571,9 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
                             utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
                             utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ 过期时间: {proxy_info.expire_ts}")
                         else:
-                            utils.logger.warning(f"[MULTI_TASK_{task_id}] 指定的代理IP {request.proxy_ip} 不可用")
+                            utils.logger.warning(f"[MULTI_TASK_{task_id}] ⚠️ 指定的代理IP {request.proxy_ip} 不可用，将尝试其他方式")
                 except Exception as e:
-                    utils.logger.warning(f"[MULTI_TASK_{task_id}] 获取指定代理失败: {e}")
+                    utils.logger.warning(f"[MULTI_TASK_{task_id}] ⚠️ 获取指定代理失败: {e}")
             else:
                 # 自动获取代理
                 try:
@@ -577,7 +581,7 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
                     proxy_manager = await get_qingguo_proxy_manager()
                     proxy_info = await proxy_manager.get_available_proxy()
                     if proxy_info:
-                        utils.logger.info(f"[MULTI_TASK_{task_id}] 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[MULTI_TASK_{task_id}] ✅ 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
                         # 🆕 打印代理详细信息
                         utils.logger.info(f"[MULTI_TASK_{task_id}] 📋 自动代理详细信息:")
                         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 代理ID: {proxy_info.id}")
@@ -588,9 +592,20 @@ async def _run_multi_platform_crawler_task_internal(task_id: str, request: Multi
                         utils.logger.info(f"[MULTI_TASK_{task_id}]   ├─ 描述: {proxy_info.description}")
                         utils.logger.info(f"[MULTI_TASK_{task_id}]   └─ 过期时间: {proxy_info.expire_ts}")
                 except Exception as e:
-                    utils.logger.warning(f"[MULTI_TASK_{task_id}] 自动获取代理失败: {e}")
+                    utils.logger.warning(f"[MULTI_TASK_{task_id}] ⚠️ 自动获取代理失败: {e}")
+            
+            # 🆕 关键改进：如果所有代理获取方式都失败，自动降级为直接访问
+            if not proxy_info:
+                utils.logger.warning(f"[MULTI_TASK_{task_id}] ⚠️ 所有代理获取方式都失败，自动降级为直接访问模式")
+                utils.logger.info(f"[MULTI_TASK_{task_id}] 🔄 降级策略：禁用代理，使用直接网络连接")
+                proxy_fallback_used = True
+                # 强制禁用代理
+                request.use_proxy = False
+                utils.logger.info(f"[MULTI_TASK_{task_id}] ✅ 已启用代理降级策略，将使用直接访问模式")
+            else:
+                utils.logger.info(f"[MULTI_TASK_{task_id}] ✅ 代理获取成功，将使用代理模式")
         else:
-            utils.logger.info(f"[MULTI_TASK_{task_id}] 未启用代理功能")
+            utils.logger.info(f"[MULTI_TASK_{task_id}] ℹ️ 用户未启用代理功能，使用直接访问模式")
         
         # 执行爬取任务
         platform_results = {}

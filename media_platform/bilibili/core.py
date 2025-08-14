@@ -876,7 +876,7 @@ class BilibiliCrawler(AbstractCrawler):
                                            keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
-                                           proxy_strategy: str = "disabled") -> List[Dict]:
+                                           proxy_ip: str = None) -> List[Dict]:
         """
         从数据库获取创作者列表进行爬取
         Args:
@@ -889,7 +889,7 @@ class BilibiliCrawler(AbstractCrawler):
             get_comments: 是否获取评论
             save_data_option: 数据保存方式
             use_proxy: 是否使用代理
-            proxy_strategy: 代理策略
+            proxy_ip: 指定代理IP地址
         Returns:
             List[Dict]: 爬取结果列表
         """

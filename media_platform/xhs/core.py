@@ -260,6 +260,40 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                     )
                                     
                                     if detail_item:
+                                        # 🆕 打印原始数据结构
+                                        utils.logger.info("=" * 100)
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📊 小红书原始数据结构 - 详细信息")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 笔记ID: {note_id}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据结构类型: {type(detail_item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段数量: {len(detail_item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段列表: {list(detail_item.keys())}")
+                                        
+                                        # 打印关键字段值
+                                        key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                        for field in key_fields:
+                                            if field in detail_item:
+                                                value = detail_item[field]
+                                                if isinstance(value, dict):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                                elif isinstance(value, list):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                                else:
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {value}")
+                                            else:
+                                                utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: 不存在")
+                                        
+                                        # 打印完整数据结构（JSON格式）
+                                        import json
+                                        try:
+                                            json_str = json.dumps(detail_item, ensure_ascii=False, indent=2, default=str)
+                                            utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 完整数据结构:")
+                                            utils.logger.info(json_str)
+                                        except Exception as json_e:
+                                            utils.logger.warning(f"[XiaoHongShuCrawler.search] JSON序列化失败: {json_e}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 原始数据: {detail_item}")
+                                        
+                                        utils.logger.info("=" * 100)
+                                        
                                         # 合并基本信息到详细信息中
                                         detail_item.update({
                                             "source_keyword": keyword,
@@ -274,6 +308,41 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                         utils.logger.debug(f"[XiaoHongShuCrawler.search] 成功获取并存储笔记详细信息: {note_id}")
                                     else:
                                         utils.logger.debug(f"[XiaoHongShuCrawler.search] 详细信息获取失败，使用基本信息: {note_id}")
+                                        
+                                        # 🆕 打印基本信息数据结构
+                                        utils.logger.info("=" * 100)
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📊 小红书原始数据结构 - 基本信息")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 笔记ID: {note_id}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据结构类型: {type(item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段数量: {len(item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段列表: {list(item.keys())}")
+                                        
+                                        # 打印关键字段值
+                                        key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                        for field in key_fields:
+                                            if field in item:
+                                                value = item[field]
+                                                if isinstance(value, dict):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                                elif isinstance(value, list):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                                else:
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {value}")
+                                            else:
+                                                utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: 不存在")
+                                        
+                                        # 打印完整数据结构（JSON格式）
+                                        import json
+                                        try:
+                                            json_str = json.dumps(item, ensure_ascii=False, indent=2, default=str)
+                                            utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 完整数据结构:")
+                                            utils.logger.info(json_str)
+                                        except Exception as json_e:
+                                            utils.logger.warning(f"[XiaoHongShuCrawler.search] JSON序列化失败: {json_e}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 原始数据: {item}")
+                                        
+                                        utils.logger.info("=" * 100)
+                                        
                                         # 如果获取详细信息失败，使用基本信息
                                         item["source_keyword"] = keyword
                                         await self.xhs_store.store_content({**item, "task_id": self.task_id} if self.task_id else item)
@@ -281,6 +350,42 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                         
                                 except Exception as detail_e:
                                     utils.logger.debug(f"[XiaoHongShuCrawler.search] 获取详细信息异常，使用基本信息: {detail_e}")
+                                    
+                                    # 🆕 打印基本信息数据结构（异常情况）
+                                    utils.logger.info("=" * 100)
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📊 小红书原始数据结构 - 基本信息（异常情况）")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 笔记ID: {note_id}")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 异常信息: {detail_e}")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据结构类型: {type(item)}")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段数量: {len(item)}")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.search] 📋 数据字段列表: {list(item.keys())}")
+                                    
+                                    # 打印关键字段值
+                                    key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                    for field in key_fields:
+                                        if field in item:
+                                            value = item[field]
+                                            if isinstance(value, dict):
+                                                utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                            elif isinstance(value, list):
+                                                utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                            else:
+                                                utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: {value}")
+                                        else:
+                                            utils.logger.info(f"[XiaoHongShuCrawler.search] 📌 {field}: 不存在")
+                                    
+                                    # 打印完整数据结构（JSON格式）
+                                    import json
+                                    try:
+                                        json_str = json.dumps(item, ensure_ascii=False, indent=2, default=str)
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 完整数据结构:")
+                                        utils.logger.info(json_str)
+                                    except Exception as json_e:
+                                        utils.logger.warning(f"[XiaoHongShuCrawler.search] JSON序列化失败: {json_e}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.search] 📄 原始数据: {item}")
+                                    
+                                    utils.logger.info("=" * 100)
+                                    
                                     # 如果获取详细信息失败，使用基本信息
                                     item["source_keyword"] = keyword
                                     await self.xhs_store.store_content({**item, "task_id": self.task_id} if self.task_id else item)
@@ -345,7 +450,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                            keywords: str = None, account_id: str = None, session_id: str = None,
                                            login_type: str = "qrcode", get_comments: bool = False,
                                            save_data_option: str = "db", use_proxy: bool = False,
-                                           proxy_strategy: str = "disabled") -> List[Dict]:
+                                           proxy_ip: str = None) -> List[Dict]:
         """
         从数据库获取创作者列表进行爬取
         Args:
@@ -357,7 +462,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             get_comments: 是否获取评论
             save_data_option: 数据保存方式
             use_proxy: 是否使用代理
-            proxy_strategy: 代理策略
+            proxy_ip: 指定代理IP地址
         Returns:
             List[Dict]: 爬取结果列表
         """
@@ -452,16 +557,174 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             try:
                                 utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 处理第 {i+1} 条笔记")
                                 
-                                # 保存到数据库
-                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始保存到数据库")
-                                try:
-                                    await self.xhs_store.update_xhs_note(note_item, task_id=self.task_id)
-                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记数据保存成功")
-                                except Exception as e:
-                                    utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 保存笔记数据失败: {e}")
-                                    continue
+                                # 🆕 打印创作者爬取的原始数据结构
+                                utils.logger.info("=" * 100)
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📊 小红书原始数据结构 - 创作者爬取")
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 创作者: {creator_name}")
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 笔记索引: {i+1}/{len(all_notes_list)}")
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据结构类型: {type(note_item)}")
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段数量: {len(note_item)}")
+                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段列表: {list(note_item.keys())}")
                                 
-                                all_results.append(note_item)
+                                # 打印关键字段值
+                                key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                for field in key_fields:
+                                    if field in note_item:
+                                        value = note_item[field]
+                                        if isinstance(value, dict):
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                        elif isinstance(value, list):
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                        else:
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {value}")
+                                    else:
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: 不存在")
+                                
+                                # 打印完整数据结构（JSON格式）
+                                import json
+                                try:
+                                    json_str = json.dumps(note_item, ensure_ascii=False, indent=2, default=str)
+                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 完整数据结构:")
+                                    utils.logger.info(json_str)
+                                except Exception as json_e:
+                                    utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] JSON序列化失败: {json_e}")
+                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 原始数据: {note_item}")
+                                
+                                utils.logger.info("=" * 100)
+                                
+                                # 🆕 获取笔记详细信息（参考关键词搜索的实现）
+                                note_id = note_item.get("note_id")
+                                xsec_token = note_item.get("xsec_token", "")
+                                xsec_source = note_item.get("xsec_source", "")
+                                
+                                if note_id and xsec_token:
+                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取笔记详细信息: {note_id}")
+                                    try:
+                                        # 获取详细信息
+                                        detail_item = await self.xhs_client.get_note_by_id(
+                                            note_id=note_id,
+                                            xsec_source=xsec_source,
+                                            xsec_token=xsec_token
+                                        )
+                                        
+                                        if detail_item:
+                                            # 🆕 打印详细数据结构
+                                            utils.logger.info("=" * 100)
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📊 小红书详细数据结构 - 创作者爬取")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 创作者: {creator_name}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 笔记ID: {note_id}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据结构类型: {type(detail_item)}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段数量: {len(detail_item)}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段列表: {list(detail_item.keys())}")
+                                            
+                                            # 打印关键字段值
+                                            key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                            for field in key_fields:
+                                                if field in detail_item:
+                                                    value = detail_item[field]
+                                                    if isinstance(value, dict):
+                                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                                    elif isinstance(value, list):
+                                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                                    else:
+                                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {value}")
+                                                else:
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: 不存在")
+                                            
+                                            # 打印完整数据结构（JSON格式）
+                                            import json
+                                            try:
+                                                json_str = json.dumps(detail_item, ensure_ascii=False, indent=2, default=str)
+                                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 完整详细数据结构:")
+                                                utils.logger.info(json_str)
+                                            except Exception as json_e:
+                                                utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] JSON序列化失败: {json_e}")
+                                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 原始详细数据: {detail_item}")
+                                            
+                                            utils.logger.info("=" * 100)
+                                            
+                                            # 合并基本信息到详细信息中
+                                            detail_item.update({
+                                                "source_keyword": keywords or f"creator_{creator_name}",
+                                                "id": note_id,  # 确保ID字段存在
+                                                "xsec_source": xsec_source,
+                                                "xsec_token": xsec_token
+                                            })
+                                            
+                                            # 使用详细信息存储
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始保存详细信息到数据库")
+                                            try:
+                                                await self.xhs_store.store_content({**detail_item, "task_id": self.task_id} if self.task_id else detail_item)
+                                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记详细信息保存成功")
+                                                all_results.append(detail_item)
+                                            except Exception as e:
+                                                utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 保存笔记详细信息失败: {e}")
+                                                continue
+                                        else:
+                                            utils.logger.debug(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 详细信息获取失败，使用基本信息: {note_id}")
+                                            # 如果获取详细信息失败，使用基本信息
+                                            note_item["source_keyword"] = keywords or f"creator_{creator_name}"
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始保存基本信息到数据库")
+                                            try:
+                                                await self.xhs_store.store_content({**note_item, "task_id": self.task_id} if self.task_id else note_item)
+                                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记基本信息保存成功")
+                                                all_results.append(note_item)
+                                            except Exception as e:
+                                                utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 保存笔记基本信息失败: {e}")
+                                                continue
+                                            
+                                    except Exception as detail_e:
+                                        utils.logger.debug(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取详细信息异常，使用基本信息: {detail_e}")
+                                        
+                                        # 🆕 打印基本信息数据结构（异常情况）
+                                        utils.logger.info("=" * 100)
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📊 小红书基本信息数据结构 - 创作者爬取（异常情况）")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 创作者: {creator_name}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 笔记ID: {note_id}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 异常信息: {detail_e}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据结构类型: {type(note_item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段数量: {len(note_item)}")
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📋 数据字段列表: {list(note_item.keys())}")
+                                        
+                                        # 打印关键字段值
+                                        key_fields = ["note_id", "id", "type", "desc", "user", "interact_info", "image_list", "tag_list", "time"]
+                                        for field in key_fields:
+                                            if field in note_item:
+                                                value = note_item[field]
+                                                if isinstance(value, dict):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 字段: {list(value.keys())}")
+                                                elif isinstance(value, list):
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {type(value)} - 长度: {len(value)}")
+                                                else:
+                                                    utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: {value}")
+                                            else:
+                                                utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📌 {field}: 不存在")
+                                        
+                                        # 打印完整数据结构（JSON格式）
+                                        import json
+                                        try:
+                                            json_str = json.dumps(note_item, ensure_ascii=False, indent=2, default=str)
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 完整基本信息结构:")
+                                            utils.logger.info(json_str)
+                                        except Exception as json_e:
+                                            utils.logger.warning(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] JSON序列化失败: {json_e}")
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 📄 原始基本信息: {note_item}")
+                                        
+                                        utils.logger.info("=" * 100)
+                                        
+                                        # 如果获取详细信息失败，使用基本信息
+                                        note_item["source_keyword"] = keywords or f"creator_{creator_name}"
+                                        utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 开始保存基本信息到数据库（异常情况）")
+                                        try:
+                                            await self.xhs_store.store_content({**note_item, "task_id": self.task_id} if self.task_id else note_item)
+                                            utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记基本信息保存成功（异常情况）")
+                                            all_results.append(note_item)
+                                        except Exception as e:
+                                            utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 保存笔记基本信息失败（异常情况）: {e}")
+                                            continue
+                                else:
+                                    utils.logger.debug(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 笔记缺少必要信息，跳过: note_id={note_id}, xsec_token={xsec_token}")
+                                    continue
                                 
                                 # 检查是否达到数量限制
                                 if len(all_results) >= max_count:

@@ -122,7 +122,7 @@ PLATFORM_FIELD_MAPPINGS = {
         "raw_data": "raw_data"
     },
     "xhs": {
-        "content_id": "id",  # 修复：使用顶层的id字段
+        "content_id": "note_id",  # 修复：使用note_id字段作为内容ID
         "content_type": "type",  # 修复：使用顶层的type字段
         "title": "desc",  # 修复：使用顶层的desc字段
         "description": "desc",  # 修复：使用顶层的desc字段

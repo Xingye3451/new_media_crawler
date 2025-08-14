@@ -421,11 +421,14 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
             # 🆕 标记浏览器由外部管理，避免重复关闭
             crawler._externally_managed = True
             
-            # 🆕 设置代理信息
+            # 🆕 设置代理信息 - 支持降级策略
             if proxy_info and request.use_proxy:
                 crawler.proxy_info = proxy_info
-                utils.logger.info(f"[TASK_{task_id}] 设置代理: {proxy_info.ip}:{proxy_info.port}")
+                utils.logger.info(f"[TASK_{task_id}] ✅ 设置代理: {proxy_info.ip}:{proxy_info.port}")
                 await log_task_step(task_id, request.platform, "proxy_setup", f"设置代理: {proxy_info.ip}:{proxy_info.port}", "INFO", 42, request.account_id)
+            elif not request.use_proxy:
+                utils.logger.info(f"[TASK_{task_id}] ℹ️ 使用直接访问模式（无代理）")
+                await log_task_step(task_id, request.platform, "proxy_setup", "使用直接访问模式（无代理）", "INFO", 42, request.account_id)
             
             utils.logger.info(f"[TASK_{task_id}] ✅ 爬虫实例创建成功")
             await log_task_step(task_id, request.platform, "crawler_ready", "爬虫实例就绪", "INFO", 45, request.account_id)
@@ -663,9 +666,13 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
         
         utils.logger.info(f"[CRAWLER_START] 平台 {request.platform} 登录状态正常")
         
-        # 🆕 获取代理信息
+        # 🆕 获取代理信息 - 支持自动降级为直接访问
         proxy_info = None
+        proxy_fallback_used = False  # 标记是否使用了降级策略
+        
         if request.use_proxy:
+            utils.logger.info(f"[CRAWLER_START] 用户选择了代理模式，开始获取代理...")
+            
             if hasattr(request, 'proxy_ip') and request.proxy_ip:
                 # 手动指定代理IP
                 try:
@@ -694,7 +701,7 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
                                 area=proxy_data.get('area'),
                                 description=proxy_data.get('description')
                             )
-                            utils.logger.info(f"[CRAWLER_START] 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
+                            utils.logger.info(f"[CRAWLER_START] ✅ 使用指定代理: {proxy_info.ip}:{proxy_info.port}")
                             # 🆕 打印代理详细信息
                             utils.logger.info(f"[CRAWLER_START] 📋 代理详细信息:")
                             utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
@@ -705,16 +712,16 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
                             utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
                             utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
                         else:
-                            utils.logger.warning(f"[CRAWLER_START] 指定的代理IP {request.proxy_ip} 不可用")
+                            utils.logger.warning(f"[CRAWLER_START] ⚠️ 指定的代理IP {request.proxy_ip} 不可用，将尝试其他方式")
                 except Exception as e:
-                    utils.logger.warning(f"[CRAWLER_START] 获取指定代理失败: {e}")
+                    utils.logger.warning(f"[CRAWLER_START] ⚠️ 获取指定代理失败: {e}")
             elif request.account_id:
                 # 使用登录时的代理
                 try:
                     from api.login_proxy_helper import get_proxy_from_login_token
                     proxy_info = await get_proxy_from_login_token(request.account_id, request.platform)
                     if proxy_info:
-                        utils.logger.info(f"[CRAWLER_START] 获取到登录代理: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[CRAWLER_START] ✅ 获取到登录代理: {proxy_info.ip}:{proxy_info.port}")
                         # 🆕 打印代理详细信息
                         utils.logger.info(f"[CRAWLER_START] 📋 登录代理详细信息:")
                         utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
@@ -725,9 +732,9 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
                         utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
                         utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
                     else:
-                        utils.logger.info(f"[CRAWLER_START] 未找到登录代理，将使用新代理")
+                        utils.logger.info(f"[CRAWLER_START] ℹ️ 未找到登录代理，将尝试自动获取")
                 except Exception as e:
-                    utils.logger.warning(f"[CRAWLER_START] 获取登录代理失败: {e}")
+                    utils.logger.warning(f"[CRAWLER_START] ⚠️ 获取登录代理失败: {e}")
             
             # 如果没有获取到代理，尝试自动获取
             if not proxy_info:
@@ -736,7 +743,7 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
                     proxy_manager = await get_qingguo_proxy_manager()
                     proxy_info = await proxy_manager.get_available_proxy()
                     if proxy_info:
-                        utils.logger.info(f"[CRAWLER_START] 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
+                        utils.logger.info(f"[CRAWLER_START] ✅ 自动获取代理: {proxy_info.ip}:{proxy_info.port}")
                         # 🆕 打印代理详细信息
                         utils.logger.info(f"[CRAWLER_START] 📋 自动代理详细信息:")
                         utils.logger.info(f"[CRAWLER_START]   ├─ 代理ID: {proxy_info.id}")
@@ -747,9 +754,20 @@ async def start_crawler(request: CrawlerRequest, background_tasks: BackgroundTas
                         utils.logger.info(f"[CRAWLER_START]   ├─ 描述: {proxy_info.description}")
                         utils.logger.info(f"[CRAWLER_START]   └─ 过期时间: {proxy_info.expire_ts}")
                 except Exception as e:
-                    utils.logger.warning(f"[CRAWLER_START] 自动获取代理失败: {e}")
+                    utils.logger.warning(f"[CRAWLER_START] ⚠️ 自动获取代理失败: {e}")
+            
+            # 🆕 关键改进：如果所有代理获取方式都失败，自动降级为直接访问
+            if not proxy_info:
+                utils.logger.warning(f"[CRAWLER_START] ⚠️ 所有代理获取方式都失败，自动降级为直接访问模式")
+                utils.logger.info(f"[CRAWLER_START] 🔄 降级策略：禁用代理，使用直接网络连接")
+                proxy_fallback_used = True
+                # 强制禁用代理
+                request.use_proxy = False
+                utils.logger.info(f"[CRAWLER_START] ✅ 已启用代理降级策略，将使用直接访问模式")
+            else:
+                utils.logger.info(f"[CRAWLER_START] ✅ 代理获取成功，将使用代理模式")
         else:
-            utils.logger.info(f"[CRAWLER_START] 未启用代理功能")
+            utils.logger.info(f"[CRAWLER_START] ℹ️ 用户未启用代理功能，使用直接访问模式")
         
         # 生成任务ID
         task_id = str(uuid.uuid4())
