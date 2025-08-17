@@ -495,7 +495,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                         # 使用用户选择的创作者
                         utils.logger.info(f"[TASK_{task_id}] 使用用户选择的创作者，数量: {len(request.selected_creators)}")
                         creators_query = """
-                            SELECT creator_id, platform, name, nickname 
+                            SELECT creator_id, platform, name, nickname, sec_uid 
                             FROM unified_creator 
                             WHERE platform = %s AND creator_id IN ({})
                             ORDER BY last_modify_ts DESC
@@ -507,7 +507,7 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                         # 获取所有创作者（按最大数量限制）
                         utils.logger.info(f"[TASK_{task_id}] 未选择特定创作者，获取所有创作者")
                         creators_query = """
-                            SELECT creator_id, platform, name, nickname 
+                            SELECT creator_id, platform, name, nickname, sec_uid 
                             FROM unified_creator 
                             WHERE platform = %s AND is_deleted = 0
                             ORDER BY last_modify_ts DESC
@@ -520,8 +520,9 @@ async def _run_crawler_task_internal(task_id: str, request: CrawlerRequest, prox
                     if not creators:
                         raise Exception(f"平台 {request.platform} (映射为 {mapped_platform}) 没有找到可用的创作者")
                     
-                    # 先初始化爬虫（创建客户端等）
-                    await crawler.start()
+                    # 🆕 修复：创作者模式不需要调用start()，直接调用专门的创作者爬取方法
+                    # 先初始化爬虫（创建客户端等），但不执行start()中的爬取逻辑
+                    await crawler._init_crawler_only()
                     
                     # 🆕 添加调试日志，确保关键字正确传递
                     utils.logger.debug(f"[TASK_{task_id}] 传递给创作者爬取方法的关键字: '{request.keywords}'")

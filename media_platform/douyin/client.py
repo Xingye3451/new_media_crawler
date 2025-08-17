@@ -12,8 +12,9 @@
 import asyncio
 import copy
 import json
+import time
 import urllib.parse
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 from playwright.async_api import BrowserContext
@@ -333,6 +334,135 @@ class DOUYINClient(AbstractApiClient):
         headers["Referer"] = urllib.parse.quote(referer_url, safe=':/')
         return await self.get(uri, params)
 
+    async def search_user_videos(self, user_id: str, keywords: str, max_count: int = 50) -> List[Dict]:
+        """
+        搜索指定用户的视频（使用主页内搜索接口）
+        Args:
+            user_id: 用户ID
+            keywords: 搜索关键词
+            max_count: 最大获取数量
+        Returns:
+            List[Dict]: 视频列表
+        """
+        try:
+            utils.logger.info(f"[DOUYINClient.search_user_videos] 开始搜索用户 {user_id} 的关键词 '{keywords}' 视频")
+            
+            # 使用抖音主页内搜索接口
+            offset = 0
+            all_matching_videos = []
+            
+            # 限制搜索页数，避免过度请求
+            max_search_pages = 10
+            current_page = 0
+            
+            while current_page < max_search_pages and len(all_matching_videos) < max_count:
+                current_page += 1
+                utils.logger.info(f"[DOUYINClient.search_user_videos] 搜索第 {current_page} 页")
+                
+                try:
+                    # 构建主页内搜索请求参数
+                    search_params = {
+                        "device_platform": "webapp",
+                        "aid": "6383",
+                        "channel": "channel_pc_web",
+                        "search_channel": "aweme_personal_home_video",  # 主页内搜索
+                        "search_source": "normal_search",
+                        "search_scene": "douyin_search",
+                        "sort_type": "0",
+                        "publish_time": "0",
+                        "is_filter_search": "0",
+                        "query_correct_type": "1",
+                        "keyword": keywords,
+                        "enable_history": "1",
+                        "search_id": f"{int(time.time() * 1000)}CD94424B022C85DE74",  # 生成搜索ID
+                        "offset": str(offset),
+                        "count": "10",
+                        "from_user": user_id,  # 指定用户ID
+                        "pc_client_type": "1",
+                        "pc_libra_divert": "Windows",
+                        "support_h265": "1",
+                        "support_dash": "1",
+                        "version_code": "170400",
+                        "version_name": "17.4.0",
+                        "cookie_enabled": "true",
+                        "screen_width": "2560",
+                        "screen_height": "1440",
+                        "browser_language": "zh-CN",
+                        "browser_platform": "Win32",
+                        "browser_name": "Chrome",
+                        "browser_version": "139.0.0.0",
+                        "browser_online": "true",
+                        "engine_name": "Blink",
+                        "engine_version": "139.0.0.0",
+                        "os_name": "Windows",
+                        "os_version": "10",
+                        "cpu_core_num": "16",
+                        "device_memory": "8",
+                        "platform": "PC",
+                        "downlink": "10",
+                        "effective_type": "4g",
+                        "round_trip_time": "150",
+                        "webid": "7519425222413321738"
+                    }
+                    
+                    # 设置请求头
+                    headers = copy.copy(self.headers)
+                    headers["Referer"] = f"https://www.douyin.com/user/{user_id}"
+                    
+                    # 调用主页内搜索接口
+                    search_result = await self.get("/aweme/v1/web/home/search/item/", search_params, headers=headers)
+                    
+                    utils.logger.debug(f"[DOUYINClient.search_user_videos] 第 {current_page} 页搜索API响应: {search_result}")
+                    
+                    if not search_result:
+                        utils.logger.warning(f"[DOUYINClient.search_user_videos] 第 {current_page} 页搜索无结果")
+                        break
+                    
+                    # 检查搜索结果
+                    aweme_list = search_result.get("aweme_list", [])
+                    if not aweme_list:
+                        utils.logger.info(f"[DOUYINClient.search_user_videos] 第 {current_page} 页没有更多结果")
+                        break
+                    
+                    # 处理搜索结果
+                    for aweme_item in aweme_list:
+                        try:
+                            video_data = aweme_item.get("item", {})
+                            if video_data:
+                                all_matching_videos.append(video_data)
+                                utils.logger.info(f"[DOUYINClient.search_user_videos] 找到匹配用户 {user_id} 的视频: {video_data.get('desc', '')[:50]}")
+                                
+                                if len(all_matching_videos) >= max_count:
+                                    utils.logger.info(f"[DOUYINClient.search_user_videos] 已达到最大数量限制 {max_count}")
+                                    break
+                        except Exception as e:
+                            utils.logger.warning(f"[DOUYINClient.search_user_videos] 处理视频时出错: {e}")
+                            continue
+                    
+                    # 检查是否还有更多结果
+                    has_more = search_result.get("has_more", 0)
+                    if not has_more:
+                        utils.logger.info(f"[DOUYINClient.search_user_videos] 没有更多结果")
+                        break
+                    
+                    # 更新offset用于下一页
+                    offset += 10  # 每页10个结果
+                    
+                    # 添加延迟，避免请求过于频繁
+                    await asyncio.sleep(1.0)
+                    
+                except Exception as e:
+                    utils.logger.error(f"[DOUYINClient.search_user_videos] 第 {current_page} 页搜索失败: {e}")
+                    break
+            
+            utils.logger.info(f"[DOUYINClient.search_user_videos] 主页内搜索完成，找到 {len(all_matching_videos)} 个匹配用户 {user_id} 的视频")
+            
+            return all_matching_videos
+            
+        except Exception as e:
+            utils.logger.error(f"[DOUYINClient.search_user_videos] 搜索用户视频失败: {e}")
+            return []
+
     async def get_aweme_all_comments(
             self,
             aweme_id: str,
@@ -399,33 +529,127 @@ class DOUYINClient(AbstractApiClient):
             "publish_video_strategy_type": 2,
             "personal_center_strategy": 1,
         }
-        return await self.get(uri, params)
+        
+        # 设置请求头
+        headers = copy.copy(self.headers)
+        headers["Referer"] = f"https://www.douyin.com/user/{sec_user_id}"
+        
+        utils.logger.debug(f"[DOUYINClient.get_user_info] 请求参数: {params}")
+        
+        result = await self.get(uri, params, headers=headers)
+        
+        utils.logger.debug(f"[DOUYINClient.get_user_info] API响应: {result}")
+        
+        return result
 
     async def get_user_aweme_posts(self, sec_user_id: str, max_cursor: str = "") -> Dict:
         uri = "/aweme/v1/web/aweme/post/"
         params = {
+            "device_platform": "webapp",
+            "aid": "6383",
+            "channel": "channel_pc_web",
             "sec_user_id": sec_user_id,
-            "count": 18,
             "max_cursor": max_cursor,
             "locate_query": "false",
-            "publish_video_strategy_type": 2,
-            'verifyFp': 'verify_ma3hrt8n_q2q2HyYA_uLyO_4N6D_BLvX_E2LgoGmkA1BU',
-            'fp': 'verify_ma3hrt8n_q2q2HyYA_uLyO_4N6D_BLvX_E2LgoGmkA1BU'
+            "show_live_replay_strategy": "1",
+            "need_time_list": "1",
+            "time_list_query": "0",
+            "whale_cut_token": "",
+            "cut_version": "1",
+            "count": "18",
+            "publish_video_strategy_type": "2",
+            "from_user_page": "1",
+            "update_version_code": "170400",
+            "pc_client_type": "1",
+            "pc_libra_divert": "Windows",
+            "support_h265": "1",
+            "support_dash": "1",
+            "cpu_core_num": "16",
+            "version_code": "290100",
+            "version_name": "29.1.0",
+            "cookie_enabled": "true",
+            "screen_width": "2560",
+            "screen_height": "1440",
+            "browser_language": "zh-CN",
+            "browser_platform": "Win32",
+            "browser_name": "Chrome",
+            "browser_version": "139.0.0.0",
+            "browser_online": "true",
+            "engine_name": "Blink",
+            "engine_version": "139.0.0.0",
+            "os_name": "Windows",
+            "os_version": "10",
+            "device_memory": "8",
+            "platform": "PC",
+            "downlink": "10",
+            "effective_type": "4g",
+            "round_trip_time": "150",
+            "webid": "7519425222413321738"
         }
-        return await self.get(uri, params)
+        
+        # 设置请求头
+        headers = copy.copy(self.headers)
+        headers["Referer"] = f"https://www.douyin.com/user/{sec_user_id}"
+        
+        utils.logger.debug(f"[DOUYINClient.get_user_aweme_posts] 请求参数: {params}")
+        
+        result = await self.get(uri, params, headers=headers)
+        
+        utils.logger.info(f"[DOUYINClient.get_user_aweme_posts] API响应状态: {result.get('status_code', 'unknown')}")
+        utils.logger.info(f"[DOUYINClient.get_user_aweme_posts] API响应has_more: {result.get('has_more', 'unknown')}")
+        utils.logger.info(f"[DOUYINClient.get_user_aweme_posts] API响应aweme_list长度: {len(result.get('aweme_list', []))}")
+        utils.logger.debug(f"[DOUYINClient.get_user_aweme_posts] API响应详情: {result}")
+        
+        return result
 
-    async def get_all_user_aweme_posts(self, sec_user_id: str, callback: Optional[Callable] = None):
+    async def get_all_user_aweme_posts(self, sec_user_id: str, callback: Optional[Callable] = None, max_count: int = None):
         posts_has_more = 1
         max_cursor = ""
         result = []
+        page_count = 0
+        
+        utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 开始获取用户 {sec_user_id} 的视频，最大数量限制: {max_count}")
+        
         while posts_has_more == 1:
-            aweme_post_res = await self.get_user_aweme_posts(sec_user_id, max_cursor)
-            posts_has_more = aweme_post_res.get("has_more", 0)
-            max_cursor = aweme_post_res.get("max_cursor")
-            aweme_list = aweme_post_res.get("aweme_list") if aweme_post_res.get("aweme_list") else []
-            utils.logger.info(
-                f"[DOUYINClient.get_all_user_aweme_posts] got sec_user_id:{sec_user_id} video len : {len(aweme_list)}")
-            if callback:
-                await callback(aweme_list)
-            result.extend(aweme_list)
+            page_count += 1
+            utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 获取第 {page_count} 页视频")
+            
+            try:
+                aweme_post_res = await self.get_user_aweme_posts(sec_user_id, max_cursor)
+                
+                if not aweme_post_res:
+                    utils.logger.error(f"[DOUYINClient.get_all_user_aweme_posts] 第 {page_count} 页API响应为空")
+                    break
+                
+                posts_has_more = aweme_post_res.get("has_more", 0)
+                max_cursor = aweme_post_res.get("max_cursor")
+                aweme_list = aweme_post_res.get("aweme_list") if aweme_post_res.get("aweme_list") else []
+                
+                utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 第 {page_count} 页获取到 {len(aweme_list)} 个视频")
+                utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] has_more: {posts_has_more}, max_cursor: {max_cursor}")
+                
+                # 🆕 应用数量限制
+                if max_count is not None:
+                    remaining_count = max_count - len(result)
+                    if remaining_count <= 0:
+                        utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 已达到最大数量限制 {max_count}，停止获取")
+                        break
+                    
+                    # 只取需要的数量
+                    if len(aweme_list) > remaining_count:
+                        aweme_list = aweme_list[:remaining_count]
+                        utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 限制数量，只取前 {remaining_count} 个视频")
+                
+                if callback:
+                    await callback(aweme_list)
+                result.extend(aweme_list)
+                
+                # 🆕 增加延迟，避免触发反爬虫
+                await asyncio.sleep(2.0)
+                
+            except Exception as e:
+                utils.logger.error(f"[DOUYINClient.get_all_user_aweme_posts] 第 {page_count} 页获取失败: {e}")
+                break
+        
+        utils.logger.info(f"[DOUYINClient.get_all_user_aweme_posts] 用户 {sec_user_id} 视频获取完成，共 {len(result)} 个视频")
         return result

@@ -675,6 +675,42 @@ class DouyinRedisStoreImplement(AbstractStore):
         if self.redis_callback:
             await self.redis_callback("dy", creator, "creator")
 
+    async def save_creator(self, user_id: str, creator: Dict):
+        """
+        保存抖音创作者 - 兼容性方法
+        Args:
+            user_id: 用户ID
+            creator: 创作者数据
+        """
+        try:
+            # 构建统一格式的创作者数据
+            unified_creator = {
+                "creator_id": user_id,
+                "platform": "dy",
+                "author_id": user_id,
+                "author_name": creator.get('nickname', ''),
+                "author_nickname": creator.get('nickname', ''),
+                "author_avatar": creator.get('avatar_thumb', {}).get('url_list', [''])[0] if creator.get('avatar_thumb') else '',
+                "author_signature": creator.get('signature', ''),
+                "gender": creator.get('gender', ''),
+                "ip_location": creator.get('location', ''),
+                "follows": creator.get('following_count', 0),
+                "fans": creator.get('follower_count', 0),
+                "interaction": creator.get('total_favorited', 0),
+                "tags": json.dumps(creator.get('tags', {}), ensure_ascii=False),
+                "raw_data": json.dumps(creator, ensure_ascii=False),
+                "add_ts": utils.get_current_timestamp(),
+                "last_modify_ts": utils.get_current_timestamp()
+            }
+            
+            # 调用store_creator方法
+            await self.store_creator(unified_creator)
+            
+            utils.logger.info(f"✅ [DouyinRedisStore] 创作者数据已保存: {user_id}")
+            
+        except Exception as e:
+            utils.logger.error(f"❌ [DouyinRedisStore] 保存创作者数据失败: {user_id}, 错误: {e}")
+
     async def get_all_content(self) -> List[Dict]:
         """
         获取所有存储的内容

@@ -202,7 +202,7 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.error("[DouYinCrawler] ❌ 数据库中没有找到有效的登录凭证")
                 raise Exception("数据库中没有找到有效的登录凭证，请先登录")
             
-            # 🆕 修复：根据动态参数决定执行逻辑，而不是依赖配置文件
+            # 🆕 修复：完全移除配置文件依赖，只使用动态参数
             # 检查是否有动态关键字
             if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
                 utils.logger.info(f"[DouYinCrawler.start] 检测到动态关键字，执行搜索模式")
@@ -215,21 +215,163 @@ class DouYinCrawler(AbstractCrawler):
             elif hasattr(self, 'dynamic_creators') and self.dynamic_creators:
                 utils.logger.info(f"[DouYinCrawler.start] 检测到动态创作者列表，执行创作者模式")
                 await self.get_creators_and_videos()
-            # 回退到配置文件模式（向后兼容）
+            # 如果没有动态参数，说明是外部调用模式，不执行任何爬取逻辑
             else:
-                utils.logger.info(f"[DouYinCrawler.start] 使用配置文件模式，类型: {config.CRAWLER_TYPE}")
-                crawler_type_var.set(config.CRAWLER_TYPE)
-                if config.CRAWLER_TYPE == "search":
-                    # Search for notes and retrieve their comment information.
-                    await self.search()
-                elif config.CRAWLER_TYPE == "detail":
-                    # Get the information and comments of the specified post
-                    await self.get_specified_awemes()
-                elif config.CRAWLER_TYPE == "creator":
-                    # Get the information and comments of the specified creator
-                    await self.get_creators_and_videos()
+                utils.logger.info(f"[DouYinCrawler.start] 无动态参数，仅初始化完成，等待外部调用")
+                # 不执行任何爬取逻辑，等待外部调用具体方法
 
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
+
+    async def _create_browser_context(self, httpx_proxy_format=None):
+        """🆕 创建浏览器上下文 - 提取自start()方法"""
+        utils.logger.info("[DouYinCrawler._create_browser_context] 开始创建浏览器上下文")
+        
+        try:
+            # 设置代理
+            playwright_proxy_format = None
+            if hasattr(self, 'proxy_info') and self.proxy_info:
+                playwright_proxy_format = self.proxy_info.get_playwright_proxy_format()
+                utils.logger.info(f"[DouYinCrawler._create_browser_context] 使用代理: {playwright_proxy_format}")
+            
+            # 🆕 修复：不使用async with，避免浏览器在方法结束时关闭
+            # 创建playwright实例并保存引用
+            self.playwright = await async_playwright().start()
+            
+            # Launch a browser context.
+            chromium = self.playwright.chromium
+            self.browser_context = await self.launch_browser(
+                chromium,
+                playwright_proxy_format,
+                user_agent=None,
+                headless=config.HEADLESS
+            )
+            
+            # 🆕 集成抖音反爬虫增强模块
+            try:
+                from anti_crawler import dy_anti_crawler
+                
+                # 设置增强的浏览器上下文
+                await dy_anti_crawler.setup_enhanced_browser_context(self.browser_context)
+                utils.logger.info("🛡️ [DouYinCrawler._create_browser_context] 抖音反爬虫增强模块已集成")
+                
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DouYinCrawler._create_browser_context] 抖音反爬虫模块加载失败，使用基础模式: {e}")
+            
+            # stealth.min.js is a js script to prevent the website from detecting the crawler.
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
+            self.context_page = await self.browser_context.new_page()
+            
+            # 🆕 使用增强的页面加载策略
+            try:
+                from anti_crawler import dy_anti_crawler
+                
+                # 获取最优登录URL
+                optimal_url = await dy_anti_crawler.get_optimal_login_url()
+                utils.logger.info(f"🛡️ [DouYinCrawler._create_browser_context] 选择最优登录URL: {optimal_url}")
+                
+                # 使用增强的页面加载
+                try:
+                    if await dy_anti_crawler.enhance_page_loading(self.context_page, optimal_url):
+                        utils.logger.info("🛡️ [DouYinCrawler._create_browser_context] 页面加载成功")
+                        
+                        # 🆕 在页面加载后立即模拟人类行为，建立"人类"身份
+                        try:
+                            if hasattr(self, 'context_page') and self.context_page and not self.context_page.is_closed():
+                                utils.logger.info("🛡️ [DouYinCrawler._create_browser_context] 开始模拟人类行为，建立真实用户身份...")
+                                await dy_anti_crawler.simulate_human_behavior(self.context_page)
+                                utils.logger.info("🛡️ [DouYinCrawler._create_browser_context] 人类行为模拟完成，身份建立成功")
+                            else:
+                                utils.logger.warning("🛡️ [DouYinCrawler._create_browser_context] 页面已关闭，跳过人类行为模拟")
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler._create_browser_context] 人类行为模拟失败: {e}")
+                        
+                        # 🆕 在人类行为模拟后，进行反爬虫检查和处理
+                        try:
+                            # 检查频率限制
+                            if await dy_anti_crawler.handle_frequency_limit(self.context_page, "douyin_session"):
+                                utils.logger.warning("🛡️ [DouYinCrawler._create_browser_context] 检测到频率限制，已处理")
+                            
+                            # 绕过验证码
+                            if not await dy_anti_crawler.bypass_captcha(self.context_page, "douyin_session"):
+                                utils.logger.error("🛡️ [DouYinCrawler._create_browser_context] 验证码处理失败")
+                            
+                            # 处理抖音特有的反爬虫机制
+                            if await dy_anti_crawler.handle_dy_specific_anti_crawler(self.context_page, "douyin_session"):
+                                utils.logger.warning("🛡️ [DouYinCrawler._create_browser_context] 检测到抖音特有反爬虫机制，已处理")
+                                
+                        except Exception as e:
+                            utils.logger.warning(f"🛡️ [DouYinCrawler._create_browser_context] 反爬虫检查失败: {e}")
+                            
+                    else:
+                        utils.logger.warning("🛡️ [DouYinCrawler._create_browser_context] 增强页面加载失败，使用默认方式")
+                        await self.context_page.goto(self.index_url)
+                except Exception as e:
+                    utils.logger.warning(f"🛡️ [DouYinCrawler._create_browser_context] 增强页面加载处理失败: {e}")
+                    await self.context_page.goto(self.index_url)
+                    
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DouYinCrawler._create_browser_context] 反爬虫增强功能失败，使用默认方式: {e}")
+                await self.context_page.goto(self.index_url)
+            
+            utils.logger.info("[DouYinCrawler._create_browser_context] ✅ 浏览器上下文创建完成")
+            
+        except Exception as e:
+            utils.logger.error(f"[DouYinCrawler._create_browser_context] ❌ 浏览器上下文创建失败: {e}")
+            raise
+
+    async def _init_crawler_only(self):
+        """🆕 仅初始化爬虫，不执行爬取逻辑 - 用于创作者模式"""
+        utils.logger.info("[DouYinCrawler._init_crawler_only] 开始初始化爬虫（仅初始化模式）")
+        
+        try:
+            # 设置代理
+            httpx_proxy_format = None
+            if hasattr(self, 'proxy_info') and self.proxy_info:
+                httpx_proxy_format = self.proxy_info.get_httpx_proxy_format()
+                utils.logger.info(f"[DouYinCrawler._init_crawler_only] 使用代理: {httpx_proxy_format}")
+            
+            # 创建浏览器上下文
+            await self._create_browser_context(httpx_proxy_format)
+            
+            # 创建抖音客户端
+            self.dy_client = await self.create_douyin_client(httpx_proxy_format)
+            
+            # 使用数据库中的登录凭证
+            utils.logger.info("[DouYinCrawler._init_crawler_only] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[DouYinCrawler._init_crawler_only] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[DouYinCrawler._init_crawler_only] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("dy", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[DouYinCrawler._init_crawler_only] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.dy_client.set_cookies_from_string(cookie_str)
+                    
+                    # 跳过验证，直接使用cookies
+                    utils.logger.info("[DouYinCrawler._init_crawler_only] ✅ 跳过cookies验证，直接使用数据库中的cookies")
+                    # 更新cookies到客户端
+                    await self.dy_client.update_cookies(browser_context=self.browser_context)
+                    
+                except Exception as e:
+                    utils.logger.error(f"[DouYinCrawler._init_crawler_only] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[DouYinCrawler._init_crawler_only] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
+            utils.logger.info("[DouYinCrawler._init_crawler_only] ✅ 爬虫初始化完成（仅初始化模式）")
+            
+        except Exception as e:
+            utils.logger.error(f"[DouYinCrawler._init_crawler_only] ❌ 爬虫初始化失败: {e}")
+            raise
 
     async def search(self, start_page: int = 1) -> int:
         utils.logger.info("[DouYinCrawler.search] Begin search douyin keywords")
@@ -251,12 +393,8 @@ class DouYinCrawler(AbstractCrawler):
         start_time = time.time()
         processed_count = 0
         
-        # 🆕 修复：完全忽略配置文件中的关键字，使用动态传入的关键字
-        # 从实例变量获取关键字，如果没有则使用配置文件中的（向后兼容）
+        # 🆕 修复：完全移除配置文件依赖，只使用动态传入的关键字
         keywords_to_search = getattr(self, 'dynamic_keywords', None)
-        if not keywords_to_search:
-            utils.logger.warning("[DouYinCrawler.search] 未找到动态关键字，使用配置文件中的关键字（向后兼容）")
-            keywords_to_search = config.KEYWORDS
         
         # 确保关键字不为空
         if not keywords_to_search or not keywords_to_search.strip():
@@ -578,20 +716,55 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 开始爬取创作者: {creator_name} (ID: {user_id})")
                 
                 try:
-                    # 获取创作者详细信息
-                    creator_info: Dict = await self.dy_client.get_user_info(user_id)
-                    if creator_info:
-                        # 更新创作者信息到数据库
-                        await self.douyin_store.save_creator(user_id, creator=creator_info)
-                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
-                        
-                        # 🆕 更新任务的creator_ref_ids字段（参考B站实现）
-                        try:
-                            from api.crawler_core import update_task_creator_ref_ids
-                            await update_task_creator_ref_ids(self.task_id, [str(user_id)])
-                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
-                        except Exception as e:
-                            utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
+                    # 🆕 首先尝试从数据库中获取创作者的sec_uid
+                    sec_user_id = None
+                    if creator.get("sec_uid"):
+                        sec_user_id = creator["sec_uid"]
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 从creator数据中获取到sec_user_id: {sec_user_id}")
+                    
+                    # 如果没有sec_uid，则通过API获取创作者信息
+                    if not sec_user_id:
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 从creator数据中未找到sec_user_id，尝试通过API获取")
+                        creator_info: Dict = await self.dy_client.get_user_info(user_id)
+                        if creator_info:
+                            # 更新创作者信息到数据库
+                            await self.douyin_store.save_creator(user_id, creator=creator_info)
+                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                            
+                            # 尝试从API响应中获取sec_user_id
+                            utils.logger.debug(f"[DouYinCrawler.get_creators_and_notes_from_db] creator_info结构: {creator_info}")
+                            
+                            if creator_info:
+                                # 尝试从不同位置获取sec_user_id
+                                if creator_info.get("user") and creator_info["user"].get("sec_uid"):
+                                    sec_user_id = creator_info["user"]["sec_uid"]
+                                elif creator_info.get("sec_uid"):
+                                    sec_user_id = creator_info["sec_uid"]
+                                elif creator_info.get("user_info") and creator_info["user_info"].get("sec_uid"):
+                                    sec_user_id = creator_info["user_info"]["sec_uid"]
+                                
+                                if sec_user_id:
+                                    utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 从API响应获取到sec_user_id: {sec_user_id}")
+                                else:
+                                    utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] API响应中没有找到sec_user_id")
+                    else:
+                        # 如果已经有sec_user_id，仍然更新创作者信息
+                        creator_info: Dict = await self.dy_client.get_user_info(user_id)
+                        if creator_info:
+                            await self.douyin_store.save_creator(user_id, creator=creator_info)
+                            utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 创作者信息已更新: {creator_name}")
+                    
+                    # 🆕 更新任务的creator_ref_ids字段（参考B站实现）
+                    try:
+                        from api.crawler_core import update_task_creator_ref_ids
+                        await update_task_creator_ref_ids(self.task_id, [str(user_id)])
+                        utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 任务creator_ref_ids已更新: {user_id}")
+                    except Exception as e:
+                        utils.logger.error(f"[DouYinCrawler.get_creators_and_notes_from_db] 更新任务creator_ref_ids失败: {e}")
+                    
+                    if not sec_user_id:
+                        utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 无法获取sec_user_id，使用原始user_id: {user_id}")
+                        sec_user_id = user_id
                     
                     # 🆕 根据是否有关键词选择不同的获取方式（参考B站和快手实现）
                     if keywords and keywords.strip():
@@ -602,20 +775,22 @@ class DouYinCrawler(AbstractCrawler):
                         # 确保关键词不为空且有效
                         clean_keywords = keywords.strip()
                         if clean_keywords:
-                            all_video_list = await self.dy_client.search_user_videos(user_id, clean_keywords, max_count)
+                            all_video_list = await self.dy_client.search_user_videos(sec_user_id, clean_keywords, max_count)
                             utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词搜索完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                         else:
                             utils.logger.warning(f"[DouYinCrawler.get_creators_and_notes_from_db] 关键词为空，使用默认获取方式")
                             all_video_list = await self.dy_client.get_all_user_aweme_posts(
-                                sec_user_id=user_id,
-                                callback=self.fetch_creator_video_detail
+                                sec_user_id=sec_user_id,
+                                callback=self.fetch_creator_video_detail,
+                                max_count=max_count
                             )
                     else:
                         # 获取创作者的所有视频（应用数量限制）
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取创作者 {creator_name} 的所有视频（无关键词筛选）")
                         all_video_list = await self.dy_client.get_all_user_aweme_posts(
-                            sec_user_id=user_id,
-                            callback=self.fetch_creator_video_detail
+                            sec_user_id=sec_user_id,
+                            callback=self.fetch_creator_video_detail,
+                            max_count=max_count
                         )
                         utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 获取所有视频完成，获取到 {len(all_video_list) if all_video_list else 0} 个视频")
                     
@@ -635,6 +810,9 @@ class DouYinCrawler(AbstractCrawler):
                                     aweme_id=video_item.get("aweme_id", ""), 
                                     semaphore=asyncio.Semaphore(5)
                                 )
+                                
+                                # 🆕 增加延迟，避免触发反爬虫
+                                await asyncio.sleep(1.0)
                                 
                                 if video_detail:
                                     utils.logger.info(f"[DouYinCrawler.get_creators_and_notes_from_db] 成功获取视频详细信息")
@@ -695,22 +873,30 @@ class DouYinCrawler(AbstractCrawler):
         """
         Concurrently obtain the specified post list and save the data
         """
-        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-        task_list = [
-            self.get_aweme_detail(post_item.get("aweme_id"), semaphore) for post_item in video_list
-        ]
-
-        note_details = await asyncio.gather(*task_list)
-        for aweme_item in note_details:
-            if aweme_item is not None:
-                # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
-                existing_ids = [item.get("aweme_id") for item in self.douyin_store.collected_data]
-                if aweme_item.get("aweme_id") not in existing_ids:
-                    # 使用Redis存储
-                    await self.douyin_store.store_content({**aweme_item, "task_id": self.task_id} if self.task_id else aweme_item)
-                    utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 新增数据: {aweme_item.get('aweme_id')}")
-                else:
-                    utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 跳过重复数据: {aweme_item.get('aweme_id')}")
+        # 🆕 减少并发数，避免触发反爬虫
+        semaphore = asyncio.Semaphore(3)  # 从config.MAX_CONCURRENCY_NUM改为3
+        
+        # 🆕 串行处理，避免并发过高
+        for post_item in video_list:
+            try:
+                aweme_item = await self.get_aweme_detail(post_item.get("aweme_id"), semaphore)
+                
+                if aweme_item is not None:
+                    # 🆕 修复：检查是否已存在相同ID的数据，避免重复存储
+                    existing_ids = [item.get("aweme_id") for item in self.douyin_store.collected_data]
+                    if aweme_item.get("aweme_id") not in existing_ids:
+                        # 使用Redis存储
+                        await self.douyin_store.store_content({**aweme_item, "task_id": self.task_id} if self.task_id else aweme_item)
+                        utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 新增数据: {aweme_item.get('aweme_id')}")
+                    else:
+                        utils.logger.debug(f"🆕 [DouYinCrawler.fetch_creator_video_detail] 跳过重复数据: {aweme_item.get('aweme_id')}")
+                
+                # 🆕 增加延迟，避免触发反爬虫
+                await asyncio.sleep(1.5)
+                
+            except Exception as e:
+                utils.logger.error(f"[DouYinCrawler.fetch_creator_video_detail] 处理视频失败: {e}")
+                continue
 
     @staticmethod
     def format_proxy_info(ip_proxy_info: IpInfoModel) -> Tuple[Optional[Dict], Optional[Dict]]:
