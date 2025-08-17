@@ -203,9 +203,18 @@ class DYAntiCrawler:
     async def handle_frequency_limit(self, page, session_id: str, retry_count: int = 0) -> bool:
         """处理频率限制问题 - 修复等待时间过长问题"""
         try:
-            # 检查页面是否已关闭
-            if not page or page.is_closed():
-                utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过频率限制检查")
+            # 🆕 更严格的页面状态检查，避免在已关闭的页面上操作
+            if not page:
+                utils.logger.warning("⚠️ [DY反爬] 页面对象为空，跳过频率限制检查")
+                return False
+            
+            try:
+                # 尝试检查页面状态，如果失败说明页面已关闭
+                if page.is_closed():
+                    utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过频率限制检查")
+                    return False
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败，可能已关闭: {e}")
                 return False
             
             # 🆕 添加总超时控制，确保不超过10秒
@@ -231,6 +240,19 @@ class DYAntiCrawler:
             ]
             
             try:
+                # 🆕 更严格的页面状态检查
+                if not page:
+                    utils.logger.warning(f"⚠️ [DY反爬] 页面对象为空，跳过频率限制检查")
+                    return False
+                
+                try:
+                    if page.is_closed():
+                        utils.logger.warning(f"⚠️ [DY反爬] 页面已关闭，跳过频率限制检查")
+                        return False
+                except Exception as e:
+                    utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
+                    return False
+                
                 page_content = await page.text_content("body")
                 current_title = await page.title()
             except Exception as e:
@@ -254,6 +276,19 @@ class DYAntiCrawler:
                     
                     # 策略2: 刷新页面
                     try:
+                        # 🆕 更严格的页面状态检查
+                        if not page:
+                            utils.logger.warning(f"⚠️ [DY反爬] 页面对象为空，跳过页面刷新")
+                            return True
+                        
+                        try:
+                            if page.is_closed():
+                                utils.logger.warning(f"⚠️ [DY反爬] 页面已关闭，跳过页面刷新")
+                                return True
+                        except Exception as e:
+                            utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
+                            return True
+                        
                         await page.reload(wait_until="domcontentloaded", timeout=30000)
                         await asyncio.sleep(random.uniform(2, 5))
                     except Exception as e:
@@ -261,6 +296,19 @@ class DYAntiCrawler:
                     
                     # 策略3: 清除cookies和localStorage
                     try:
+                        # 🆕 更严格的页面状态检查
+                        if not page:
+                            utils.logger.warning(f"⚠️ [DY反爬] 页面对象为空，跳过清除存储")
+                            return True
+                        
+                        try:
+                            if page.is_closed():
+                                utils.logger.warning(f"⚠️ [DY反爬] 页面已关闭，跳过清除存储")
+                                return True
+                        except Exception as e:
+                            utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
+                            return True
+                        
                         await page.evaluate("""
                             localStorage.clear();
                             sessionStorage.clear();
@@ -282,9 +330,17 @@ class DYAntiCrawler:
     async def simulate_human_behavior(self, page) -> None:
         """模拟人类行为"""
         try:
-            # 检查页面是否已关闭
-            if not page or page.is_closed():
-                utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过人类行为模拟")
+            # 🆕 更严格的页面状态检查
+            if not page:
+                utils.logger.warning("⚠️ [DY反爬] 页面对象为空，跳过人类行为模拟")
+                return
+            
+            try:
+                if page.is_closed():
+                    utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过人类行为模拟")
+                    return
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
                 return
             
             # 1. 随机鼠标移动 - 完全重写，避免鼠标对象问题
@@ -365,9 +421,17 @@ class DYAntiCrawler:
     async def bypass_captcha(self, page, session_id: str) -> bool:
         """绕过验证码"""
         try:
-            # 检查页面是否已关闭
-            if not page or page.is_closed():
-                utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过验证码检查")
+            # 🆕 更严格的页面状态检查
+            if not page:
+                utils.logger.warning("⚠️ [DY反爬] 页面对象为空，跳过验证码检查")
+                return True
+            
+            try:
+                if page.is_closed():
+                    utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过验证码检查")
+                    return True
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
                 return True
             
             # 检查是否有验证码
@@ -457,9 +521,17 @@ class DYAntiCrawler:
     async def enhance_page_loading(self, page, url: str) -> bool:
         """增强页面加载策略"""
         try:
-            # 检查页面是否已关闭
-            if not page or page.is_closed():
-                utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过增强页面加载")
+            # 🆕 更严格的页面状态检查
+            if not page:
+                utils.logger.warning("⚠️ [DY反爬] 页面对象为空，跳过增强页面加载")
+                return False
+            
+            try:
+                if page.is_closed():
+                    utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过增强页面加载")
+                    return False
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
                 return False
             
             # 1. 设置页面加载超时
@@ -545,9 +617,17 @@ class DYAntiCrawler:
     async def handle_dy_specific_anti_crawler(self, page, session_id: str, retry_count: int = 0) -> bool:
         """处理抖音特有的反爬虫机制 - 修复等待时间过长问题"""
         try:
-            # 检查页面是否已关闭
-            if not page or page.is_closed():
-                utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过抖音特有反爬虫检查")
+            # 🆕 更严格的页面状态检查
+            if not page:
+                utils.logger.warning("⚠️ [DY反爬] 页面对象为空，跳过抖音特有反爬虫检查")
+                return False
+            
+            try:
+                if page.is_closed():
+                    utils.logger.warning("⚠️ [DY反爬] 页面已关闭，跳过抖音特有反爬虫检查")
+                    return False
+            except Exception as e:
+                utils.logger.warning(f"⚠️ [DY反爬] 页面状态检查失败: {e}")
                 return False
             
             # 🆕 添加总超时控制，确保不超过10秒
@@ -605,6 +685,20 @@ class DYAntiCrawler:
             
         except Exception as e:
             utils.logger.error(f"❌ [DY反爬] 处理抖音特有反爬虫机制失败: {e}")
+            return False
+
+    def _is_page_safe(self, page) -> bool:
+        """🆕 安全的页面状态检查方法"""
+        try:
+            if not page:
+                return False
+            
+            # 尝试检查页面状态
+            if hasattr(page, 'is_closed'):
+                return not page.is_closed()
+            
+            return True
+        except Exception:
             return False
 
 # 全局实例

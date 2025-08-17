@@ -64,8 +64,24 @@ class DouYinCrawler(AbstractCrawler):
             if self.context_page.is_closed():
                 self._page_closed = True
                 return False
+            # 🆕 检查浏览器上下文是否也关闭
+            if (hasattr(self, 'browser_context') and 
+                self.browser_context):
+                # BrowserContext没有is_closed方法，检查其状态
+                try:
+                    # 尝试获取浏览器上下文的状态
+                    if hasattr(self.browser_context, 'pages'):
+                        pages = self.browser_context.pages
+                        if not pages or all(page.is_closed() for page in pages):
+                            self._page_closed = True
+                            return False
+                except Exception:
+                    # 如果无法检查，假设上下文已关闭
+                    self._page_closed = True
+                    return False
             return True
-        except Exception:
+        except Exception as e:
+            utils.logger.warning(f"[DouYinCrawler._is_page_available] 页面状态检查失败: {e}")
             self._page_closed = True
             return False
 
@@ -450,17 +466,34 @@ class DouYinCrawler(AbstractCrawler):
                     else:
                         utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 前页面不可用，跳过反爬虫检查")
                     
-                    # 🆕 修复：在搜索前检查页面状态，避免在关闭的页面上搜索
+                    # 🆕 修复：在搜索前检查页面状态，如果页面关闭则尝试重新创建
                     if not self._is_page_available():
-                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 时页面不可用，跳过搜索")
-                        break
+                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] 搜索页面 {page} 时页面不可用，尝试重新创建页面")
+                        try:
+                            # 尝试重新创建页面
+                            if hasattr(self, 'browser_context') and self.browser_context:
+                                self.context_page = await self.browser_context.new_page()
+                                await self.context_page.goto(self.index_url)
+                                self._page_closed = False
+                                utils.logger.info("🛡️ [DouYinCrawler.search] 页面重新创建成功")
+                            else:
+                                utils.logger.error("🛡️ [DouYinCrawler.search] 无法重新创建页面，浏览器上下文不可用")
+                                break
+                        except Exception as e:
+                            utils.logger.error(f"🛡️ [DouYinCrawler.search] 重新创建页面失败: {e}")
+                            break
                     
                     # 🆕 修复：移除对config.PUBLISH_TIME_TYPE的依赖，使用默认值
-                    posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
-                                                                            offset=page * dy_limit_count - dy_limit_count,
-                                                                            publish_time=PublishTimeType.UNLIMITED,  # 使用正确的枚举值
-                                                                            search_id=dy_search_id
-                                                                            )
+                    try:
+                        posts_res = await self.dy_client.search_info_by_keyword(keyword=keyword,
+                                                                                offset=page * dy_limit_count - dy_limit_count,
+                                                                                publish_time=PublishTimeType.UNLIMITED,  # 使用正确的枚举值
+                                                                                search_id=dy_search_id
+                                                                                )
+                    except Exception as e:
+                        utils.logger.warning(f"🛡️ [DouYinCrawler.search] API调用失败: {e}")
+                        # 即使API调用失败，也继续处理，避免中断整个流程
+                        posts_res = {"data": []}
                     if posts_res.get("data") is None or posts_res.get("data") == []:
                         utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page} is empty,{posts_res.get('data')}`")
                         break
@@ -504,7 +537,7 @@ class DouYinCrawler(AbstractCrawler):
                     batch_data = data_list[i:i + batch_size]
                     utils.logger.info(f"[DouYinCrawler.search] Processing video batch {i//batch_size + 1}, items: {len(batch_data)}")
                     
-                    # 🆕 批处理前只进行基础检查，不进行人类行为模拟
+                    # 🆕 批处理前检查页面状态，如果页面关闭则跳过反爬虫检查
                     if dy_anti_crawler and self._is_page_available():
                         try:
                             # 🆕 只进行频率限制检查，不进行人类行为模拟
@@ -514,7 +547,7 @@ class DouYinCrawler(AbstractCrawler):
                         except Exception as e:
                             utils.logger.warning(f"🛡️ [DouYinCrawler.search] 批处理前反爬虫检查失败: {e}")
                     else:
-                        utils.logger.debug(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前页面不可用")
+                        utils.logger.debug(f"🛡️ [DouYinCrawler.search] 批处理 {i//batch_size + 1} 前页面不可用，跳过反爬虫检查，继续处理数据")
                     
                     # 🆕 处理视频数据 - 即使页面关闭也继续处理
                     for post_item in batch_data:
@@ -1020,8 +1053,15 @@ class DouYinCrawler(AbstractCrawler):
 
     async def close(self) -> None:
         """Close browser context"""
-        await self.browser_context.close()
-        utils.logger.info("[DouYinCrawler.close] Browser context closed ...")
+        try:
+            # 🆕 检查页面状态，避免在已关闭的页面上操作
+            if self._is_page_available():
+                await self.browser_context.close()
+                utils.logger.info("[DouYinCrawler.close] Browser context closed ...")
+            else:
+                utils.logger.info("[DouYinCrawler.close] Browser context already closed, skipping ...")
+        except Exception as e:
+            utils.logger.warning(f"[DouYinCrawler.close] 关闭浏览器时出现警告: {e}")
 
     async def search_by_keywords(self, keywords: str, max_count: int = 50, 
                                 account_id: str = None, session_id: str = None,
@@ -1121,8 +1161,15 @@ class DouYinCrawler(AbstractCrawler):
                 if hasattr(self, 'browser_context') and self.browser_context:
                     # 检查是否由外部管理（如multi_platform_crawler.py）
                     if not hasattr(self, '_externally_managed') or not self._externally_managed:
-                        await self.close()
-                        utils.logger.info("[DouYinCrawler.search_by_keywords] 浏览器已关闭")
+                        # 🆕 延迟关闭浏览器，确保所有任务完成
+                        await asyncio.sleep(3)  # 等待3秒确保所有异步任务完成
+                        
+                        # 🆕 检查页面状态，避免在已关闭的页面上操作
+                        if self._is_page_available():
+                            await self.close()
+                            utils.logger.info("[DouYinCrawler.search_by_keywords] 浏览器已关闭")
+                        else:
+                            utils.logger.info("[DouYinCrawler.search_by_keywords] 页面已关闭，跳过关闭操作")
                     else:
                         utils.logger.info("[DouYinCrawler.search_by_keywords] 浏览器由外部管理，跳过关闭")
             except Exception as e:
@@ -1180,6 +1227,14 @@ class DouYinCrawler(AbstractCrawler):
             # 安全关闭浏览器，避免重复关闭
             try:
                 if hasattr(self, 'browser_context') and self.browser_context:
-                    await self.close()
+                    # 🆕 延迟关闭浏览器，确保所有任务完成
+                    await asyncio.sleep(3)  # 等待3秒确保所有异步任务完成
+                    
+                    # 🆕 检查页面状态，避免在已关闭的页面上操作
+                    if self._is_page_available():
+                        await self.close()
+                        utils.logger.info("[DouYinCrawler.get_user_notes] 浏览器已关闭")
+                    else:
+                        utils.logger.info("[DouYinCrawler.get_user_notes] 页面已关闭，跳过关闭操作")
             except Exception as e:
                 utils.logger.warning(f"[DouYinCrawler.get_user_notes] 关闭浏览器时出现警告: {e}")

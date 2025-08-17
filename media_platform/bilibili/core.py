@@ -115,6 +115,89 @@ class BilibiliCrawler(AbstractCrawler):
             raise Exception("数据库中没有找到有效的登录凭证，请先登录")
         
         utils.logger.info("[BilibiliCrawler.start] 爬虫初始化完成，浏览器上下文已创建")
+        
+    async def _init_crawler_only(self) -> None:
+        """
+        仅初始化爬虫（创建客户端等），但不执行start()中的爬取逻辑
+        用于创作者模式，避免重复执行爬取逻辑
+        """
+        try:
+            utils.logger.info("[BilibiliCrawler._init_crawler_only] 开始初始化爬虫（仅初始化模式）")
+            
+            # 创建浏览器上下文
+            await self._create_browser_context()
+            
+            # 初始化登录凭证
+            utils.logger.info("[BilibiliCrawler._init_crawler_only] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[BilibiliCrawler._init_crawler_only] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[BilibiliCrawler._init_crawler_only] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("bili", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[BilibiliCrawler._init_crawler_only] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.bili_client.set_cookies_from_string(cookie_str)
+                    utils.logger.info("[BilibiliCrawler._init_crawler_only] ✅ 跳过cookies验证，直接使用数据库中的cookies")
+                except Exception as e:
+                    utils.logger.error(f"[BilibiliCrawler._init_crawler_only] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[BilibiliCrawler._init_crawler_only] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
+            utils.logger.info("[BilibiliCrawler._init_crawler_only] ✅ 爬虫初始化完成（仅初始化模式）")
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliCrawler._init_crawler_only] 初始化失败: {e}")
+            raise
+    
+    async def _create_browser_context(self) -> None:
+        """
+        创建浏览器上下文
+        """
+        try:
+            utils.logger.info("[BilibiliCrawler._create_browser_context] 开始创建浏览器上下文")
+            
+            playwright_proxy_format, httpx_proxy_format = None, None
+            if config.ENABLE_IP_PROXY:
+                ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
+                ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
+                playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
+
+            # 创建playwright实例
+            self.playwright = await async_playwright().start()
+            
+            # Launch a browser context.
+            chromium = self.playwright.chromium
+            self.browser_context = await self.launch_browser(
+                chromium,
+                None,
+                self.user_agent,
+                headless=config.HEADLESS
+            )
+            
+            # stealth.min.js is a js script to prevent the website from detecting the crawler.
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
+            
+            self.context_page = await self.browser_context.new_page()
+            await self.context_page.goto(self.index_url)
+
+            # Create a client to interact with the bilibili website.
+            self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
+            
+            utils.logger.info("[BilibiliCrawler._create_browser_context] ✅ 浏览器上下文创建完成")
+            
+        except Exception as e:
+            utils.logger.error(f"[BilibiliCrawler._create_browser_context] 创建浏览器上下文失败: {e}")
+            raise
 
     async def get_creators_and_notes(self) -> None:
         """Get creator's videos and retrieve their comment information."""

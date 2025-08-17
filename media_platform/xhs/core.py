@@ -132,31 +132,118 @@ class XiaoHongShuCrawler(AbstractCrawler):
         # 🆕 修复：根据动态参数决定执行逻辑，而不是依赖配置文件
         crawler_type_var.set(config.CRAWLER_TYPE)
         
-        # 检查是否有动态关键字，如果有则执行搜索
+        # 检查是否有动态关键字
         if hasattr(self, 'dynamic_keywords') and self.dynamic_keywords:
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态关键字: {self.dynamic_keywords}")
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行关键词搜索模式")
+            utils.logger.info(f"[XiaoHongShuCrawler.start] 检测到动态关键字，执行搜索模式")
             await self.search(start_page=start_page)
+        # 检查是否有动态笔记ID列表
         elif hasattr(self, 'dynamic_note_ids') and self.dynamic_note_ids:
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态笔记ID: {self.dynamic_note_ids}")
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行指定笔记模式")
+            utils.logger.info(f"[XiaoHongShuCrawler.start] 检测到动态笔记ID列表，执行详情模式")
             await self.get_specified_notes()
+        # 检查是否有动态创作者列表
         elif hasattr(self, 'dynamic_creators') and self.dynamic_creators:
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 检测到动态创作者: {self.dynamic_creators}")
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 执行创作者模式")
+            utils.logger.info(f"[XiaoHongShuCrawler.start] 检测到动态创作者列表，执行创作者模式")
             await self.get_creators_and_notes()
+        # 如果没有动态参数，说明是外部调用模式，不执行任何爬取逻辑
         else:
-            # 如果没有动态参数，则使用配置文件中的设置
-            utils.logger.debug(f"[XiaoHongShuCrawler.start] 使用配置文件中的爬取类型: {config.CRAWLER_TYPE}")
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
-                await self.search(start_page=start_page)
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_notes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get the information and comments of the specified creator
-                await self.get_creators_and_notes()
+            utils.logger.info(f"[XiaoHongShuCrawler.start] 无动态参数，仅初始化完成，等待外部调用")
+            # 不执行任何爬取逻辑，等待外部调用具体方法
+
+        utils.logger.info("[XiaoHongShuCrawler.start] XiaoHongShu Crawler finished ...")
+        
+    async def _init_crawler_only(self) -> None:
+        """
+        仅初始化爬虫（创建客户端等），但不执行start()中的爬取逻辑
+        用于创作者模式，避免重复执行爬取逻辑
+        """
+        try:
+            utils.logger.info("[XiaoHongShuCrawler._init_crawler_only] 开始初始化爬虫（仅初始化模式）")
+            
+            # 创建浏览器上下文
+            await self._create_browser_context()
+            
+            # 初始化登录凭证
+            utils.logger.info("[XiaoHongShuCrawler._init_crawler_only] 开始使用数据库中的登录凭证...")
+            
+            # 从传入的参数中获取account_id
+            account_id = getattr(self, 'account_id', None)
+            if account_id:
+                utils.logger.info(f"[XiaoHongShuCrawler._init_crawler_only] 使用指定账号: {account_id}")
+            else:
+                utils.logger.info(f"[XiaoHongShuCrawler._init_crawler_only] 使用默认账号（最新登录）")
+            
+            # 从数据库获取cookies
+            cookie_str = await get_cookies_from_database("xhs", account_id)
+            
+            if cookie_str:
+                utils.logger.info("[XiaoHongShuCrawler._init_crawler_only] 发现数据库中的cookies，直接使用...")
+                try:
+                    # 设置cookies到浏览器
+                    await self.xhs_client.set_cookies_from_string(cookie_str)
+                    utils.logger.info("[XiaoHongShuCrawler._init_crawler_only] ✅ 跳过cookies验证，直接使用数据库中的cookies")
+                except Exception as e:
+                    utils.logger.error(f"[XiaoHongShuCrawler._init_crawler_only] 使用数据库cookies失败: {e}")
+                    raise Exception(f"使用数据库登录凭证失败: {str(e)}")
+            else:
+                utils.logger.error("[XiaoHongShuCrawler._init_crawler_only] ❌ 数据库中没有找到有效的登录凭证")
+                raise Exception("数据库中没有找到有效的登录凭证，请先登录")
+            
+            utils.logger.info("[XiaoHongShuCrawler._init_crawler_only] ✅ 爬虫初始化完成（仅初始化模式）")
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuCrawler._init_crawler_only] 初始化失败: {e}")
+            raise
+    
+    async def _create_browser_context(self) -> None:
+        """
+        创建浏览器上下文
+        """
+        try:
+            utils.logger.info("[XiaoHongShuCrawler._create_browser_context] 开始创建浏览器上下文")
+            
+            playwright_proxy_format, httpx_proxy_format = None, None
+            if config.ENABLE_IP_PROXY:
+                ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
+                ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
+                playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
+
+            # 创建playwright实例
+            self.playwright = await async_playwright().start()
+            
+            # Launch a browser context.
+            chromium = self.playwright.chromium
+            self.browser_context = await self.launch_browser(
+                chromium, playwright_proxy_format, self.user_agent, config.HEADLESS
+            )
+            
+            # stealth.min.js is a js script to prevent the website from detecting the crawler.
+            await self.browser_context.add_init_script(
+                path="libs/stealth.min.js"
+            )
+            
+            # add a cookie attribute webId to avoid the appearance of a sliding captcha on the webpage
+            await self.browser_context.add_cookies(
+                [
+                    {
+                        "name": "webId",
+                        "value": "xxx123",
+                        "domain": ".xiaohongshu.com",
+                        "path": "/",
+                    }
+                ]
+            )
+            
+            self.context_page = await self.browser_context.new_page()
+            await self.context_page.goto(self.index_url)
+
+            # Create a client to interact with the xiaohongshu website.
+            self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
+            
+            utils.logger.info("[XiaoHongShuCrawler._create_browser_context] ✅ 浏览器上下文创建完成")
+            
+        except Exception as e:
+            utils.logger.error(f"[XiaoHongShuCrawler._create_browser_context] 创建浏览器上下文失败: {e}")
+            raise
 
     async def search(self, start_page: int = 1) -> None:
         """Search for notes and retrieve their comment information."""
@@ -529,6 +616,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                                 user_id=user_id,
                                 crawl_interval=crawl_interval,
                                 callback=self.fetch_creator_notes_detail,
+                                note_type="video",  # 只获取视频类型
                             )
                     else:
                         # 获取创作者的所有笔记
@@ -544,6 +632,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                             user_id=user_id,
                             crawl_interval=crawl_interval,
                             callback=self.fetch_creator_notes_detail,
+                            note_type="video",  # 只获取视频类型
                         )
                         utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes_from_db] 获取所有笔记完成，获取到 {len(all_notes_list) if all_notes_list else 0} 条笔记")
                     

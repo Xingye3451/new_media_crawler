@@ -576,7 +576,7 @@ class XiaoHongShuClient(AbstractApiClient):
         return info.get("user").get("userPageData")
 
     async def get_notes_by_creator(
-        self, creator: str, cursor: str, page_size: int = 30
+        self, creator: str, cursor: str, page_size: int = 30, note_type: str = "video"
     ) -> Dict:
         """
         获取博主的笔记
@@ -584,6 +584,7 @@ class XiaoHongShuClient(AbstractApiClient):
             creator: 博主ID
             cursor: 上一页最后一条笔记的ID
             page_size: 分页数据长度
+            note_type: 笔记类型筛选 ("video", "image", "all")
 
         Returns:
 
@@ -595,6 +596,14 @@ class XiaoHongShuClient(AbstractApiClient):
             "num": page_size,
             "image_formats": "jpg,webp,avif",
         }
+        
+        # 🆕 添加笔记类型筛选
+        if note_type == "video":
+            data["note_type"] = "video"
+        elif note_type == "image":
+            data["note_type"] = "image"
+        # 如果是 "all" 或其他值，不添加 note_type 参数，获取所有类型
+        
         return await self.get(uri, data)
 
     async def get_all_notes_by_creator(
@@ -602,6 +611,7 @@ class XiaoHongShuClient(AbstractApiClient):
         user_id: str,
         crawl_interval: float = 1.0,
         callback: Optional[Callable] = None,
+        note_type: str = "video",
     ) -> List[Dict]:
         """
         获取指定用户下的所有发过的帖子，该方法会一直查找一个用户下的所有帖子信息
@@ -609,6 +619,7 @@ class XiaoHongShuClient(AbstractApiClient):
             user_id: 用户ID
             crawl_interval: 爬取一次的延迟单位（秒）
             callback: 一次分页爬取结束后的更新回调函数
+            note_type: 笔记类型筛选 ("video", "image", "all")
 
         Returns:
 
@@ -617,7 +628,7 @@ class XiaoHongShuClient(AbstractApiClient):
         notes_has_more = True
         notes_cursor = ""
         while notes_has_more and len(result) < config.CRAWLER_MAX_NOTES_COUNT:
-            notes_res = await self.get_notes_by_creator(user_id, notes_cursor)
+            notes_res = await self.get_notes_by_creator(user_id, notes_cursor, note_type=note_type)
             if not notes_res:
                 utils.logger.error(
                     f"[XiaoHongShuClient.get_notes_by_creator] The current creator may have been banned by xhs, so they cannot access the data."
@@ -743,7 +754,7 @@ class XiaoHongShuClient(AbstractApiClient):
 
     async def search_user_notes(self, user_id: str, keywords: str, max_count: int = 50) -> List[Dict]:
         """
-        搜索指定用户的笔记
+        搜索指定用户的笔记 - 使用本地筛选方式
         Args:
             user_id: 用户ID
             keywords: 搜索关键词
@@ -752,63 +763,60 @@ class XiaoHongShuClient(AbstractApiClient):
             List[Dict]: 笔记列表
         """
         try:
-            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 开始搜索用户 {user_id} 的关键词 '{keywords}' 笔记")
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 开始本地筛选用户 {user_id} 的关键词 '{keywords}' 笔记")
             
-            # 🆕 使用小红书的原生搜索API，然后过滤出指定用户的笔记
-            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 使用原生搜索API搜索关键词: {keywords}")
+            # 🆕 使用本地筛选方式：先获取用户所有笔记，然后在本地过滤
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 使用本地筛选方式，先获取用户所有笔记")
             
-            all_matching_notes = []
-            page = 1
-            max_search_pages = 10  # 限制搜索页数，避免过度请求
+            # 获取用户所有笔记（只获取视频类型）
+            all_user_notes = await self.get_all_notes_by_creator(
+                user_id=user_id,
+                crawl_interval=1.0,
+                callback=None,  # 不使用callback，直接返回数据
+                note_type="video"  # 只获取视频类型
+            )
             
-            while page <= max_search_pages and len(all_matching_notes) < max_count:
-                utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 搜索第 {page} 页")
-                
+            if not all_user_notes:
+                utils.logger.warning(f"[XiaoHongShuClient.search_user_notes] 用户 {user_id} 没有获取到笔记")
+                return []
+            
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 获取到用户 {user_id} 的 {len(all_user_notes)} 条笔记，开始本地筛选")
+            
+            # 本地筛选包含关键词的笔记
+            matching_notes = []
+            keywords_lower = keywords.lower().strip()
+            
+            for note in all_user_notes:
                 try:
-                    # 使用全局搜索API
-                    search_result = await self.get_note_by_keyword(
-                        keyword=keywords,
-                        page=page,
-                        page_size=20,
-                        note_type=SearchNoteType.VIDEO  # 默认搜索视频内容
-                    )
+                    # 检查笔记描述是否包含关键词
+                    note_desc = note.get("desc", "").lower()
+                    note_title = note.get("title", "").lower()
+                    note_type = note.get("type", "").lower()
                     
-                    utils.logger.debug(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页搜索API响应: {search_result}")
+                    # 检查标签是否包含关键词
+                    tag_list = note.get("tag_list", [])
+                    tag_text = " ".join([tag.get("name", "").lower() for tag in tag_list if tag.get("name")])
                     
-                    if not search_result or not search_result.get("items"):
-                        utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页没有更多结果")
-                        break
-                    
-                    items = search_result.get("items", [])
-                    
-                    # 过滤出指定用户的笔记
-                    for note in items:
-                        try:
-                            note_user_id = note.get("user", {}).get("user_id")
-                            if note_user_id == user_id:
-                                all_matching_notes.append(note)
-                                utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 找到匹配用户 {user_id} 的笔记")
-                                
-                                if len(all_matching_notes) >= max_count:
-                                    utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 已达到最大数量限制 {max_count}")
-                                    break
-                        except Exception as e:
-                            utils.logger.warning(f"[XiaoHongShuClient.search_user_notes] 处理笔记时出错: {e}")
-                            continue
-                    
-                    # 如果当前页没有找到匹配的笔记，继续搜索下一页
-                    page += 1
-                    
-                    # 添加延迟，避免请求过于频繁
-                    await asyncio.sleep(1)
-                    
+                    # 检查是否包含关键词
+                    if (keywords_lower in note_desc or 
+                        keywords_lower in note_title or 
+                        keywords_lower in note_type or 
+                        keywords_lower in tag_text):
+                        
+                        matching_notes.append(note)
+                        utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 找到匹配关键词 '{keywords}' 的笔记: {note.get('desc', '')[:50]}...")
+                        
+                        if len(matching_notes) >= max_count:
+                            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 已达到最大数量限制 {max_count}")
+                            break
+                            
                 except Exception as e:
-                    utils.logger.error(f"[XiaoHongShuClient.search_user_notes] 第 {page} 页搜索失败: {e}")
-                    break
+                    utils.logger.warning(f"[XiaoHongShuClient.search_user_notes] 处理笔记时出错: {e}")
+                    continue
             
-            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 搜索完成，找到 {len(all_matching_notes)} 个匹配用户 {user_id} 的笔记")
-            return all_matching_notes
+            utils.logger.info(f"[XiaoHongShuClient.search_user_notes] 本地筛选完成，找到 {len(matching_notes)} 个匹配关键词 '{keywords}' 的笔记")
+            return matching_notes
             
         except Exception as e:
-            utils.logger.error(f"[XiaoHongShuClient.search_user_notes] 搜索用户笔记失败: {e}")
+            utils.logger.error(f"[XiaoHongShuClient.search_user_notes] 本地筛选用户笔记失败: {e}")
             return []

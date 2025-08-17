@@ -70,7 +70,12 @@ class DOUYINClient(AbstractApiClient):
             local_storage: Dict = {}
         else:
             try:
-                local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+                # 🆕 检查页面是否已关闭
+                if not self.playwright_page or self.playwright_page.is_closed():
+                    utils.logger.warning(f"⚠️ [DOUYINClient] 页面已关闭，跳过localStorage获取")
+                    local_storage: Dict = {}
+                else:
+                    local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
             except Exception as e:
                 utils.logger.warning(f"⚠️ [DOUYINClient] 获取localStorage失败: {e}")
                 local_storage: Dict = {}
